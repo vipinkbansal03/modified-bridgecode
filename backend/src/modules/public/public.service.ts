@@ -1713,6 +1713,18 @@ async function toPublicProductDetail(
     ),
   );
 
+  const usedValuesByAttrName = new Map<string, Set<string>>();
+  for (const variant of publicVariants) {
+    for (const [attrName, val] of Object.entries(variant.attributeCombination)) {
+      let set = usedValuesByAttrName.get(attrName);
+      if (!set) {
+        set = new Set();
+        usedValuesByAttrName.set(attrName, set);
+      }
+      set.add(val);
+    }
+  }
+
   const configuratorAttributes = p.hasVariants
     ? p.attributes
     .map((pa) => {
@@ -1723,11 +1735,9 @@ async function toPublicProductDetail(
         );
 
       // Only offer values that exist on at least one sellable variant for this country.
+      const usedSet = usedValuesByAttrName.get(pa.attribute.name);
       const valuesUsedByVariants = allowedValues.filter((value) =>
-        publicVariants.some(
-          (variant) =>
-            variant.attributeCombination[pa.attribute.name] === value.value,
-        ),
+        usedSet ? usedSet.has(value.value) : false
       );
 
       const role =

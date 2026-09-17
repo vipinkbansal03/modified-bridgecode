@@ -2073,32 +2073,60 @@ export async function generateCountryPrices(
     return [baseRow, ...variantRows];
   });
 
-  for (const price of priceRows) {
-    const existing = await prisma.productPrice.findFirst({
-      where: {
-        productId: price.productId,
-        variantId: price.variantId,
-        countryId: price.countryId,
-      },
-      select: { id: true },
-    });
+  // Batch fetch all existing prices for this product in ONE query
+  const existingPrices = await prisma.productPrice.findMany({
+    where: { productId },
+    select: { id: true, countryId: true, variantId: true },
+  });
 
-    if (existing) {
-      await prisma.productPrice.update({
-        where: { id: existing.id },
-        data: {
-          currencyId: price.currencyId,
-          mrp: price.mrp,
-          sellingPrice: price.sellingPrice,
-          dealerPrice: price.dealerPrice,
-          distributorPrice: price.distributorPrice,
-          status: price.status,
-        },
-      });
+  const existingMap = new Map<string, string>();
+  for (const ep of existingPrices) {
+    existingMap.set(`${ep.countryId}:${ep.variantId ?? "__base__"}`, ep.id);
+  }
+
+  const toCreate: typeof priceRows = [];
+  const toUpdate: { id: string; price: (typeof priceRows)[0] }[] = [];
+
+  for (const price of priceRows) {
+    const key = `${price.countryId}:${price.variantId ?? "__base__"}`;
+    const existingId = existingMap.get(key);
+    if (existingId) {
+      toUpdate.push({ id: existingId, price });
     } else {
-      await prisma.productPrice.create({
-        data: price,
+      toCreate.push(price);
+    }
+  }
+
+  // Bulk insert new prices in chunks of 1000
+  if (toCreate.length > 0) {
+    for (let i = 0; i < toCreate.length; i += 1000) {
+      await prisma.productPrice.createMany({
+        data: toCreate.slice(i, i + 1000),
+        skipDuplicates: true,
       });
+    }
+  }
+
+  // Bulk update existing prices in chunked transactions
+  if (toUpdate.length > 0) {
+    const UPDATE_BATCH = 100;
+    for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH) {
+      const chunk = toUpdate.slice(i, i + UPDATE_BATCH);
+      await prisma.$transaction(
+        chunk.map((item) =>
+          prisma.productPrice.update({
+            where: { id: item.id },
+            data: {
+              currencyId: item.price.currencyId,
+              mrp: item.price.mrp,
+              sellingPrice: item.price.sellingPrice,
+              dealerPrice: item.price.dealerPrice,
+              distributorPrice: item.price.distributorPrice,
+              status: item.price.status,
+            },
+          })
+        )
+      );
     }
   }
 

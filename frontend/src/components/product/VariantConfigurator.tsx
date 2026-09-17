@@ -153,15 +153,8 @@ function buildInitialSelections(
   attributes: ProductOptionAttribute[],
   variants: ApiVariant[],
 ) {
-  const seed = variants[0];
   return attributes.reduce<Record<string, string>>((acc, attribute) => {
-    const seedValue =
-      attribute.name === PACKAGE_ATTRIBUTE_NAME
-        ? (getVariantPackageLabel(seed) ?? attribute.values[0]?.value ?? "")
-        : (seed?.attributeCombination?.[attribute.name] ??
-          attribute.values[0]?.value ??
-          "");
-    if (seedValue) acc[attribute.name] = seedValue;
+    acc[attribute.name] = "";
     return acc;
   }, {});
 }
@@ -335,23 +328,30 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     ),
   );
 
-  const currentVariant =
-    matchingVariants.find((variant) =>
-      attributes.every((attribute) =>
-        variantMatchesSelection(
-          variant,
-          attribute.name,
-          selectedOptions[attribute.name] ?? "",
-          attribute.id,
-          attribute.values,
+  const allAttributesSelected =
+    attributes.length === 0 ||
+    attributes.every(
+      (attribute) => Boolean(selectedOptions[attribute.name]),
+    );
+
+  const currentVariant = allAttributesSelected
+    ? (matchingVariants.find((variant) =>
+        attributes.every((attribute) =>
+          variantMatchesSelection(
+            variant,
+            attribute.name,
+            selectedOptions[attribute.name] ?? "",
+            attribute.id,
+            attribute.values,
+          ),
         ),
-      ),
-    ) ??
-    (matchingVariants.length === 1
-      ? matchingVariants[0]
-      : variants.length === 1
-        ? variants[0]
-        : null);
+      ) ??
+      (matchingVariants.length === 1
+        ? matchingVariants[0]
+        : variants.length === 1
+          ? variants[0]
+          : null))
+    : null;
 
   const currentAvailableStock = currentVariant
     ? (currentVariant.warehouseInventories?.length
@@ -577,42 +577,45 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
     nextSelections[attributeName] = value;
 
-    for (let i = attrIndex + 1; i < attributes.length; i++) {
-      const downstreamAttr = attributes[i];
-      const validDownstreamVariants = variants.filter((v) =>
-        Object.entries(nextSelections).every(([k, vVal]) => {
-          const kAttr = attributes.find((a) => a.name === k);
-          return (
-            !vVal ||
-            variantMatchesSelection(
-              v,
-              k,
-              vVal,
-              kAttr?.id,
-              kAttr?.values,
-            )
-          );
-        }),
-      );
-
-      const availableDownstreamValues = new Set(
-        validDownstreamVariants
-          .map((v) =>
-            downstreamAttr.name === PACKAGE_ATTRIBUTE_NAME
-              ? getVariantPackageLabel(v)
-              : v.attributeCombination[downstreamAttr.name],
-          )
-          .filter((val): val is string => Boolean(val)),
-      );
-
-      const currentDownstreamVal = selectedOptions[downstreamAttr.name];
-      if (currentDownstreamVal && availableDownstreamValues.has(currentDownstreamVal)) {
-        nextSelections[downstreamAttr.name] = currentDownstreamVal;
-      } else {
-        const firstAvailable = downstreamAttr.values.find((v) =>
-          availableDownstreamValues.has(v.value),
+    if (!value) {
+      for (let i = attrIndex + 1; i < attributes.length; i++) {
+        nextSelections[attributes[i].name] = "";
+      }
+    } else {
+      for (let i = attrIndex + 1; i < attributes.length; i++) {
+        const downstreamAttr = attributes[i];
+        const validDownstreamVariants = variants.filter((v) =>
+          Object.entries(nextSelections).every(([k, vVal]) => {
+            const kAttr = attributes.find((a) => a.name === k);
+            return (
+              !vVal ||
+              variantMatchesSelection(
+                v,
+                k,
+                vVal,
+                kAttr?.id,
+                kAttr?.values,
+              )
+            );
+          }),
         );
-        nextSelections[downstreamAttr.name] = firstAvailable?.value ?? "";
+
+        const availableDownstreamValues = new Set(
+          validDownstreamVariants
+            .map((v) =>
+              downstreamAttr.name === PACKAGE_ATTRIBUTE_NAME
+                ? getVariantPackageLabel(v)
+                : v.attributeCombination[downstreamAttr.name],
+            )
+            .filter((val): val is string => Boolean(val)),
+        );
+
+        const currentDownstreamVal = selectedOptions[downstreamAttr.name];
+        if (currentDownstreamVal && availableDownstreamValues.has(currentDownstreamVal)) {
+          nextSelections[downstreamAttr.name] = currentDownstreamVal;
+        } else {
+          nextSelections[downstreamAttr.name] = "";
+        }
       }
     }
 
@@ -990,7 +993,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     Current Variant
                   </p>
                   <p className="mt-1 text-[16px] font-semibold leading-snug text-ink sm:text-[18px]">
-                    {currentVariant?.title ?? "No valid combination selected"}
+                    {currentVariant?.title ?? (allAttributesSelected ? "No valid combination selected" : "Please select all options above")}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {currentVariant ? (
@@ -1014,7 +1017,9 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                       </>
                     ) : (
                       <span className="text-[12px] text-steel-2">
-                        Choose a supported combination to continue.
+                        {allAttributesSelected
+                          ? "Choose a supported combination to continue."
+                          : "Choose an option for each attribute above to continue."}
                       </span>
                     )}
                   </div>
@@ -1028,9 +1033,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     <p className="mt-1 text-[24px] font-semibold text-ink">
                       {formatMoney(currencySymbol, currentResolvedUnitPrice)}
                     </p>
-                  ) : (
+                  ) : currentVariant ? (
                     <span className="mt-1 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-3 py-1 text-sm font-semibold text-[#E31E24]">
                       Price Upon Request
+                    </span>
+                  ) : (
+                    <span className="mt-1 inline-block text-[13px] font-medium text-steel">
+                      Select options above
                     </span>
                   )}
                   <p className="mt-1 text-[12px] text-steel">
@@ -1041,7 +1050,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
               </div>
 
-              {!currentPrice && (
+              {currentVariant && !currentPrice && (
                 <div className="mt-3 rounded-lg border border-[#FDE8E8] bg-[#FEF2F2] p-3 text-[13px] text-[#B91C1C]">
                   Pricing for this region is provided via custom quote. Click <strong>Request Quote</strong> to submit your configuration.
                 </div>
@@ -1098,9 +1107,11 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
                   const isWarehouseUnavailable = false; // Disabled because Smart Cart Splitting handles cross-warehouse fulfillment
                   
-                  const isSelectedOutOfStock = !isGloballyInStock;
+                  const isSelectedOutOfStock = currentVariant ? !isGloballyInStock : false;
+                  const isReady = Boolean(currentVariant);
 
                   const getButtonLabel = (defaultLabel: string) => {
+                    if (!isReady) return "Select Options";
                     if (!isGloballyInStock) return "Out of Stock";
                     return defaultLabel;
                   };
@@ -1110,20 +1121,20 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                       <>
                         <button
                           type="button"
-                          disabled={isSelectedOutOfStock}
+                          disabled={!isReady || isSelectedOutOfStock}
                           onClick={handleAddConfiguration}
                           className={`inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 cursor-pointer ${
-                            isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                            !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
                           Add Configuration
                         </button>
                         <button
                           type="button"
-                          disabled={isSelectedOutOfStock}
+                          disabled={!isReady || isSelectedOutOfStock}
                           onClick={() => handleAddToCart(false)}
                           className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-brand hover:bg-transparent hover:text-brand cursor-pointer ${
-                            isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                            !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
                           <ShoppingBag size={15} />
@@ -1131,10 +1142,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                         </button>
                         <button
                           type="button"
-                          disabled={isSelectedOutOfStock}
+                          disabled={!isReady || isSelectedOutOfStock}
                           onClick={() => handleAddToCart(true)}
                           className={`inline-flex items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] cursor-pointer ${
-                            isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                            !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
                           Buy Now
@@ -1153,7 +1164,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     <div className="flex flex-wrap items-center gap-3">
                       <button
                         type="button"
-                        disabled={isSelectedOutOfStock}
+                        disabled={!isReady || isSelectedOutOfStock}
                         onClick={() => {
                           if (!currentVariant || isSelectedOutOfStock) return;
                           const resolvedWh = resolveWarehouseForCart(currentVariant, quantity);
@@ -1180,7 +1191,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           openCart();
                         }}
                         className={`inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 cursor-pointer ${
-                          isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                          !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                         }`}
                       >
                         {getButtonLabel("Request Quote (RFQ)")}

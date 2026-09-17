@@ -299,25 +299,37 @@ export function DynamicVariantMatrixConfigurator({
     [apiProduct.attributes],
   );
 
-  const xAxisAttributes = attributes.filter(
-    (attribute) => getAttributeDisplayType(attribute) === "X_GRID",
+  const xAxisAttributes = useMemo(
+    () => attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID"),
+    [attributes],
   );
-  const yAxisAttributes = attributes.filter(
-    (attribute) => getAttributeDisplayType(attribute) === "Y_GRID",
+  const yAxisAttributes = useMemo(
+    () => attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID"),
+    [attributes],
   );
   const rowAxisAttributes = yAxisAttributes;
   const matrixEnabled = Boolean(
     xAxisAttributes.length && yAxisAttributes.length,
   );
-  const dropdownAttributes = matrixEnabled
-    ? attributes.filter(
-        (attribute) =>
-          !xAxisAttributes.some((axis) => axis.id === attribute.id) &&
-          !yAxisAttributes.some((axis) => axis.id === attribute.id),
-      )
-    : attributes;
-  const rowCombinations = buildAxisCombinations(rowAxisAttributes);
-  const columnCombinations = buildAxisCombinations(xAxisAttributes);
+  const dropdownAttributes = useMemo(
+    () =>
+      matrixEnabled
+        ? attributes.filter(
+            (attribute) =>
+              !xAxisAttributes.some((axis) => axis.id === attribute.id) &&
+              !yAxisAttributes.some((axis) => axis.id === attribute.id),
+          )
+        : attributes,
+    [matrixEnabled, attributes, xAxisAttributes, yAxisAttributes],
+  );
+  const rowCombinations = useMemo(
+    () => buildAxisCombinations(rowAxisAttributes),
+    [rowAxisAttributes],
+  );
+  const columnCombinations = useMemo(
+    () => buildAxisCombinations(xAxisAttributes),
+    [xAxisAttributes],
+  );
 
   const normalizedVariants = useMemo<NormalizedVariant[]>(
     () =>

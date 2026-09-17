@@ -3191,8 +3191,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   ];
 
   const variantGridState: VariantGridState = useMemo(() => {
-    const rowAxisMappings = mappedAttributeRows.filter((mapping) => mapping.attribute.role === "Y_GRID");
-    const columnAxisMappings = mappedAttributeRows.filter((mapping) => mapping.attribute.role === "X_GRID");
+    const rowAxisMappings = mappedAttributeRows.filter(
+      (mapping) => mapping.gridAxis === "ROW" || (!mapping.gridAxis && mapping.attribute.role === "Y_GRID")
+    );
+    const columnAxisMappings = mappedAttributeRows.filter(
+      (mapping) => mapping.gridAxis === "COLUMN" || (!mapping.gridAxis && mapping.attribute.role === "X_GRID")
+    );
     const reasons: string[] = [];
 
     if (rowAxisMappings.length !== 1 || columnAxisMappings.length !== 1) {
@@ -3201,13 +3205,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
     const rowAxis = rowAxisMappings[0];
     const columnAxis = columnAxisMappings[0];
-
-    if (rowAxis && rowAxis.attribute.role !== "Y_GRID") {
-      reasons.push(`${rowAxis.attribute.name} must use the Grid Y Axis display type to drive matrix rows`);
-    }
-    if (columnAxis && columnAxis.attribute.role !== "X_GRID") {
-      reasons.push(`${columnAxis.attribute.name} must use the Grid X Axis display type to drive matrix columns`);
-    }
 
     const rowValues = rowAxis?.allowedValues.map((allowedValue) => allowedValue.attributeValue) ?? [];
     const columnValues = columnAxis?.allowedValues.map((allowedValue) => allowedValue.attributeValue) ?? [];
@@ -3236,20 +3233,47 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       reasons.push("more than one package is present, so each row/column cell would match multiple package variants");
     }
 
+    // Fast O(N) pre-indexing of variants by (rowValueId, columnValueId)
+    const rowValIdSet = new Set(rowValues.map((rv) => rv.id));
+    const colValIdSet = new Set(columnValues.map((cv) => cv.id));
+    const variantByCellMap = new Map<string, typeof filteredVariantRows[0]>();
+    const variantCountByCellMap = new Map<string, number>();
+
+    for (const variant of filteredVariantRows) {
+      const avIds = (variant.attributeValues ?? []).map((av) => av.attributeValueId);
+      let matchedRowId: string | null = null;
+      let matchedColId: string | null = null;
+
+      for (const id of avIds) {
+        if (!matchedRowId && rowValIdSet.has(id)) matchedRowId = id;
+        if (!matchedColId && colValIdSet.has(id)) matchedColId = id;
+        if (matchedRowId && matchedColId) break;
+      }
+
+      if (matchedRowId && matchedColId) {
+        const cellKey = `${matchedRowId}:${matchedColId}`;
+        const count = (variantCountByCellMap.get(cellKey) ?? 0) + 1;
+        variantCountByCellMap.set(cellKey, count);
+        if (count === 1) {
+          variantByCellMap.set(cellKey, variant);
+        }
+      }
+    }
+
     const rows = rowValues.map((rowValue) => ({
       value: rowValue,
       cells: columnValues.map((columnValue) => {
-        const matches = filteredVariantRows.filter((variant) => {
-          const selectedValueIds = new Set((variant.attributeValues ?? []).map((attributeValue) => attributeValue.attributeValueId));
-          return selectedValueIds.has(rowValue.id) && selectedValueIds.has(columnValue.id);
-        });
-        if (matches.length === 0) {
+        const cellKey = `${rowValue.id}:${columnValue.id}`;
+        const matchCount = variantCountByCellMap.get(cellKey) ?? 0;
+        if (matchCount === 0) {
           reasons.push(`missing variant for ${rowValue.value} / ${columnValue.value}`);
-        }
-        if (matches.length > 1) {
+        } else if (matchCount > 1) {
           reasons.push(`multiple variants match ${rowValue.value} / ${columnValue.value}`);
         }
-        return { columnValue, variant: matches.length === 1 ? matches[0] : null };
+        return {
+          columnValue,
+          variant: matchCount === 1 ? (variantByCellMap.get(cellKey) ?? null) : null,
+        };
       }),
     }));
 
@@ -4729,7 +4753,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         const result = await adminApi.post(`/products/${productId}/generate-variants`, {
           packageIds: manualVariantPackageId ? [manualVariantPackageId] : [],
           attributes: attributesPayload,
-        });
+        }, { timeout: 180000 });
         showToast(result.data.message || "Variants created.");
       }
       setManualVariantOpen(false);
@@ -4864,7 +4888,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       if (Number.isFinite(basePrice) && basePrice > 0) {
         payload.basePrice = basePrice;
       }
-      const result = await adminApi.post(`/products/${productId}/generate-variants`, payload);
+      const result = await adminApi.post(`/products/${productId}/generate-variants`, payload, { timeout: 180000 });
       showToast(result.data.message || "Variants generated.");
       setGenerateVariantOpen(false);
       refetch();

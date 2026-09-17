@@ -88,13 +88,18 @@ async function syncVariantsStorefrontVisibility(variantIds: string[], productId:
     where: { productId, enabled: true, country: { status: "ACTIVE" } },
     select: { countryId: true },
   });
+  if (!productCountries.length) return;
 
-  await prisma.variantCountry.createMany({
-    data: uniqueVariantIds.flatMap((variantId) =>
-      productCountries.map(({ countryId }) => ({ variantId, countryId, enabled: true })),
-    ),
-    skipDuplicates: true,
-  });
+  const allRows = uniqueVariantIds.flatMap((variantId) =>
+    productCountries.map(({ countryId }) => ({ variantId, countryId, enabled: true })),
+  );
+
+  for (let i = 0; i < allRows.length; i += 1000) {
+    await prisma.variantCountry.createMany({
+      data: allRows.slice(i, i + 1000),
+      skipDuplicates: true,
+    });
+  }
 }
 
 async function syncVariantStorefrontVisibility(variantId: string, productId: string) {
@@ -1647,7 +1652,8 @@ export async function listVariantCountries(productId: string, variantId: string)
 }
 
 async function syncVariantCountriesFromProduct(productId: string, variantIds: string[]) {
-  if (!variantIds.length) return;
+  const uniqueVariantIds = Array.from(new Set(variantIds));
+  if (!uniqueVariantIds.length) return;
 
   const enabledCountries = await prisma.productCountry.findMany({
     where: { productId, enabled: true },
@@ -1656,16 +1662,20 @@ async function syncVariantCountriesFromProduct(productId: string, variantIds: st
 
   if (!enabledCountries.length) return;
 
-  await prisma.variantCountry.createMany({
-    data: variantIds.flatMap((variantId) =>
-      enabledCountries.map((country) => ({
-        variantId,
-        countryId: country.countryId,
-        enabled: true,
-      })),
-    ),
-    skipDuplicates: true,
-  });
+  const allRows = uniqueVariantIds.flatMap((variantId) =>
+    enabledCountries.map((country) => ({
+      variantId,
+      countryId: country.countryId,
+      enabled: true,
+    })),
+  );
+
+  for (let i = 0; i < allRows.length; i += 1000) {
+    await prisma.variantCountry.createMany({
+      data: allRows.slice(i, i + 1000),
+      skipDuplicates: true,
+    });
+  }
 }
 
 export async function updateVariantCountries(
@@ -1995,6 +2005,7 @@ export async function assignAttributes(
       },
     });
 
+    const titlesToUpdate: { id: string; title: string }[] = [];
     for (const variant of existingVariants) {
       if (!variant.attributeValues.length) continue;
       const sortedValues = [...variant.attributeValues]
@@ -2007,15 +2018,26 @@ export async function assignAttributes(
 
       const newTitle = buildVariantTitle(sortedValues, variant.package?.title);
       if (newTitle && newTitle !== variant.title) {
-        await tx.productVariant.update({
-          where: { id: variant.id },
-          data: { title: newTitle },
-        });
+        titlesToUpdate.push({ id: variant.id, title: newTitle });
+      }
+    }
+
+    if (titlesToUpdate.length > 0) {
+      for (let i = 0; i < titlesToUpdate.length; i += 50) {
+        const chunk = titlesToUpdate.slice(i, i + 50);
+        await Promise.all(
+          chunk.map((item) =>
+            tx.productVariant.update({
+              where: { id: item.id },
+              data: { title: item.title },
+            })
+          )
+        );
       }
     }
 
     return created;
-  });
+  }, { timeout: 30000, maxWait: 10000 });
 }
 
 export async function listProductAttributes(productId: string) {
@@ -2504,97 +2526,180 @@ export async function generateVariants(
     ? await Promise.all(packageIds.map((packageId) => ensureProductPackage(productId, packageId)))
     : [null];
 
-  const createdVariants = await Promise.all(
-    combos.flatMap((combo) =>
-      packages.map(async (pkg) => {
-        const variantKey = buildVariantKey(combo.map((v) => v.id), pkg?.id);
-        const title = buildVariantTitle(combo, pkg?.title);
-        const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey } });
-        if (existing) {
-          const isSoftDeleted = existing.deletedAt !== null;
-          const wasInactive = existing.status === "INACTIVE" || isSoftDeleted;
-          const restored = wasInactive
-            ? await prisma.productVariant.update({
-                where: { id: existing.id },
-                data: {
-                  status: "ACTIVE",
-                  deletedAt: null,
-                },
-              })
-            : existing;
-          const existingInventories = await prisma.inventory.findMany({
-            where: { variantId: existing.id },
-            select: { id: true, countryId: true },
-          });
-          const inventoryByCountry = new Map(existingInventories.map((inventory) => [inventory.countryId ?? "__base__", inventory]));
-          await prisma.$transaction(
-            inventoryTemplates.map((template) => {
-              const matchingInventory = inventoryByCountry.get(template.countryId ?? "__base__");
-              return matchingInventory
-                ? prisma.inventory.update({
-                    where: { id: matchingInventory.id },
-                    data: {
-                      stock: template.stock,
-                      reservedStock: template.reservedStock,
-                      lowStockThreshold: template.lowStockThreshold,
-                      status: template.status,
-                    },
-                  })
-                : prisma.inventory.create({
-                    data: { productId, variantId: existing.id, ...template },
-                  });
-            }),
-          );
-          return { variant: restored, isNew: false, isRestored: wasInactive };
-        }
-
-        const variant = await prisma.productVariant.create({
-          data: {
-            productId,
-            packageId: pkg?.id ?? null,
-            title,
-            variantKey,
-            sku: buildGeneratedVariantSku(product, variantKey),
-            weight: product.packageWeight ?? null,
-            length: product.packageLength ?? null,
-            width: product.packageWidth ?? null,
-            height: product.packageHeight ?? null,
-            shippingClass: product.shippingClass ?? null,
-            fragile: product.fragile,
-            hazardous: product.hazardous,
-            status: "ACTIVE",
-          },
-        });
-
-        await prisma.productVariantAttributeValue.createMany({
-          data: combo.map((v) => ({
-            variantId: variant.id,
-            attributeId: v.attributeId,
-            attributeValueId: v.id,
-          })),
-        });
-
-        await prisma.inventory.createMany({
-          data: inventoryTemplates.map((template) => ({ productId, variantId: variant.id, ...template })),
-        });
-
-        return { variant, isNew: true, isRestored: false };
-      })
-    )
+  const targets = combos.flatMap((combo) =>
+    packages.map((pkg) => ({
+      combo,
+      pkg,
+      variantKey: buildVariantKey(combo.map((v) => v.id), pkg?.id),
+      title: buildVariantTitle(combo, pkg?.title),
+    }))
   );
 
-  const activeVariantIds = createdVariants
-    .filter((v) => v.variant.status === "ACTIVE")
-    .map((v) => v.variant.id);
+  const existingVariants = await prisma.productVariant.findMany({
+    where: { productId },
+  });
+  const existingVariantMap = new Map(existingVariants.map((v) => [v.variantKey, v]));
+
+  const newTargets: typeof targets = [];
+  const existingTargets: { target: typeof targets[0]; existing: typeof existingVariants[0] }[] = [];
+
+  for (const t of targets) {
+    const existing = existingVariantMap.get(t.variantKey);
+    if (existing) {
+      existingTargets.push({ target: t, existing });
+    } else {
+      newTargets.push(t);
+    }
+  }
+
+  const toRestoreIds = existingTargets
+    .filter((e) => e.existing.status === "INACTIVE" || e.existing.deletedAt !== null)
+    .map((e) => e.existing.id);
+
+  if (toRestoreIds.length > 0) {
+    for (let i = 0; i < toRestoreIds.length; i += 500) {
+      await prisma.productVariant.updateMany({
+        where: { id: { in: toRestoreIds.slice(i, i + 500) } },
+        data: {
+          status: "ACTIVE",
+          deletedAt: null,
+        },
+      });
+    }
+    // Update local existing state to ACTIVE
+    for (const e of existingTargets) {
+      if (toRestoreIds.includes(e.existing.id)) {
+        e.existing.status = "ACTIVE" as const;
+        e.existing.deletedAt = null;
+      }
+    }
+  }
+
+  if (existingTargets.length > 0 && inventoryTemplates.length > 0) {
+    const existingVariantIds = existingTargets.map((e) => e.existing.id);
+    const existingInventories: { id: string; variantId: string | null; countryId: string | null }[] = [];
+    for (let i = 0; i < existingVariantIds.length; i += 500) {
+      const chunk = await prisma.inventory.findMany({
+        where: { variantId: { in: existingVariantIds.slice(i, i + 500) } },
+        select: { id: true, variantId: true, countryId: true },
+      });
+      existingInventories.push(...chunk);
+    }
+
+    const existingInvSet = new Set(
+      existingInventories.map((inv) => `${inv.variantId}:${inv.countryId ?? "__base__"}`)
+    );
+
+    const invToCreate: any[] = [];
+    for (const e of existingTargets) {
+      for (const template of inventoryTemplates) {
+        const key = `${e.existing.id}:${template.countryId ?? "__base__"}`;
+        if (!existingInvSet.has(key)) {
+          invToCreate.push({
+            productId,
+            variantId: e.existing.id,
+            ...template,
+          });
+        }
+      }
+    }
+
+    if (invToCreate.length > 0) {
+      for (let i = 0; i < invToCreate.length; i += 1000) {
+        await prisma.inventory.createMany({
+          data: invToCreate.slice(i, i + 1000),
+          skipDuplicates: true,
+        });
+      }
+    }
+  }
+
+  const createdVariantsList: any[] = [];
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < newTargets.length; i += BATCH_SIZE) {
+    const chunk = newTargets.slice(i, i + BATCH_SIZE);
+    const batchResult = await prisma.$transaction(
+      async (tx) => {
+        const createdInBatch: any[] = [];
+        const attrValuesToCreate: any[] = [];
+        const inventoriesToCreate: any[] = [];
+
+        for (const item of chunk) {
+          const variant = await tx.productVariant.create({
+            data: {
+              productId,
+              packageId: item.pkg?.id ?? null,
+              title: item.title,
+              variantKey: item.variantKey,
+              sku: buildGeneratedVariantSku(product, item.variantKey),
+              weight: product.packageWeight ?? null,
+              length: product.packageLength ?? null,
+              width: product.packageWidth ?? null,
+              height: product.packageHeight ?? null,
+              shippingClass: product.shippingClass ?? null,
+              fragile: product.fragile,
+              hazardous: product.hazardous,
+              status: "ACTIVE",
+            },
+          });
+          createdInBatch.push(variant);
+
+          for (const v of item.combo) {
+            attrValuesToCreate.push({
+              variantId: variant.id,
+              attributeId: v.attributeId,
+              attributeValueId: v.id,
+            });
+          }
+
+          for (const template of inventoryTemplates) {
+            inventoriesToCreate.push({
+              productId,
+              variantId: variant.id,
+              ...template,
+            });
+          }
+        }
+
+        if (attrValuesToCreate.length > 0) {
+          await tx.productVariantAttributeValue.createMany({
+            data: attrValuesToCreate,
+            skipDuplicates: true,
+          });
+        }
+
+        if (inventoriesToCreate.length > 0) {
+          await tx.inventory.createMany({
+            data: inventoriesToCreate,
+            skipDuplicates: true,
+          });
+        }
+
+        return createdInBatch;
+      },
+      { timeout: 30000 }
+    );
+
+    createdVariantsList.push(...batchResult);
+  }
+
+  const allVariants = [
+    ...existingTargets.map((e) => e.existing),
+    ...createdVariantsList,
+  ];
+  const activeVariantIds = allVariants
+    .filter((v) => v.status === "ACTIVE")
+    .map((v) => v.id);
 
   await syncVariantsStorefrontVisibility(activeVariantIds, productId);
-  await syncVariantCountriesFromProduct(productId, createdVariants.map((v) => v.variant.id));
+  await syncVariantCountriesFromProduct(productId, allVariants.map((v) => v.id));
 
-  const newCount = createdVariants.filter((v) => v.isNew).length;
-  const restoredCount = createdVariants.filter((v) => v.isRestored).length;
-  const totalCount = createdVariants.length;
+  const newCount = createdVariantsList.length;
+  const restoredCount = toRestoreIds.length;
+  const totalCount = targets.length;
 
-  const result: any = createdVariants.map((v) => v.variant);
+  const result: any = allVariants;
   result.newCount = newCount;
   result.restoredCount = restoredCount;
   result.totalCount = totalCount;

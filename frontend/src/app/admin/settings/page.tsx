@@ -329,10 +329,31 @@ export default function SettingsPage() {
       const searchParams = new URLSearchParams(window.location.search);
       const tabParam = searchParams.get("tab");
       if (tabParam) {
-        setActiveTab(tabParam);
+        if (tabParam === "email") {
+          router.replace("/admin/settings/email");
+          return;
+        }
+        if (tabParam === "sms") {
+          router.replace("/admin/settings/sms");
+          return;
+        }
+        if (tabParam === "whatsapp") {
+          router.replace("/admin/settings/whatsapp");
+          return;
+        }
+        if (TABS.some((t) => t.id === tabParam)) {
+          setActiveTab(tabParam);
+        } else {
+          setActiveTab("general");
+          const url = new URL(window.location.href);
+          url.searchParams.delete("tab");
+          window.history.replaceState({}, "", url.toString());
+        }
       }
     }
-  }, []);
+  }, [router]);
+
+  const currentTab = TABS.some((t) => t.id === activeTab) ? activeTab : "general";
 
   useEffect(() => {
     if (countries.length > 0 && !selectedCountryCode) {
@@ -635,7 +656,7 @@ export default function SettingsPage() {
                 <button key={tab.id} onClick={() => handleTabChange(tab.id)}
                   className={cn(
                     "w-full flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-[13px] font-medium text-left transition-colors",
-                    activeTab === tab.id ? "bg-[#E31E24] text-white shadow-xs" : "text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
+                    currentTab === tab.id ? "bg-[#E31E24] text-white shadow-xs" : "text-[#6B6B6B] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]"
                   )}>
                   <Icon size={14} className="flex-none" />{tab.label}
                 </button>
@@ -647,7 +668,7 @@ export default function SettingsPage() {
         {/* ── Content ── */}
         <div className="flex-1 min-w-0">
           <AdminStickySaveBar
-            title={TABS.find((t) => t.id === activeTab)?.label}
+            title={TABS.find((t) => t.id === currentTab)?.label}
             subtitle={canUpdate ? "Changes are not applied until you save." : undefined}
             isReadOnly={!canUpdate}
             readOnlyMessage="Read-only mode. You do not have permissions to edit store settings."
@@ -663,7 +684,7 @@ export default function SettingsPage() {
           <fieldset disabled={!canUpdate} className="rounded-xl border border-[#E6E6E6] bg-white p-6 disabled:opacity-90">
 
             {/* ── General ── */}
-            {activeTab === "general" && (
+            {currentTab === "general" && (
               <div className="space-y-6">
                 <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Manage core website identity, canonical domain URL, brand logos, favicon, and customer support contact details.
@@ -915,7 +936,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── SEO ── */}
-            {activeTab === "seo" && (
+            {currentTab === "seo" && (
               <div>
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Configure global search engine optimization (SEO), OpenGraph social preview cards, XML sitemaps, and robots.txt crawling rules.
@@ -984,7 +1005,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Analytics ── */}
-            {activeTab === "analytics" && (
+            {currentTab === "analytics" && (
               <div className="space-y-5">
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Connect Google Analytics, GTM, Clarity, and Hotjar to track website visitors, view behavior heatmaps, and monitor customer traffic.
@@ -1013,7 +1034,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Pixels ── */}
-            {activeTab === "pixels" && (
+            {currentTab === "pixels" && (
               <div className="space-y-5">
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Connect ad tracking pixels (Meta, LinkedIn, Twitter/X, TikTok, Pinterest) to measure ad conversions and run retargeting campaigns.
@@ -1050,7 +1071,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Social Media ── */}
-            {activeTab === "social" && (
+            {currentTab === "social" && (
               <div>
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Connect official brand social channels (Facebook, Instagram, LinkedIn, YouTube, X, Pinterest) per country with automatic global fallback.
@@ -1109,7 +1130,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Verification ── */}
-            {activeTab === "verification" && (
+            {currentTab === "verification" && (
               <div>
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Prove domain ownership to search engines and platforms (Google Search Console, Bing, Facebook, Pinterest) to activate indexing and security.
@@ -1134,7 +1155,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Custom Scripts ── */}
-            {activeTab === "scripts" && (
+            {currentTab === "scripts" && (
               <div>
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Paste custom JavaScript codes or third-party widgets (such as Live Chat, A/B testing, or surveys) to inject them into the website.
@@ -1150,7 +1171,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Cookie Consent ── */}
-            {activeTab === "cookies" && (
+            {currentTab === "cookies" && (
               <div>
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Enable a GDPR & CCPA compliant cookie notice for visitors. If a visitor clicks Reject, analytics and tracking scripts are automatically blocked.
@@ -1179,7 +1200,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Auth Pages ── */}
-            {activeTab === "auth" && (
+            {currentTab === "auth" && (
               <div>
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Upload slider images here or paste an existing media URL. These settings control the customer login page.
@@ -1400,7 +1421,7 @@ export default function SettingsPage() {
             )}
 
             {/* ── Tax & Compliance ── */}
-            {activeTab === "tax" && (
+            {currentTab === "tax" && (
               <div>
                 <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
                   Manage seller legal identity, corporate GSTIN / IEC registrations, and fulfillment warehouse state for dynamic tax invoices.
