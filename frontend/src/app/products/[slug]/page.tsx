@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
@@ -33,41 +34,41 @@ const API_ORIGIN =
     ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api(?:\/admin)?$/, "")
     : "http://localhost:4000");
 
-async function fetchProductFromApi(slug: string): Promise<ApiProductDetail | null> {
+const fetchProductFromApi = cache(async (slug: string): Promise<ApiProductDetail | null> => {
   try {
     const cookieStore = await cookies();
     const language = cookieStore.get("language")?.value;
     const countryCode = cookieStore.get("country")?.value?.toUpperCase();
 
-    const queryOptions = [
-      { lang: language, countryCode },
-      { lang: undefined, countryCode },
-      { lang: language, countryCode: undefined },
-      { lang: undefined, countryCode: undefined },
-    ];
+    const params = new URLSearchParams();
+    if (language) params.set("lang", language);
+    if (countryCode) params.set("countryCode", countryCode);
+    const query = params.toString();
 
-    const tried = new Set<string>();
-    for (const option of queryOptions) {
-      const params = new URLSearchParams();
-      if (option.lang) params.set("lang", option.lang);
-      if (option.countryCode) params.set("countryCode", option.countryCode);
-      const query = params.toString();
-      if (tried.has(query)) continue;
-      tried.add(query);
-
-      const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query ? `?${query}` : ""}`, {
-        cache: "no-store",
-      });
-      if (!res.ok) continue;
+    const res = await fetch(`${API_ORIGIN}/api/products/${slug}${query ? `?${query}` : ""}`, {
+      cache: "no-store",
+    });
+    if (res.ok) {
       const json = await res.json();
       if (json.data) return json.data;
+    }
+
+    // Fallback without query params if country/language was not available
+    if (query) {
+      const fallbackRes = await fetch(`${API_ORIGIN}/api/products/${slug}`, {
+        cache: "no-store",
+      });
+      if (fallbackRes.ok) {
+        const json = await fallbackRes.json();
+        if (json.data) return json.data;
+      }
     }
 
     return null;
   } catch {
     return null;
   }
-}
+});
 
 async function fetchSlugsFromApi(): Promise<string[]> {
   try {
@@ -281,7 +282,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               {hasVariants ? (
                 <div className="my-5 rounded-2xl border border-line bg-[#FAFAFA] p-4 sm:p-5 space-y-3">
                   <div className="flex flex-wrap items-center gap-3">
-                    <ConfigureButton label="Add to Cart" className="h-11 flex-1 min-w-[150px]" />
+                    <ConfigureButton label="Configure Product" className="h-11 flex-1 min-w-[150px]" />
                     {apiProduct?.id && (
                       <WishlistButton
                         productId={apiProduct.id}

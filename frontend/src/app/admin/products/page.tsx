@@ -68,7 +68,7 @@ interface ProductRow {
   media: { url: string }[];
   countries: { countryId: string }[];
   inventories: { stock: number; reservedStock: number }[];
-  prices: { sellingPrice: string | number; currency: { symbol: string; code: string } }[];
+  prices: { sellingPrice: string | number; currency: { symbol: string; code: string; isBase?: boolean } }[];
   updatedAt: string;
   createdAt: string;
 }
@@ -322,7 +322,7 @@ export default function AdminProductsPage() {
   };
 
   const formatPrice = (product: ProductRow) => {
-    const price = product.prices[0];
+    const price = product.prices.find((p) => p.currency?.isBase || p.currency?.code === "INR") ?? product.prices[0];
     if (!price) return "—";
     return `${price.currency.symbol}${Number(price.sellingPrice).toFixed(2)}`;
   };

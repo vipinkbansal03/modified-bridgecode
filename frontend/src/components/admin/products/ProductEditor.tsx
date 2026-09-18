@@ -507,10 +507,16 @@ const emptyRuleDraft: RuleDraft = {
 };
 
 const getVariantPriceForCountry = (variant: VariantRow, countryId?: string, productBasePrices?: any[]) => {
-  const specific = countryId ? variant.prices?.find((price) => price.countryId === countryId || price.country?.id === countryId) : variant.prices?.[0];
-  if (specific) return specific;
-  const base = countryId ? productBasePrices?.find((price) => price.countryId === countryId || price.country?.id === countryId) : productBasePrices?.[0];
-  return base ?? null;
+  if (countryId) {
+    const specific = variant.prices?.find((price) => price.countryId === countryId || price.country?.id === countryId);
+    if (specific) return specific;
+    const base = productBasePrices?.find((price) => price.countryId === countryId || price.country?.id === countryId);
+    return base ?? null;
+  }
+  const specificBase = variant.prices?.find((price: any) => price.currency?.isBase || price.currency?.code === "INR") ?? variant.prices?.[0];
+  if (specificBase) return specificBase;
+  const productBase = productBasePrices?.find((price: any) => price.currency?.isBase || price.currency?.code === "INR") ?? productBasePrices?.[0];
+  return productBase ?? null;
 };
 
 const formatVariantPrice = (variant: VariantRow, productBasePrices?: any[]) => {
@@ -2126,14 +2132,26 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
 
   const productVariantPrices = useMemo(() => {
-    const rawPrices = (product?.prices || []).filter((p: any) => p.variantId != null);
     const enabledCountries = (productCountries as CountryAvailability[]).filter((c) => c.enabled);
-    const rows: any[] = [];
+    if (!enabledCountries.length || !variantRows.length) return [];
 
+    const basePriceByCountryId = new Map<string, any>();
+    (product?.prices || []).forEach((p: any) => {
+      if (p.variantId == null) {
+        basePriceByCountryId.set(p.countryId, p);
+      }
+    });
+
+    const rows: any[] = [];
     variantRows.forEach((variant) => {
+      const variantPriceByCountryId = new Map<string, any>();
+      (variant.prices || []).forEach((p: any) => {
+        variantPriceByCountryId.set(p.countryId, p);
+      });
+
       enabledCountries.forEach((country) => {
-        const override = rawPrices.find((p: any) => p.variantId === variant.id && p.countryId === country.id);
-        
+        const override = variantPriceByCountryId.get(country.id);
+
         if (override) {
           rows.push({
             ...override,
@@ -2142,9 +2160,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             isOverride: true
           });
         } else {
-          const basePrice = product?.prices?.find((p: any) => p.variantId == null && p.countryId === country.id);
+          const basePrice = basePriceByCountryId.get(country.id);
           rows.push({
-            id: `base-${variant.id}-${country.id}`, 
+            id: `base-${variant.id}-${country.id}`,
             variantId: variant.id,
             countryId: country.id,
             country: country,
@@ -3233,6 +3251,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       reasons.push("more than one package is present, so each row/column cell would match multiple package variants");
     }
 
+    const earlyReasons = Array.from(new Set(reasons));
+    if (earlyReasons.length || !rowAxis || !columnAxis) {
+      return { mode: "flat" as const, reasons: earlyReasons };
+    }
+
     // Fast O(N) pre-indexing of variants by (rowValueId, columnValueId)
     const rowValIdSet = new Set(rowValues.map((rv) => rv.id));
     const colValIdSet = new Set(columnValues.map((cv) => cv.id));
@@ -3278,7 +3301,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }));
 
     const uniqueReasons = Array.from(new Set(reasons));
-    if (uniqueReasons.length || !rowAxis || !columnAxis) {
+    if (uniqueReasons.length) {
       return { mode: "flat" as const, reasons: uniqueReasons };
     }
 

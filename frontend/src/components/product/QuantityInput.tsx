@@ -23,7 +23,7 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
         disabled ? "pointer-events-none opacity-40" : "bg-white"
       } ${
         size === "xs"
-          ? "h-6 w-full max-w-[90px] sm:w-[65px] sm:max-w-none"
+          ? "h-6.5 w-full max-w-[95px] sm:w-[72px] sm:max-w-none"
           : size === "sm" 
           ? "h-8 w-full max-w-[120px] sm:w-[86px] sm:max-w-none" 
           : "h-10 w-full max-w-[180px] sm:h-9 sm:w-[112px] sm:max-w-none"
@@ -33,7 +33,7 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
         type="button"
         onClick={() => onChange(value <= minPositive ? 0 : normalize(value - 1))}
         className={`flex h-full select-none items-center justify-center rounded-l-full text-[#1A1A1A] transition-colors hover:bg-[#F5F5F5] ${
-          size === "xs" ? "w-6 text-[13px]" : size === "sm" ? "w-8 text-[15px]" : "w-10 text-[18px] sm:w-9"
+          size === "xs" ? "w-6.5 text-[14px]" : size === "sm" ? "w-8 text-[15px]" : "w-10 text-[18px] sm:w-9"
         }`}
         aria-label="Decrease quantity"
       >
@@ -51,14 +51,14 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
         }}
         disabled={disabled}
         className={`h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-center font-semibold text-[#1A1A1A] focus:outline-none focus:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${
-          size === "xs" ? "text-[10px]" : size === "sm" ? "text-[12px]" : "text-[14px]"
+          size === "xs" ? "text-[11.5px]" : size === "sm" ? "text-[12px]" : "text-[14px]"
         }`}
       />
       <button
         type="button"
         onClick={() => onChange(normalize(value + 1))}
         className={`flex h-full select-none items-center justify-center rounded-r-full text-[#1A1A1A] transition-colors hover:bg-[#F5F5F5] ${
-          size === "xs" ? "w-6 text-[13px]" : size === "sm" ? "w-8 text-[15px]" : "w-10 text-[18px] sm:w-9"
+          size === "xs" ? "w-6.5 text-[14px]" : size === "sm" ? "w-8 text-[15px]" : "w-10 text-[18px] sm:w-9"
         }`}
         aria-label="Increase quantity"
       >

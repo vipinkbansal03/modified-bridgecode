@@ -617,8 +617,7 @@ export async function listProducts(query: ProductListQuery) {
         inventories: { select: { stock: true, reservedStock: true } },
         prices: {
           where: { status: "ACTIVE", variantId: null },
-          orderBy: [{ sellingPrice: "asc" }],
-          take: 1,
+          orderBy: [{ currency: { isBase: "desc" } }, { sellingPrice: "asc" }],
           include: { country: true, currency: true },
         },
         _count: { select: { variants: true, collections: true } },
@@ -656,8 +655,7 @@ export async function listVariants(query: VariantListQuery) {
         inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
         prices: {
           where: { status: "ACTIVE" },
-          orderBy: [{ sellingPrice: "asc" }],
-          take: 1,
+          orderBy: [{ currency: { isBase: "desc" } }, { sellingPrice: "asc" }],
           include: { currency: true, country: true },
         },
         attributeValues: {
@@ -825,7 +823,10 @@ export async function getProduct(id: string) {
         },
       },
       inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
-      prices: { include: { country: true, currency: true, variant: true } },
+      prices: {
+        where: { variantId: null },
+        include: { country: true, currency: true },
+      },
       translations: { include: { language: true } },
     },
   });

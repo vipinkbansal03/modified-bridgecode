@@ -466,51 +466,12 @@ export async function checkSoleActiveBasePrice(
 ): Promise<{ isSole: boolean; reason?: string }> {
   const rule = await prisma.productPrice.findUnique({
     where: { id: priceId },
-    include: {
-      product: {
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          deletedAt: true,
-          hasVariants: true,
-        },
-      },
-      variant: { select: { id: true, title: true, status: true } },
-      country: { select: { id: true, name: true, code: true } },
-    },
+    select: { id: true, deletedAt: true },
   });
 
   if (!rule) return { isSole: false };
 
-  // If parent Product is inactive or soft-deleted:
-  // allowing the pricing rule operation (deactivate/archive) is acceptable because the Product
-  // is already unavailable for normal storefront/checkout resolution.
-  const productUnavailable =
-    rule.product.deletedAt !== null ||
-    rule.product.status === "INACTIVE" ||
-    rule.product.status === "ARCHIVED";
-
-  if (productUnavailable) {
-    // Hard-delete safety requirement: active pricing rules cannot be permanently deleted without being archived first.
-    if (action === "delete" && rule.deletedAt === null) {
-      return {
-        isSole: true,
-        reason: "Active pricing rules cannot be permanently deleted. Archive the pricing rule first.",
-      };
-    }
-    return { isSole: false };
-  }
-
-  // If rule is already inactive or archived and action is deactivate/archive:
-  if (action === "deactivate" && rule.status === "INACTIVE") {
-    return { isSole: false };
-  }
-  if (action === "archive" && rule.deletedAt !== null) {
-    return { isSole: false };
-  }
-
-  // Hard-delete requirement: must be archived first
+  // Hard-delete requirement: active pricing rules cannot be permanently deleted without being archived first.
   if (action === "delete" && rule.deletedAt === null) {
     return {
       isSole: true,
@@ -518,43 +479,7 @@ export async function checkSoleActiveBasePrice(
     };
   }
 
-  // Exact resolution hierarchy check in the affected country (rule.countryId):
-  // 1. If rule is a VARIANT PRICE (rule.variantId != null):
-  // Context is: (Product rule.productId, Variant rule.variantId, Country rule.countryId).
-  // In the resolver, fallback is: (Product rule.productId, variantId: null, Country rule.countryId, status: "ACTIVE", deletedAt: null).
-  if (rule.variantId !== null) {
-    const activeBaseFallback = await prisma.productPrice.findFirst({
-      where: {
-        productId: rule.productId,
-        variantId: null,
-        countryId: rule.countryId,
-        status: "ACTIVE",
-        deletedAt: null,
-        NOT: { id: rule.id },
-      },
-      select: { id: true },
-    });
-
-    if (activeBaseFallback) {
-      // Active base price fallback exists in the same country!
-      return { isSole: false };
-    }
-
-    // No active base price exists in this country for this product!
-    return {
-      isSole: true,
-      reason: `Cannot ${action} this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.`,
-    };
-  }
-
-  // 2. If rule is a PRODUCT BASE PRICE (rule.variantId == null):
-  // In this country (rule.countryId), this is the authoritative base price and fallback for all variants.
-  // Because of @@unique([productId, variantId, countryId]), no other product-level base price can exist in this country.
-  // Removing it leaves the country without a base price, breaking resolution for the product and any variants without specific prices.
-  return {
-    isSole: true,
-    reason: `Cannot ${action} this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.`,
-  };
+  return { isSole: false };
 }
 
 async function collectPricingRows(query: PricingListQuery) {

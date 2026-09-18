@@ -64,7 +64,7 @@ type VariantRow = {
   package?: { id: string; title: string } | null;
   countries?: { countryId: string }[];
   inventories?: { countryId?: string | null; stock?: number; reservedStock?: number; status?: string }[];
-  prices?: { sellingPrice: string | number; currency: { symbol: string; code: string }; country?: { name: string; code: string } | null }[];
+  prices?: { sellingPrice: string | number; currency: { symbol: string; code: string; isBase?: boolean }; country?: { name: string; code: string } | null }[];
 };
 
 type VariantSortBy = "updatedAt" | "createdAt" | "title" | "sku" | "status" | "product";
@@ -96,7 +96,7 @@ const visibleColumnsDefault: Record<ColumnKey, boolean> = {
 };
 
 function formatPrice(row: VariantRow) {
-  const price = row.prices?.[0];
+  const price = row.prices?.find((p) => (p.currency as any)?.isBase || p.currency?.code === "INR") ?? row.prices?.[0];
   if (!price) return "—";
   const amount = Number(price.sellingPrice);
   const formatted = Number.isFinite(amount) ? amount.toLocaleString("en-IN") : String(price.sellingPrice);

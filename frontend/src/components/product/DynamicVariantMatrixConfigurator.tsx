@@ -455,6 +455,7 @@ export function DynamicVariantMatrixConfigurator({
     : false;
 
   const activeRowCombinations = useMemo(() => {
+    if (!allDropdownsSelected && dropdownAttributes.length > 0) return [];
     return rowCombinations.filter((rc) => {
       return columnCombinations.some((cc) => {
         const key = buildVariantLookupKey(
@@ -468,9 +469,10 @@ export function DynamicVariantMatrixConfigurator({
         return variantLookup.has(key) && variantLookup.get(key) !== null;
       });
     });
-  }, [rowCombinations, columnCombinations, dropdownSelections, selectedPackageId, variantLookup]);
+  }, [allDropdownsSelected, dropdownAttributes.length, rowCombinations, columnCombinations, dropdownSelections, selectedPackageId, variantLookup]);
 
   const activeColumnCombinations = useMemo(() => {
+    if (!allDropdownsSelected && dropdownAttributes.length > 0) return [];
     return columnCombinations.filter((cc) => {
       return activeRowCombinations.some((rc) => {
         const key = buildVariantLookupKey(
@@ -484,7 +486,7 @@ export function DynamicVariantMatrixConfigurator({
         return variantLookup.has(key) && variantLookup.get(key) !== null;
       });
     });
-  }, [columnCombinations, activeRowCombinations, dropdownSelections, selectedPackageId, variantLookup]);
+  }, [allDropdownsSelected, dropdownAttributes.length, columnCombinations, activeRowCombinations, dropdownSelections, selectedPackageId, variantLookup]);
 
   const selectedEntries = useMemo(
     () =>
@@ -1011,7 +1013,7 @@ export function DynamicVariantMatrixConfigurator({
                     <table className="w-full border-collapse text-left">
                       <thead>
                         <tr className="border-b border-line bg-[#F8F9FA]">
-                          <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-1.5 py-1 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-ink">
+                          <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-2.5 py-2 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink">
                             <span className="text-brand">
                               {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
                             </span>
@@ -1027,10 +1029,10 @@ export function DynamicVariantMatrixConfigurator({
                             return (
                               <th
                                 key={columnCombination.key}
-                                className="min-w-[65px] border-r border-line bg-[#F8F9FA] px-1 py-1 text-center text-[10px] font-bold text-ink last:border-r-0"
+                                className="min-w-[80px] border-r border-line bg-[#F8F9FA] px-2 py-2 text-center text-[11px] font-bold text-ink last:border-r-0"
                               >
                                 <div className="inline-flex flex-col items-center">
-                                  <span className="rounded-md bg-red-50 px-1 py-0.5 text-[9.5px] font-bold text-brand border border-red-100/60 leading-tight">
+                                  <span className="rounded-md bg-red-50 px-2 py-1 text-[11px] font-bold text-brand border border-red-100/60 leading-tight">
                                     {headerText}
                                   </span>
                                 </div>
@@ -1045,7 +1047,7 @@ export function DynamicVariantMatrixConfigurator({
                             key={rowCombination.key}
                             className="border-b border-line hover:bg-slate-50/50 transition-colors last:border-b-0"
                           >
-                            <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-1.5 py-1.5 text-left font-bold text-ink text-[10.5px] whitespace-nowrap shadow-xs">
+                            <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-2.5 py-2 text-left font-bold text-ink text-[12px] whitespace-nowrap shadow-xs">
                               {rowCombination.labels.map((l) => l.value.value).join(" • ") || "All"}
                             </th>
                             {activeColumnCombinations.map((columnCombination) => {
@@ -1080,11 +1082,11 @@ export function DynamicVariantMatrixConfigurator({
                               return (
                                 <td
                                   key={columnCombination.key}
-                                  className="align-middle border-r border-line px-1 py-1 text-center last:border-r-0"
+                                  className="align-middle border-r border-line px-1.5 py-1.5 text-center last:border-r-0"
                                 >
                                   {variant ? (
                                     <div
-                                      className={`mx-auto flex flex-col items-center justify-center rounded-md p-0.5 transition-all ${
+                                      className={`mx-auto flex flex-col items-center justify-center rounded-md p-1 transition-all ${
                                         quantity > 0
                                           ? "bg-red-50/70 ring-1 ring-brand/30"
                                           : "bg-white"
@@ -1105,9 +1107,9 @@ export function DynamicVariantMatrixConfigurator({
                                         disabled={!variant}
                                       />
                                       <div className="mt-1.5 text-center">
-                                        <p className="text-[10px] font-bold text-ink">
+                                        <p className="text-[12px] font-bold text-ink">
                                           {isPor ? (
-                                            <span className="text-[10.5px] font-semibold text-brand">
+                                            <span className="text-[11.5px] font-semibold text-brand">
                                               Price Upon Request
                                             </span>
                                           ) : price && displayUnitPrice != null ? (
@@ -1120,14 +1122,14 @@ export function DynamicVariantMatrixConfigurator({
                                           )}
                                         </p>
                                         {outOfStock ? (
-                                          <span className="text-[10px] font-semibold text-red-500">
+                                          <span className="text-[11px] font-semibold text-red-500">
                                             Out of stock
                                           </span>
                                         ) : null}
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="py-2 text-center text-[11px] font-medium text-steel-2">
+                                    <div className="py-2 text-center text-[12px] font-medium text-steel-2">
                                       
                                     </div>
                                   )}

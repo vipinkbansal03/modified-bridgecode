@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingBag, ArrowDown } from "lucide-react";
+import { SlidersHorizontal, ArrowDown } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 interface ConfigureButtonProps {
@@ -10,7 +10,7 @@ interface ConfigureButtonProps {
 }
 
 export function ConfigureButton({
-  label = "Add to Cart",
+  label = "Configure Product",
   className,
   showIcon = true,
 }: ConfigureButtonProps) {
@@ -43,7 +43,7 @@ export function ConfigureButton({
         className
       )}
     >
-      {showIcon && <ShoppingBag size={16} />}
+      {showIcon && <SlidersHorizontal size={16} />}
       <span>{label}</span>
       <ArrowDown size={14} className="opacity-80" />
     </button>
