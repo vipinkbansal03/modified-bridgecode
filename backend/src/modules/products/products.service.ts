@@ -59,6 +59,25 @@ async function assertUniqueProductSku(sku?: string | null, excludeId?: string) {
   if (duplicate) throw new AppError("A product with this SKU already exists.", 409);
 }
 
+export async function assertProductExists(productId: string) {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      sku: true,
+      status: true,
+      categoryId: true,
+      hasVariants: true,
+      defaultCountryId: true,
+      defaultCurrencyId: true,
+    },
+  });
+  if (!product) throw new AppError("Product not found.", 404);
+  return product;
+}
+
 function generateProductSku(title: string): string {
   const base = slugify(title).toUpperCase();
   return base ? `MO-${base}` : "";
@@ -616,7 +635,7 @@ export async function listProducts(query: ProductListQuery) {
         countries: { where: { enabled: true }, select: { countryId: true } },
         inventories: { select: { stock: true, reservedStock: true } },
         prices: {
-          where: { status: "ACTIVE", variantId: null },
+          where: { status: "ACTIVE", variantId: null, deletedAt: null },
           orderBy: [{ currency: { isBase: "desc" } }, { sellingPrice: "asc" }],
           include: { country: true, currency: true },
         },
@@ -654,7 +673,7 @@ export async function listVariants(query: VariantListQuery) {
         countries: { where: { enabled: true }, select: { countryId: true } },
         inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
         prices: {
-          where: { status: "ACTIVE" },
+          where: { status: "ACTIVE", deletedAt: null },
           orderBy: [{ currency: { isBase: "desc" } }, { sellingPrice: "asc" }],
           include: { currency: true, country: true },
         },
@@ -818,13 +837,13 @@ export async function getProduct(id: string) {
           attributeValues: {
             include: { attribute: true, attributeValue: true },
           },
-          prices: { include: { country: true, currency: true } },
+          prices: { where: { deletedAt: null }, include: { country: true, currency: true } },
           inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
         },
       },
-      inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
+      inventories: { where: { variantId: null }, include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
       prices: {
-        where: { variantId: null },
+        where: { variantId: null, deletedAt: null },
         include: { country: true, currency: true },
       },
       translations: { include: { language: true } },
@@ -955,7 +974,7 @@ export async function updateShippingInfo(id: string, data: ShippingInfoInput) {
 // ─── Soft delete & Permanent delete ─────────────────────────
 
 export async function deleteProduct(id: string) {
-  await getProduct(id);
+  await assertProductExists(id);
   return prisma.product.update({
     where: { id },
     data: {
@@ -1116,14 +1135,14 @@ export async function duplicateProduct(id: string) {
       countries: true,
       collections: true,
       translations: true,
-      prices: { include: { country: true, currency: true } },
+      prices: { where: { deletedAt: null }, include: { country: true, currency: true } },
       variants: {
         where: { status: { not: "INACTIVE" } },
         include: {
           attributeValues: true,
           countries: true,
           inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
-          prices: { include: { country: true, currency: true } },
+          prices: { where: { deletedAt: null }, include: { country: true, currency: true } },
         },
       },
     },
@@ -1288,7 +1307,7 @@ export async function duplicateProduct(id: string) {
         media: { orderBy: { sortOrder: "asc" }, take: 1 },
         countries: { where: { enabled: true }, select: { countryId: true } },
         inventories: { select: { stock: true, reservedStock: true } },
-        prices: { where: { status: "ACTIVE", variantId: null }, orderBy: [{ sellingPrice: "asc" }], take: 1, include: { country: true, currency: true } },
+        prices: { where: { status: "ACTIVE", variantId: null, deletedAt: null }, orderBy: [{ sellingPrice: "asc" }], take: 1, include: { country: true, currency: true } },
         _count: { select: { variants: true, collections: true } },
       },
     });
@@ -1558,7 +1577,7 @@ export async function bulkUpdateProducts(data: {
 }
 
 export async function listProductCountries(productId: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const [countries, mappings] = await Promise.all([
     prisma.country.findMany({ where: { status: "ACTIVE" }, include: { currency: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.productCountry.findMany({ where: { productId } }),
@@ -1706,7 +1725,7 @@ export async function createPackage(
   productId: string,
   data: { title: string; image?: string | null; description?: string | null; sortOrder?: number; status?: string }
 ) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const title = data.title.trim();
   const slug = slugify(title);
   const existing = await prisma.productPackage.findFirst({ where: { productId, slug } });
@@ -1771,7 +1790,7 @@ export async function addProductMedia(
   altTexts: string[],
   mediaIds: string[] = []
 ) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   
   if ((!files || !files.length) && (!mediaIds || !mediaIds.length)) {
     return [];
@@ -1854,7 +1873,7 @@ export async function addProductMedia(
 // ─── Set cover product media ──────────────────────────────
 
 export async function setProductCoverMedia(productId: string, mediaId: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
 
   const targetMedia = await prisma.productMedia.findUnique({
     where: { id: mediaId },
@@ -1925,7 +1944,7 @@ export async function assignAttributes(
   productId: string,
   attributes: { attributeId: string; required: boolean; gridAxis?: "ROW" | "COLUMN" | null; allowedValueIds?: string[] }[]
 ) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   if (!Array.isArray(attributes)) throw new AppError("Attributes payload must be an array.", 400);
 
   const attributeIds = attributes.map((attributeConfig) => attributeConfig.attributeId);
@@ -2042,7 +2061,7 @@ export async function assignAttributes(
 }
 
 export async function listProductAttributes(productId: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   return prisma.productAttribute.findMany({
     where: { productId },
     orderBy: { createdAt: "asc" },
@@ -2069,7 +2088,7 @@ export async function listProductAttributes(productId: string) {
 }
 
 export async function removeProductAttribute(productId: string, attributeId: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const existing = await prisma.productAttribute.findUnique({
     where: { productId_attributeId: { productId, attributeId } },
   });
@@ -2118,7 +2137,7 @@ function normalizeDisplayTypeToGridAxis(str: string): GridAxis | null {
 }
 
 export async function exportProductAttributesSpreadsheet(productId: string) {
-  const product = await getProduct(productId);
+  const product = await assertProductExists(productId);
   const mappings = await listProductAttributes(productId);
 
   const rows = mappings.map((m) => {
@@ -2197,7 +2216,7 @@ export function generateSampleProductAttributesTemplate() {
 }
 
 export async function previewProductAttributesImport(productId: string, filePath: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const rawRows = readSpreadsheetRows(filePath);
   const issues: Array<{ row: number; field: string; message: string }> = [];
   const duplicateWarnings: string[] = [];
@@ -2285,7 +2304,7 @@ export async function previewProductAttributesImport(productId: string, filePath
 }
 
 export async function importProductAttributesSpreadsheet(productId: string, filePathOrRows: string | any[]) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const rawRows: any[] = Array.isArray(filePathOrRows) ? filePathOrRows : readSpreadsheetRows(filePathOrRows);
   if (rawRows.length === 0) {
     throw new AppError("Uploaded spreadsheet is empty.", 400);
@@ -3025,7 +3044,7 @@ export async function bulkUpdateVariants(
 }
 
 async function getVariantPriceImportCountry(productId: string, countryId: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const country = await prisma.country.findUnique({
     where: { id: countryId },
     select: { id: true, name: true, code: true, currency: { select: { code: true, symbol: true } } },
@@ -3041,7 +3060,7 @@ export async function exportVariantCountryPricesSpreadsheet(productId: string, c
     orderBy: [{ title: "asc" }, { sku: "asc" }],
     include: {
       prices: {
-        where: { countryId },
+        where: { countryId, deletedAt: null },
         take: 1,
         include: { currency: true },
       },
@@ -3295,7 +3314,7 @@ export async function getVariant(productId: string, variantId: string) {
     include: {
       package: true,
       attributeValues: { include: { attribute: true, attributeValue: true } },
-      prices: { include: { country: true, currency: true } },
+      prices: { where: { deletedAt: null }, include: { country: true, currency: true } },
       inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
     },
   });
@@ -3308,16 +3327,16 @@ function cartesian<T>(arrays: T[][]): T[][] {
 }
 
 export async function listTierPricing(productId: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   return prisma.tierPricing.findMany({
-    where: { productId },
+    where: { productId, deletedAt: null },
     include: { tier: true, country: true, variant: true },
     orderBy: [{ tier: { sortOrder: "asc" } }, { country: { sortOrder: "asc" } }, { createdAt: "desc" }],
   });
 }
 
 export async function createTierPricing(productId: string, data: PricingRuleInput) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   if (!data.tierId) throw new AppError("Tier is required.", 400);
   if (!data.countryId) throw new AppError("Country is required.", 400);
   const rule = normalizeExclusivePriceRule(data);
@@ -3332,7 +3351,16 @@ export async function createTierPricing(productId: string, data: PricingRuleInpu
   const existing = await prisma.tierPricing.findFirst({
     where: { productId, tierId: data.tierId, countryId: data.countryId, variantId: data.variantId || null },
   });
-  if (existing) throw new AppError("A tier pricing rule already exists for this combination.", 409);
+  if (existing) {
+    if (existing.deletedAt) {
+      return prisma.tierPricing.update({
+        where: { id: existing.id },
+        data: { ...rule, deletedAt: null },
+        include: { tier: true, country: true, variant: true },
+      });
+    }
+    throw new AppError("A tier pricing rule already exists for this combination.", 409);
+  }
 
   return prisma.tierPricing.create({
     data: { productId, tierId: data.tierId, countryId: data.countryId, variantId: data.variantId || null, ...rule },
@@ -3341,7 +3369,7 @@ export async function createTierPricing(productId: string, data: PricingRuleInpu
 }
 
 export async function updateTierPricing(productId: string, ruleId: string, data: PricingRuleInput) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const existing = await prisma.tierPricing.findFirst({ where: { id: ruleId, productId } });
   if (!existing) throw new AppError("Tier pricing rule not found.", 404);
 
@@ -3356,7 +3384,7 @@ export async function updateTierPricing(productId: string, ruleId: string, data:
   await assertTierUsable(tierId, { countryId });
 
   const duplicate = await prisma.tierPricing.findFirst({
-    where: { productId, tierId, countryId, variantId, NOT: { id: ruleId } },
+    where: { productId, tierId, countryId, variantId, deletedAt: null, NOT: { id: ruleId } },
   });
   if (duplicate) throw new AppError("A tier pricing rule already exists for this combination.", 409);
 
@@ -3370,20 +3398,21 @@ export async function updateTierPricing(productId: string, ruleId: string, data:
 export async function deleteTierPricing(productId: string, ruleId: string) {
   const existing = await prisma.tierPricing.findFirst({ where: { id: ruleId, productId } });
   if (!existing) throw new AppError("Tier pricing rule not found.", 404);
-  await prisma.tierPricing.delete({ where: { id: ruleId } });
+  if (existing.deletedAt) return;
+  await prisma.tierPricing.update({ where: { id: ruleId }, data: { deletedAt: new Date() } });
 }
 
 export async function listMoqPricing(productId: string) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   return prisma.moqPricing.findMany({
-    where: { productId },
+    where: { productId, deletedAt: null },
     include: { country: true, variant: true },
     orderBy: [{ minQuantity: "asc" }, { country: { sortOrder: "asc" } }, { createdAt: "desc" }],
   });
 }
 
 export async function createMoqPricing(productId: string, data: PricingRuleInput) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   if (!data.countryId) throw new AppError("Country is required.", 400);
   const minQuantity = Number(data.minQuantity);
   if (!Number.isInteger(minQuantity) || minQuantity < 1) throw new AppError("Minimum quantity must be at least 1.", 400);
@@ -3403,7 +3432,22 @@ export async function createMoqPricing(productId: string, data: PricingRuleInput
   const existing = await prisma.moqPricing.findFirst({
     where: { productId, countryId: data.countryId, variantId: data.variantId || null, minQuantity },
   });
-  if (existing) throw new AppError("An MOQ pricing rule already exists for this combination.", 409);
+  if (existing) {
+    if (existing.deletedAt) {
+      return prisma.moqPricing.update({
+        where: { id: existing.id },
+        data: {
+          minQuantity,
+          maxQuantity: maxQty,
+          discountPercent,
+          fixedPrice,
+          deletedAt: null,
+        },
+        include: { country: true, variant: true },
+      });
+    }
+    throw new AppError("An MOQ pricing rule already exists for this combination.", 409);
+  }
 
   return prisma.moqPricing.create({
     data: { 
@@ -3420,7 +3464,7 @@ export async function createMoqPricing(productId: string, data: PricingRuleInput
 }
 
 export async function updateMoqPricing(productId: string, ruleId: string, data: PricingRuleInput) {
-  await getProduct(productId);
+  await assertProductExists(productId);
   const existing = await prisma.moqPricing.findFirst({ where: { id: ruleId, productId } });
   if (!existing) throw new AppError("MOQ pricing rule not found.", 404);
 
@@ -3446,7 +3490,7 @@ export async function updateMoqPricing(productId: string, ruleId: string, data: 
   await ensureVariantBelongsToProduct(productId, variantId);
 
   const duplicate = await prisma.moqPricing.findFirst({
-    where: { productId, countryId, variantId, minQuantity, NOT: { id: ruleId } },
+    where: { productId, countryId, variantId, minQuantity, deletedAt: null, NOT: { id: ruleId } },
   });
   if (duplicate) throw new AppError("An MOQ pricing rule already exists for this combination.", 409);
 
@@ -3460,7 +3504,8 @@ export async function updateMoqPricing(productId: string, ruleId: string, data: 
 export async function deleteMoqPricing(productId: string, ruleId: string) {
   const existing = await prisma.moqPricing.findFirst({ where: { id: ruleId, productId } });
   if (!existing) throw new AppError("MOQ pricing rule not found.", 404);
-  await prisma.moqPricing.delete({ where: { id: ruleId } });
+  if (existing.deletedAt) return;
+  await prisma.moqPricing.update({ where: { id: ruleId }, data: { deletedAt: new Date() } });
 }
 
 const PRODUCT_EXPORT_COLUMNS = [
@@ -3914,7 +3959,7 @@ function normalizeVariantAttributeValue(value: unknown): string {
 }
 
 export async function previewVariantsImport(productId: string, filePath: string) {
-  const product = await getProduct(productId);
+  const product = await assertProductExists(productId);
   if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
 
   const productAttributeMappings = await listProductAttributes(productId);
@@ -4035,7 +4080,7 @@ export async function previewVariantsImport(productId: string, filePath: string)
 }
 
 export async function executeVariantsImport(productId: string, rows: any[]) {
-  const product = await getProduct(productId);
+  const product = await assertProductExists(productId);
   if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
 
   const productCountries = await prisma.productCountry.findMany({

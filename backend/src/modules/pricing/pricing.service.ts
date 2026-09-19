@@ -898,7 +898,7 @@ export async function softDeletePrice(id: string) {
     include: { product: true, variant: true },
   });
   if (pp) {
-    if (pp.deletedAt) throw new AppError("Pricing rule is already archived.", 400);
+    if (pp.deletedAt) return pp;
     const check = await checkSoleActiveBasePrice(id, "archive");
     if (check.isSole) {
       throw new AppError(check.reason || "Cannot archive this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.", 400);
@@ -911,7 +911,7 @@ export async function softDeletePrice(id: string) {
 
   const tp = await prisma.tierPricing.findUnique({ where: { id } });
   if (tp) {
-    if (tp.deletedAt) throw new AppError("Tier pricing rule is already archived.", 400);
+    if (tp.deletedAt) return tp;
     return prisma.tierPricing.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -920,7 +920,7 @@ export async function softDeletePrice(id: string) {
 
   const mp = await prisma.moqPricing.findUnique({ where: { id } });
   if (mp) {
-    if (mp.deletedAt) throw new AppError("MOQ pricing rule is already archived.", 400);
+    if (mp.deletedAt) return mp;
     return prisma.moqPricing.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -2048,6 +2048,7 @@ export async function generateCountryPrices(
               dealerPrice: item.price.dealerPrice,
               distributorPrice: item.price.distributorPrice,
               status: item.price.status,
+              deletedAt: null,
             },
           })
         )
