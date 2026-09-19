@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Layers3,
   ShoppingBag,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -21,6 +22,7 @@ import { useProductWarehouses } from "@/hooks/api/useProducts";
 import { WarehouseSelectorModal } from "./WarehouseSelectorModal";
 import { QuantityInput } from "./QuantityInput";
 import { StockBadge } from "./StockBadge";
+import { formatAttributeLabel } from "@/utils/attributeUtils";
 import type {
   ApiAttribute,
   ApiAttributeValue,
@@ -604,13 +606,13 @@ export function DynamicVariantMatrixConfigurator({
       .map((a) => ({ id: a.id, valueId: dropdownSelections[a.id] }))
       .filter((item) => Boolean(item.valueId));
 
-    const matchingVariants = normalizedVariants.filter((variant) =>
-      precedingSelections.every(
-        (item) => variant.selectionByAttributeId[item.id] === item.valueId,
-      ),
-    );
-
-    const sourceVariants = matchingVariants.length > 0 ? matchingVariants : normalizedVariants;
+    const sourceVariants = precedingSelections.length > 0
+      ? normalizedVariants.filter((variant) =>
+          precedingSelections.every(
+            (item) => variant.selectionByAttributeId[item.id] === item.valueId,
+          ),
+        )
+      : normalizedVariants;
 
     const availableValueIdSet = new Set(
       sourceVariants
@@ -845,19 +847,38 @@ export function DynamicVariantMatrixConfigurator({
     };
   }, [apiProduct.slug, apiProduct.variants, quantityMap, selectedCountryCode, currentCustomer]);
 
+  const dynamicAttributeListText = useMemo(() => {
+    const names: string[] = [];
+    dropdownAttributes.forEach((attr) => names.push(formatAttributeLabel(attr.name)));
+    rowAxisAttributes.forEach((attr) => names.push(formatAttributeLabel(attr.name)));
+    xAxisAttributes.forEach((attr) => names.push(formatAttributeLabel(attr.name)));
+    if (packageOptions.length > 1) {
+      names.push("Package");
+    }
+    const uniqueNames = Array.from(new Set(names.filter(Boolean)));
+    if (uniqueNames.length === 0) return "options";
+    if (uniqueNames.length === 1) return uniqueNames[0].toLowerCase();
+    if (uniqueNames.length === 2) return `${uniqueNames[0].toLowerCase()} and ${uniqueNames[1].toLowerCase()}`;
+    return `${uniqueNames.slice(0, -1).map((n) => n.toLowerCase()).join(", ")}, and ${uniqueNames[uniqueNames.length - 1].toLowerCase()}`;
+  }, [dropdownAttributes, rowAxisAttributes, xAxisAttributes, packageOptions.length]);
+
   if (!matrixEnabled) return null;
 
   return (
     <section className="pt-16">
       <div className="rounded-lg border border-line bg-white p-6 sm:p-7">
-        <div className="mb-6 flex flex-col gap-2 border-b border-line pb-5">
-          <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal leading-tight tracking-tight text-ink">
-            Order Multiple Variants In One Step
+        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-line bg-[#FAFAFA] p-5">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/20 bg-brand/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-brand">
+              <Sparkles size={12} />
+              Multi-Variant Order
+            </span>
+          </div>
+          <h2 className="text-[clamp(20px,2.4vw,28px)] font-bold leading-tight tracking-tight text-ink">
+            Order Multiple Variants in One Step
           </h2>
-          <p className="max-w-[760px] text-[14.5px] leading-relaxed text-steel">
-            Use the matrix below to enter quantities across multiple variant
-            combinations, then add every selected line to cart or quote in one
-            action.
+          <p className="max-w-[820px] text-[14px] sm:text-[14.5px] leading-relaxed text-steel">
+            Select your preferred {dynamicAttributeListText} below to order in one step. Use the matrix below to enter quantities across multiple variant combinations, then add every selected line to cart in one action.
           </p>
         </div>
 
@@ -907,7 +928,7 @@ export function DynamicVariantMatrixConfigurator({
                     >
                       <div className="mb-2 flex items-center justify-between">
                         <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
-                          {attribute.name}
+                          {formatAttributeLabel(attribute.name)}
                         </span>
                         <span className="rounded-pill border border-line bg-white px-2 py-0.5 text-[10px] font-semibold text-steel">
                           {availableValues.length}{" "}
@@ -921,7 +942,7 @@ export function DynamicVariantMatrixConfigurator({
                         }
                         className="w-full cursor-pointer rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
                       >
-                        <option value="">Select {attribute.name}</option>
+                        <option value="">Select One</option>
                         {availableValues.map((value) => (
                           <option key={value.id} value={value.id}>
                             {value.value}
@@ -1001,10 +1022,10 @@ export function DynamicVariantMatrixConfigurator({
             {activeRowCombinations.length > 0 && activeColumnCombinations.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink">
+                  <span className="text-[13px] font-bold uppercase tracking-[0.14em] text-ink">
                     Matrix Grid (Size Combinations)
                   </span>
-                  <span className="text-[11.5px] text-steel">
+                  <span className="text-[12.5px] text-steel">
                     Enter quantities directly in cells to order multiple sizes at once
                   </span>
                 </div>
@@ -1013,13 +1034,13 @@ export function DynamicVariantMatrixConfigurator({
                     <table className="w-full border-collapse text-left">
                       <thead>
                         <tr className="border-b border-line bg-[#F8F9FA]">
-                          <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-2.5 py-2 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink">
+                          <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-2.5 py-2 text-left text-[12px] font-bold uppercase tracking-[0.08em] text-ink">
                             <span className="text-brand">
-                              {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
+                              {rowAxisAttributes.map((a) => formatAttributeLabel(a.name)).join(" + ") || "Size"}
                             </span>
                             <span className="mx-1 text-steel-2">/</span>
                             <span className="text-steel">
-                              {xAxisAttributes.map((a) => a.name).join(" + ")}
+                              {xAxisAttributes.map((a) => formatAttributeLabel(a.name)).join(" + ")}
                             </span>
                           </th>
                           {activeColumnCombinations.map((columnCombination) => {
@@ -1029,10 +1050,10 @@ export function DynamicVariantMatrixConfigurator({
                             return (
                               <th
                                 key={columnCombination.key}
-                                className="min-w-[80px] border-r border-line bg-[#F8F9FA] px-2 py-2 text-center text-[11px] font-bold text-ink last:border-r-0"
+                                className="min-w-[80px] border-r border-line bg-[#F8F9FA] px-2 py-2 text-center text-[12.5px] font-bold text-ink last:border-r-0"
                               >
                                 <div className="inline-flex flex-col items-center">
-                                  <span className="rounded-md bg-red-50 px-2 py-1 text-[11px] font-bold text-brand border border-red-100/60 leading-tight">
+                                  <span className="rounded-md bg-red-50 px-2.5 py-1 text-[12px] sm:text-[12.5px] font-bold text-brand border border-red-100/60 leading-tight">
                                     {headerText}
                                   </span>
                                 </div>
@@ -1047,7 +1068,7 @@ export function DynamicVariantMatrixConfigurator({
                             key={rowCombination.key}
                             className="border-b border-line hover:bg-slate-50/50 transition-colors last:border-b-0"
                           >
-                            <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-2.5 py-2 text-left font-bold text-ink text-[12px] whitespace-nowrap shadow-xs">
+                            <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-2.5 py-2 text-left font-bold text-ink text-[13px] sm:text-[13.5px] whitespace-nowrap shadow-xs">
                               {rowCombination.labels.map((l) => l.value.value).join(" • ") || "All"}
                             </th>
                             {activeColumnCombinations.map((columnCombination) => {
@@ -1107,9 +1128,9 @@ export function DynamicVariantMatrixConfigurator({
                                         disabled={!variant}
                                       />
                                       <div className="mt-1.5 text-center">
-                                        <p className="text-[12px] font-bold text-ink">
+                                        <p className="text-[13px] font-bold text-ink">
                                           {isPor ? (
-                                            <span className="text-[11.5px] font-semibold text-brand">
+                                            <span className="text-[12px] font-semibold text-brand">
                                               Price Upon Request
                                             </span>
                                           ) : price && displayUnitPrice != null ? (
@@ -1122,7 +1143,7 @@ export function DynamicVariantMatrixConfigurator({
                                           )}
                                         </p>
                                         {outOfStock ? (
-                                          <span className="text-[11px] font-semibold text-red-500">
+                                          <span className="text-[11.5px] font-semibold text-red-500">
                                             Out of stock
                                           </span>
                                         ) : null}
@@ -1169,7 +1190,7 @@ export function DynamicVariantMatrixConfigurator({
                       <Layers3 size={18} />
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                      <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-steel-2">
                         Selected Variants
                       </p>
                       <p className="text-[14px] text-steel">
@@ -1191,10 +1212,10 @@ export function DynamicVariantMatrixConfigurator({
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-[13.5px] font-semibold text-ink">
+                              <p className="text-[14px] font-semibold text-ink">
                                 {entry.variant.title}
                               </p>
-                              <p className="mt-1 text-[12px] text-steel">
+                              <p className="mt-1 text-[12.5px] text-steel">
                                 {entry.quantity} x{" "}
                                 {formatMoney(
                                   entry.price.currencySymbol,
@@ -1221,10 +1242,10 @@ export function DynamicVariantMatrixConfigurator({
                     <div className="rounded-lg border border-line bg-white p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[13.5px] font-semibold text-ink">
+                          <p className="text-[14px] font-semibold text-ink">
                             {singleResolvedVariant.title}
                           </p>
-                          <p className="mt-1 text-[12px] text-steel">
+                          <p className="mt-1 text-[12.5px] text-steel">
                             {dropdownQuantity} x{" "}
                             {formatMoney(
                               totals.currencySymbol,
@@ -1281,33 +1302,16 @@ export function DynamicVariantMatrixConfigurator({
                   </div>
 
                   <div className="mt-5 space-y-3">
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleAddSelectedToCart(false)}
-                        disabled={!hasOrderableItems}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
-                      >
-                        <ShoppingBag size={15} />
-                        {!hasOrderableItems ? "Select Options" : "Add To Cart"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAddSelectedToCart(true)}
-                        disabled={!hasOrderableItems}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-brand px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
-                      >
-                        Buy Now
-                      </button>
-                    </div>
                     <button
                       type="button"
-                      onClick={handleAddSelectedToQuote}
+                      onClick={() => handleAddSelectedToCart(false)}
                       disabled={!hasOrderableItems}
-                      className="inline-flex w-full items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-4 py-3 text-[13.5px] font-semibold text-white transition hover:bg-[#333] disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A] shadow-sm cursor-pointer"
                     >
-                      {!hasOrderableItems ? "Select Options" : "Add Selected To Quote"}
+                      <ShoppingBag size={15} />
+                      {!hasOrderableItems ? "Select Options" : "Buy Now"}
                     </button>
+                    {/* Note (Issue tracker #29): Add Selected to Quote button hidden for now; handler handleAddSelectedToQuote retained for future restoration */}
                   </div>
 
                   {feedback && (

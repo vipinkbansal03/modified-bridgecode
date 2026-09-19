@@ -49,8 +49,7 @@ function optionalDate(value: string | Date | null | undefined) {
 
 function normalize(input: BannerInput, current?: BannerInput) {
   const merged = { ...(current ?? {}), ...input };
-  const title = merged.title?.trim();
-  if (!title) throw new AppError("Banner title is required.", 400);
+  const title = merged.title !== undefined ? (merged.title?.trim() ?? "") : (current?.title ?? "");
   const image = merged.image?.trim();
   if (!image) throw new AppError("Banner image is required.", 400);
   const placement = merged.placement;

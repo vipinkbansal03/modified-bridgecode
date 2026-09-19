@@ -14,15 +14,31 @@ export const customerRegisterSchema = z.object({
     .min(7, "Mobile number must be at least 7 digits")
     .max(20, "Mobile number is too long")
     .regex(PHONE_REGEX, "Please enter a valid mobile number"),
-  customerType: z.enum(["RETAIL", "DEALER", "DOCTOR", "WHOLESALE"]).optional(),
+  customerType: z.enum(["RETAIL", "DEALER", "DOCTOR", "WHOLESALE", "STUDENT"]).optional(),
   customerRoleKey: z.enum(["GUEST", "DEALER", "DOCTOR_RETAILER"]).optional(),
   companyName: z.string().trim().optional(),
-  website: z.string().trim().optional(),
-  addressLine1: z.string().trim().min(1, "Address is required"),
+  website: z
+    .string()
+    .trim()
+    .refine(
+      (val) => {
+        if (!val || val.trim() === "") return true;
+        try {
+          const urlToTest = val.startsWith("http://") || val.startsWith("https://") ? val : `https://${val}`;
+          const parsed = new URL(urlToTest);
+          return Boolean(parsed.hostname && parsed.hostname.includes("."));
+        } catch {
+          return false;
+        }
+      },
+      { message: "Please enter a valid website URL" }
+    )
+    .optional(),
+  addressLine1: z.string().trim().optional(),
   addressLine2: z.string().trim().optional(),
-  city: z.string().trim().min(1, "City is required"),
-  state: z.string().trim().min(1, "State is required"),
-  postalCode: z.string().trim().min(1, "Zipcode is required"),
+  city: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  postalCode: z.string().trim().optional(),
   country: z.string().trim().min(1, "Country is required"),
   preferredPrescription: z.enum(["MBT", "ROTH", "OTHER"]).optional(),
   preferredPrescriptionOther: z.string().trim().optional(),

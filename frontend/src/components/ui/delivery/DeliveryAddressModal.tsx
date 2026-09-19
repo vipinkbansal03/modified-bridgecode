@@ -5,6 +5,10 @@ import { useState, useEffect, useMemo } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useCustomerAddresses } from "@/hooks/api/useCustomerAddresses";
 import type { CustomerAddress } from "@/types/delivery.types";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/queryConfig";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
+import AddressModal from "@/app/account/AddressModal";
 
 import { CurrentLocationCard } from "./CurrentLocationCard";
 import { PincodeSearch } from "./PincodeSearch";
@@ -23,7 +27,11 @@ export function DeliveryAddressModal({
   onClose,
 }: DeliveryAddressModalProps) {
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const { currentCustomer } = useCustomerAuth();
   const { data: addresses = [], isLoading } = useCustomerAddresses(); 
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<any | null>(null); 
 
   const {
     selectedAddress,
@@ -56,7 +64,51 @@ export function DeliveryAddressModal({
   const handleAddressSelect = (address: CustomerAddress) => {
     setSelectedAddressId(address.id);
     setSelectedAddress(address);
+    if (address.postalCode) {
+      setSelectedPincode?.(address.postalCode);
+    }
+    onClose();
+  };
 
+  const handleAddNewAddress = () => {
+    if (!currentCustomer) {
+      showToast("Please sign in to save delivery addresses.", "info");
+      return;
+    }
+    setEditingAddress(null);
+    setIsAddressModalOpen(true);
+  };
+
+  const handleEditAddress = (addr: CustomerAddress) => {
+    setEditingAddress(addr);
+    setIsAddressModalOpen(true);
+  };
+
+  const handleAddressSuccess = (savedAddr: any) => {
+    queryClient.invalidateQueries({ queryKey: qk.customerAddresses.all });
+    const mappedAddress: CustomerAddress = {
+      id: savedAddr.id,
+      customerId: savedAddr.customerId || currentCustomer?.id || "",
+      label: savedAddr.label || "Delivery Address",
+      fullName: savedAddr.fullName || "",
+      phone: savedAddr.phone || "",
+      addressLine1: savedAddr.addressLine1 || "",
+      addressLine2: savedAddr.addressLine2 || null,
+      city: savedAddr.city || "",
+      state: savedAddr.state || "",
+      postalCode: savedAddr.postalCode || "",
+      countryId: savedAddr.countryId || "",
+      country: typeof savedAddr.country === "object" ? savedAddr.country : ({ id: "", name: savedAddr.country || "India", code: "IN", currencyId: "", symbol: "₹" } as any),
+      isDefault: Boolean(savedAddr.isDefault),
+      createdAt: savedAddr.createdAt || new Date().toISOString(),
+      updatedAt: savedAddr.updatedAt || new Date().toISOString(),
+    };
+    setSelectedAddress(mappedAddress);
+    if (savedAddr.postalCode) {
+      setSelectedPincode?.(savedAddr.postalCode);
+    }
+    setIsAddressModalOpen(false);
+    showToast("Delivery address saved successfully.", "success");
     onClose();
   };
 
@@ -454,11 +506,25 @@ export function DeliveryAddressModal({
             addresses={displayAddresses}
             selectedAddressId={selectedAddressId}
             onSelect={handleAddressSelect}
+            onAddNew={handleAddNewAddress}
+            onEdit={handleEditAddress}
           />
         ) : (
-          <EmptyAddresses />
+          <EmptyAddresses onAddNew={handleAddNewAddress} />
         )}
       </div>
+
+      {isAddressModalOpen && (
+        <AddressModal
+          isOpen={isAddressModalOpen}
+          onClose={() => {
+            setIsAddressModalOpen(false);
+            setEditingAddress(null);
+          }}
+          onSuccess={handleAddressSuccess}
+          editingAddress={editingAddress}
+        />
+      )}
     </Modal>
   );
 }

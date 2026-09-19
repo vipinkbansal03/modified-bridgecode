@@ -401,7 +401,7 @@ export default function ProductFiltersPage() {
                       label="Attribute Name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Wire Size"
+                      placeholder="e.g. Cross Section"
                       disabled
                     />
                     <AdminSelect

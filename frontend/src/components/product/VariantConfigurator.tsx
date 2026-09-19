@@ -28,6 +28,7 @@ import { WarehouseSelectorModal } from "./WarehouseSelectorModal";
 import { DynamicVariantMatrixConfigurator } from "./DynamicVariantMatrixConfigurator";
 import { StockBadge } from "./StockBadge";
 import { WishlistButton } from "./WishlistButton";
+import { formatAttributeLabel } from "@/utils/attributeUtils";
 import type {
   ApiAttribute,
   ApiProductDetail,
@@ -538,20 +539,20 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       .map((a) => ({ name: a.name, value: selectedOptions[a.name] }))
       .filter((item) => Boolean(item.value));
 
-    const matchingVariants = variants.filter((variant) =>
-      precedingSelections.every((item) => {
-        const itemAttr = attributes.find((a) => a.name === item.name);
-        return variantMatchesSelection(
-          variant,
-          item.name,
-          item.value,
-          itemAttr?.id,
-          itemAttr?.values,
-        );
-      }),
-    );
-
-    const sourceVariants = matchingVariants.length > 0 ? matchingVariants : variants;
+    const sourceVariants = precedingSelections.length > 0
+      ? variants.filter((variant) =>
+          precedingSelections.every((item) => {
+            const itemAttr = attributes.find((a) => a.name === item.name);
+            return variantMatchesSelection(
+              variant,
+              item.name,
+              item.value,
+              itemAttr?.id,
+              itemAttr?.values,
+            );
+          }),
+        )
+      : variants;
 
     const availableValueSet = new Set(
       sourceVariants
@@ -875,7 +876,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   >
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <label className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink/80">
-                        {attribute.name}
+                        {formatAttributeLabel(attribute.name)}
                       </label>
                       <span className="rounded-pill border border-line bg-offwhite px-2 py-0.5 text-[10px] font-semibold text-steel">
                         {availableValues.length} {availableValues.length === 1 ? "opt" : "opts"}
@@ -915,7 +916,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           className="w-full cursor-pointer rounded-md border border-line bg-white py-2 pl-3 pr-8 text-[12.5px] font-medium text-ink outline-none transition hover:border-steel-2 focus:border-brand focus:ring-1 focus:ring-brand"
                         >
                           <option value="">
-                            Select {attribute.name}
+                            Select One
                           </option>
                           {availableValues.map((value) => (
                             <option
@@ -1006,7 +1007,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                             key={key}
                             className="rounded-pill border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-steel"
                           >
-                            {key}: {value}
+                            {formatAttributeLabel(key)}: {value}
                           </span>
                         ))}
                         {getVariantPackageLabel(currentVariant) && (
@@ -1132,23 +1133,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                         <button
                           type="button"
                           disabled={!isReady || isSelectedOutOfStock}
-                          onClick={() => handleAddToCart(false)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-brand hover:bg-transparent hover:text-brand cursor-pointer ${
+                          onClick={() => handleAddToCart(true)}
+                          className={`inline-flex items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-6 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] cursor-pointer ${
                             !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                           }`}
                         >
                           <ShoppingBag size={15} />
-                          {getButtonLabel("Add to Cart")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!isReady || isSelectedOutOfStock}
-                          onClick={() => handleAddToCart(true)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] cursor-pointer ${
-                            !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
-                          }`}
-                        >
-                          Buy Now
+                          {getButtonLabel("Buy Now")}
                         </button>
                         <WishlistButton
                           productId={apiProduct.id}

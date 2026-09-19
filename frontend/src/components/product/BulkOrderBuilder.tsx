@@ -45,8 +45,8 @@ function detectType(apiProduct: ApiProductDetail): BuilderType {
       ),
     );
     const supportsWireMatrix =
-      matrixAttributeNames.has("arch") &&
-      (matrixAttributeNames.has("size") || matrixAttributeNames.has("width"));
+      (matrixAttributeNames.has("arch") || matrixAttributeNames.has("upper/lower")) &&
+      (matrixAttributeNames.has("size") || matrixAttributeNames.has("width") || matrixAttributeNames.has("cross section"));
 
     return supportsWireMatrix ? "wire" : "bracket";
   }
@@ -54,7 +54,7 @@ function detectType(apiProduct: ApiProductDetail): BuilderType {
   const keys = Object.keys(variants[0].attributeCombination).map((k) =>
     k.toLowerCase(),
   );
-  if (keys.includes("arch")) return "wire";
+  if (keys.includes("arch") || keys.includes("upper/lower")) return "wire";
   if (
     Object.keys(variants[0].attributeCombination).length > 1 ||
     variants.length > 6

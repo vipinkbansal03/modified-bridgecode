@@ -916,7 +916,7 @@ export default function AttributesPage() {
               <div className="space-y-4">
                 <AdminInput
                   label="Name"
-                  placeholder="e.g. Wire Size"
+                  placeholder="e.g. Cross Section"
                   {...form.getFieldProps("name")}
                   error={form.errors.name as string}
                   required

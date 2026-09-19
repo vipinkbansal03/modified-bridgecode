@@ -20,10 +20,13 @@ function buildMatrix(variants: ApiVariant[]) {
       variant.attributeCombination["Size"] ??
       variant.attributeCombination["Width"] ??
       Object.values(variant.attributeCombination).find(
-        (_, index) => Object.keys(variant.attributeCombination)[index].toLowerCase() !== "arch",
+        (_, index) => {
+          const k = Object.keys(variant.attributeCombination)[index].toLowerCase();
+          return k !== "arch" && k !== "upper/lower";
+        },
       ) ??
       "—";
-    const arch = (variant.attributeCombination["Arch"] ?? "").toLowerCase();
+    const arch = (variant.attributeCombination["Arch"] ?? variant.attributeCombination["Upper/Lower"] ?? "").toLowerCase();
 
     if (!matrix[size]) matrix[size] = {};
     if (arch.includes("upper") || arch.includes("u")) matrix[size].upper = variant;
@@ -47,7 +50,11 @@ function PriceCell({ price }: { price: ApiProductPrice | null }) {
 export function BulkOrderMatrix({ variants, quantityMap, priceMap, onQtyChange }: Props) {
   const matrix = buildMatrix(variants);
   const sizes = Object.keys(matrix);
-  const hasArch = variants.some((variant) => "Arch" in variant.attributeCombination);
+  const hasArch = variants.some(
+    (variant) =>
+      "Arch" in variant.attributeCombination ||
+      "Upper/Lower" in variant.attributeCombination,
+  );
 
   return (
     <>

@@ -264,7 +264,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   ) : (publicPrice as any)?.taxMode === "INCLUSIVE" ? (
                     <p className="text-[12px] text-[#6B7280]">Inclusive of all taxes</p>
                   ) : (
-                    <p className="text-[12px] text-[#6B7280]">Taxes calculated at checkout</p>
+                    <p className="text-[12px] text-[#6B7280]">Taxes Included</p>
                   )}
                 </div>
               ) : (

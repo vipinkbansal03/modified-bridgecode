@@ -10,8 +10,8 @@ import { PillCTA } from "../ui/PillCTA";
 
 export interface HeroSlide {
   image: string;
-  kicker: string;
-  title: string;
+  kicker?: string | null;
+  title?: string | null;
   ctaLabel?: string | null;
   ctaHref?: string | null;
 }
@@ -121,7 +121,7 @@ export function HeroSection({ data }: HeroSectionProps) {
 
   if (!slides || slides.length === 0) {
     return (
-      <section className="relative flex h-[calc(100dvh-64px)] xl:h-[calc(100dvh-130px)] xl:min-h-[580px] xl:max-h-[760px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D]">
+      <section className="relative flex h-[360px] sm:h-[460px] md:h-[540px] lg:h-[600px] xl:h-[640px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D]">
         <Container className="relative flex h-full flex-col justify-end md:justify-center items-start pb-16 sm:pb-14 pt-8">
           <div className="flex w-full max-w-[820px] flex-col justify-end text-left">
             <span className="mb-3.5 inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
@@ -149,7 +149,7 @@ export function HeroSection({ data }: HeroSectionProps) {
 
   return (
     <section
-      className="relative h-[calc(100dvh-64px)] xl:h-[calc(100dvh-130px)] xl:min-h-[580px] xl:max-h-[760px] overflow-hidden select-none touch-pan-y"
+      className="relative h-[360px] sm:h-[460px] md:h-[540px] lg:h-[600px] xl:h-[640px] w-full overflow-hidden select-none touch-pan-y"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={handleTouchStart}
@@ -189,15 +189,19 @@ export function HeroSection({ data }: HeroSectionProps) {
                 transition={{ duration: 0.35, delay: 0.05, ease: "easeOut" }}
                 className="flex flex-col items-start text-left"
               >
-                <span className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                  {kicker}
-                </span>
-                <h1 className="max-w-[780px] text-left text-[clamp(32px,7.5vw,46px)] sm:text-[clamp(38px,5vw,56px)] xl:text-[clamp(48px,5.5vw,72px)] font-light leading-[1.08] text-white drop-shadow-sm">
-                  {slide.title}
-                </h1>
+                {slide.title?.trim() && kicker ? (
+                  <span className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                    {kicker}
+                  </span>
+                ) : null}
+                {slide.title?.trim() ? (
+                  <h1 className="max-w-[780px] text-left text-[clamp(32px,7.5vw,46px)] sm:text-[clamp(38px,5vw,56px)] xl:text-[clamp(48px,5.5vw,72px)] font-light leading-[1.08] text-white drop-shadow-sm">
+                    {slide.title}
+                  </h1>
+                ) : null}
                 {slide.ctaHref && ctaLabel ? (
-                  <div className="mt-6 flex justify-start">
+                  <div className={slide.title?.trim() ? "mt-6 flex justify-start" : "flex justify-start"}>
                     <PillCTA href={slide.ctaHref} label={ctaLabel} />
                   </div>
                 ) : null}

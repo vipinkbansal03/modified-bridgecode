@@ -198,14 +198,7 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
           className="flex flex-1 min-w-[130px] h-11 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 text-[13.5px] font-semibold text-white transition hover:bg-[#333] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
         >
           <ShoppingBag size={16} />
-          {isAdding ? "Adding..." : "Add to Cart"}
-        </button>
-        <button
-          onClick={() => handleAddToCart(true)}
-          disabled={isOutOfStock || isAdding}
-          className="flex flex-1 min-w-[110px] h-11 items-center justify-center rounded-pill bg-brand px-5 text-[13.5px] font-semibold text-white transition hover:bg-brand/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
-        >
-          Buy Now
+          {isAdding ? "Processing..." : "Buy Now"}
         </button>
         <WishlistButton
           productId={apiProduct.id}

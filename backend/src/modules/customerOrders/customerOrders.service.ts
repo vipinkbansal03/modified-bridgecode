@@ -121,6 +121,11 @@ async function calculateCustomerOrder(
       const isOutOfStock = availableStock <= 0 || stockRecord?.status === "OUT_OF_STOCK";
       const displayName = variant ? `${product.title} - ${variant.title}` : product.title;
 
+      const catalogNumber = variant?.sku || product.sku;
+      if (!catalogNumber || !catalogNumber.trim()) {
+        throw new AppError(`Catalog Number is required for "${displayName}" to complete order.`, 400);
+      }
+
       if (isOutOfStock) {
         throw new AppError(`"${displayName}" is currently out of stock.`, 400);
       }

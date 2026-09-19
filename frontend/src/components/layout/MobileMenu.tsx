@@ -17,6 +17,8 @@ import {
   ArrowRight,
   HelpCircle,
   Building2,
+  Home,
+  FileText,
 } from "lucide-react";
 import { HeaderSearch } from "@/components/ui/HeaderSearch";
 import { LocaleSwitcher } from "@/components/ui/LocaleSwitcher";
@@ -41,6 +43,8 @@ interface MobileMenuProps {
 
 const getNavLinkIcon = (label: string) => {
   const l = label.toLowerCase();
+  if (l === "home" || l.includes("home")) return Home;
+  if (l.includes("catalog") || l.includes("catalogue") || l.includes("pdf")) return FileText;
   if (l.includes("product")) return Package;
   if (l.includes("quality") || l.includes("certif")) return ShieldCheck;
   if (l.includes("contact")) return PhoneCall;
@@ -120,6 +124,21 @@ export function MobileMenu({
 
             {/* Navigation List */}
             <div className="space-y-2">
+              {/* Home Link */}
+              <Link
+                href="/"
+                onClick={onLinkClick}
+                className="flex items-center justify-between rounded-xl border border-line bg-white p-3 text-[15.5px] font-medium text-ink hover:border-[#E31E24] hover:text-[#E31E24] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-grey text-steel">
+                    <Home size={17} />
+                  </div>
+                  <span>Home</span>
+                </div>
+                <ArrowRight size={14} className="text-steel" />
+              </Link>
+
               {/* Expandable Products Section */}
               {productsMegaNav.length > 0 ? (
                 <div className="rounded-xl border border-line bg-white overflow-hidden transition-colors">
@@ -247,6 +266,7 @@ export function MobileMenu({
               {links
                 .filter(
                   (l) =>
+                    l.label !== "Home" &&
                     l.label !== "Products" &&
                     !capabilitiesNav.some((c) => c.label === l.label),
                 )
@@ -269,6 +289,24 @@ export function MobileMenu({
                     </Link>
                   );
                 })}
+
+              {/* Product Catalog PDF Link */}
+              <a
+                href="/catalog.pdf"
+                download="Modern-Orthodontics-Product-Catalog.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onLinkClick}
+                className="flex items-center justify-between rounded-xl border border-[#E31E24]/20 bg-[#E31E24]/5 p-3 text-[15.5px] font-semibold text-[#E31E24] hover:bg-[#E31E24]/10 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E31E24]/10 text-[#E31E24]">
+                    <FileText size={17} />
+                  </div>
+                  <span>Product Catalog (PDF)</span>
+                </div>
+                <ArrowRight size={14} className="text-[#E31E24]" />
+              </a>
             </div>
 
             {/* Quick Access Actions Grid */}

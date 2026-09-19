@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { DeliveryAddressButton } from "@/components/ui/delivery/DeliveryAddressButton";
 import Link from "next/link";
-import { ChevronDown, ShoppingCart, Heart, Menu, X, MapPin } from "lucide-react";
+import { ChevronDown, ShoppingCart, Heart, Menu, X, MapPin, FileText } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
@@ -25,6 +25,7 @@ import { HAS_LIVE_API } from "@/lib/apiClient";
 
 const nav = navigation as NavigationData;
 const navLabelKeys: Record<string, StaticMessageKey> = {
+  Home: "ui.nav.home",
   Products: "ui.nav.products",
   "Quality Certifications": "ui.nav.qualityCertifications",
   "Contact Us": "ui.nav.contactUs",
@@ -133,6 +134,7 @@ export function Header() {
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [
+    { label: "Home", href: "/" },
     { label: t("ui.nav.products"), href: "/products" },
     ...capabilitiesNav,
     ...primaryNav,
@@ -231,7 +233,7 @@ export function Header() {
                       </span>
                     </button>
                     {accountOpen && (
-                      <div className="absolute right-0 top-full z-50 mt-2.5 w-[230px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
+                      <div className="absolute right-0 top-full z-50 mt-2.5 w-[240px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
                         <div className="border-b border-line pb-3">
                           <p className="truncate text-[13.5px] font-semibold text-ink">
                             {currentCustomer.firstName} {currentCustomer.lastName}
@@ -240,27 +242,62 @@ export function Header() {
                             {currentCustomer.email}
                           </p>
                         </div>
-                        <Link
-                          href="/account"
-                          onClick={() => setAccountOpen(false)}
-                          className="mt-2 block rounded-md px-3 py-2 text-[13.5px] text-ink hover:bg-grey hover:text-brand"
-                        >
-                          My Account
-                        </Link>
-                        <Link
-                          href="/wishlist"
-                          onClick={() => setAccountOpen(false)}
-                          className="mt-1 block rounded-md px-3 py-2 text-[13.5px] text-ink hover:bg-grey hover:text-brand"
-                        >
-                          My Wishlist {wishlistCount > 0 ? `(${wishlistCount})` : ""}
-                        </Link>
+                        <div className="py-1.5 space-y-0.5 border-b border-line">
+                          <Link
+                            href="/account"
+                            onClick={() => setAccountOpen(false)}
+                            className="block rounded-md px-3 py-2 text-[13px] font-medium text-ink hover:bg-grey hover:text-brand transition-colors"
+                          >
+                            Profile & Overview
+                          </Link>
+                          <Link
+                            href="/account#orders"
+                            onClick={() => setAccountOpen(false)}
+                            className="block rounded-md px-3 py-2 text-[13px] font-medium text-ink hover:bg-grey hover:text-brand transition-colors"
+                          >
+                            Order History & Invoices
+                          </Link>
+                          <Link
+                            href="/account#addresses"
+                            onClick={() => setAccountOpen(false)}
+                            className="block rounded-md px-3 py-2 text-[13px] font-medium text-ink hover:bg-grey hover:text-brand transition-colors"
+                          >
+                            Saved Addresses
+                          </Link>
+                          <Link
+                            href="/account#payment-options"
+                            onClick={() => setAccountOpen(false)}
+                            className="block rounded-md px-3 py-2 text-[13px] font-medium text-ink hover:bg-grey hover:text-brand transition-colors"
+                          >
+                            Payment Options
+                          </Link>
+                          <Link
+                            href="/account#settings"
+                            onClick={() => setAccountOpen(false)}
+                            className="block rounded-md px-3 py-2 text-[13px] font-medium text-ink hover:bg-grey hover:text-brand transition-colors"
+                          >
+                            Login & Account Settings
+                          </Link>
+                          <Link
+                            href="/wishlist"
+                            onClick={() => setAccountOpen(false)}
+                            className="flex items-center justify-between rounded-md px-3 py-2 text-[13px] font-medium text-ink hover:bg-grey hover:text-brand transition-colors"
+                          >
+                            <span>My Wishlist</span>
+                            {wishlistCount > 0 && (
+                              <span className="rounded-full bg-brand/10 text-brand px-2 py-0.2 text-[11px] font-bold">
+                                {wishlistCount}
+                              </span>
+                            )}
+                          </Link>
+                        </div>
                         <button
                           type="button"
                           onClick={() => {
                             setAccountOpen(false);
                             logout();
                           }}
-                          className="mt-2 w-full rounded-md px-3 py-2 text-left text-[13.5px] text-ink hover:bg-grey hover:text-brand"
+                          className="mt-1 w-full rounded-md px-3 py-2 text-left text-[13px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
                         >
                           Log out
                         </button>
@@ -317,8 +354,16 @@ export function Header() {
           </div>
 
           {/* Bottom Header */}
-          <div className="hidden xl:flex items-center justify-center border-t border-line">
+          <div className="hidden xl:flex items-center justify-between border-t border-line">
             <ul className="hidden shrink-0 items-center gap-5 text-[15px] font-medium text-ink xl:flex 2xl:gap-7">
+              <li className="shrink-0">
+                <Link
+                  href="/"
+                  className="block whitespace-nowrap py-4 hover:text-brand transition-colors"
+                >
+                  {t("ui.nav.home")}
+                </Link>
+              </li>
               <li
                 className="relative shrink-0"
                 onMouseEnter={() => setMegaOpen(true)}
@@ -326,7 +371,7 @@ export function Header() {
               >
                 <Link
                   href="/products"
-                  className="flex items-center gap-1.5 whitespace-nowrap py-4"
+                  className="flex items-center gap-1.5 whitespace-nowrap py-4 hover:text-brand transition-colors"
                 >
                   {t("ui.nav.products")}
                   {productsMegaNav.length > 0 && <ChevronDown size={11} className="opacity-60" />}
@@ -339,7 +384,7 @@ export function Header() {
                   onMouseEnter={() => setCapsOpen(true)}
                   onMouseLeave={() => setCapsOpen(false)}
                 >
-                  <span className="flex cursor-default items-center gap-1.5 whitespace-nowrap py-4">
+                  <span className="flex cursor-default items-center gap-1.5 whitespace-nowrap py-4 hover:text-brand transition-colors">
                     {t("ui.nav.capabilities")}
                     <ChevronDown size={11} className="opacity-60" />
                   </span>
@@ -362,13 +407,27 @@ export function Header() {
                 <li key={link.label} className="shrink-0">
                   <Link
                     href={link.href}
-                    className="block whitespace-nowrap py-4 hover:text-brand"
+                    className="block whitespace-nowrap py-4 hover:text-brand transition-colors"
                   >
                     {label(link.label)}
                   </Link>
                 </li>
               ))}
             </ul>
+
+            <div className="flex items-center shrink-0">
+              <a
+                href="/catalog.pdf"
+                download="Modern-Orthodontics-Product-Catalog.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-full bg-[#E31E24]/10 hover:bg-[#E31E24] text-[#E31E24] hover:text-white px-3.5 py-1.5 text-[13px] font-semibold transition-all duration-200"
+                title="Download Product Catalog PDF"
+              >
+                <FileText size={15} />
+                <span>Product Catalog PDF</span>
+              </a>
+            </div>
           </div>
 
           {/* Mobile Header */}

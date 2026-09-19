@@ -4,16 +4,23 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CheckCircle2,
   ChevronDown,
   CreditCard,
   Download,
+  Heart,
   Home,
+  KeyRound,
+  Lock,
   PackageCheck,
   Pencil,
   Plus,
-  Truck,
-  UserRound,
   RotateCcw,
+  ShieldCheck,
+  Truck,
+  UserCheck,
+  UserRound,
+  Wallet,
   X,
 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
@@ -244,7 +251,11 @@ export default function AccountPage() {
               Orders, saved addresses, and account details for {displayName}.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3 mt-4 sm:mt-0">
+          <div className="flex flex-wrap gap-2.5 mt-4 sm:mt-0">
+            <Button href="/wishlist" variant="outline" className="flex items-center gap-1.5">
+              <Heart size={14} className="text-brand" />
+              My Wishlist
+            </Button>
             <Button href="/account/notifications" variant="outline">
               Notifications
             </Button>
@@ -334,6 +345,24 @@ export default function AccountPage() {
                 )}
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-wide text-steel-2">
+                    Customer ID
+                  </p>
+                  <p className="mt-1 font-mono text-[13px] font-semibold text-ink">
+                    {currentCustomer.id ? `CUST-${currentCustomer.id.slice(-6).toUpperCase()}` : "—"}
+                  </p>
+                </div>
+                {currentCustomer.currentPractice && (
+                  <div>
+                    <p className="text-[12px] font-semibold uppercase tracking-wide text-steel-2">
+                      Practice Type
+                    </p>
+                    <p className="mt-1 text-ink">
+                      {currentCustomer.currentPractice}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-steel-2">
                     Status
                   </p>
                   <p className="mt-1 text-ink">
@@ -343,7 +372,61 @@ export default function AccountPage() {
               </div>
             </div>
 
-            <div className="rounded-md border border-line bg-white p-5">
+            <div className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Heart size={17} className="text-brand" />
+                  <h2 className="text-[18px] font-semibold text-ink">Wishlist</h2>
+                </div>
+                <Link
+                  href="/wishlist"
+                  className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand hover:underline"
+                >
+                  View Wishlist →
+                </Link>
+              </div>
+              <p className="mt-2 text-[13.5px] text-steel">
+                Quickly access and reorder your saved products and favourite variant combinations.
+              </p>
+            </div>
+
+            <div className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard size={17} className="text-brand" />
+                  <h2 className="text-[18px] font-semibold text-ink">Payment Options</h2>
+                </div>
+                <a
+                  href="#payment-options"
+                  className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand hover:underline"
+                >
+                  View Options →
+                </a>
+              </div>
+              <p className="mt-2 text-[13.5px] text-steel">
+                Accepted payment modes (UPI, Cards, NetBanking, COD, and B2B Invoicing).
+              </p>
+            </div>
+
+            <div className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={17} className="text-brand" />
+                  <h2 className="text-[18px] font-semibold text-ink">Account Settings</h2>
+                </div>
+                <a
+                  href="#settings"
+                  className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand hover:underline"
+                >
+                  Manage →
+                </a>
+              </div>
+              <p className="mt-2 text-[13.5px] text-steel">
+                Sign-in security, role verification, and login controls.
+              </p>
+            </div>
+
+            <div id="addresses" className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)] scroll-mt-24">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Home size={17} className="text-brand" />
@@ -451,7 +534,7 @@ export default function AccountPage() {
             </div>
           </aside>
           <div className="space-y-8">
-            <section className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)]">
+            <section id="orders" className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)] scroll-mt-24">
               <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                   <PackageCheck size={18} className="text-brand" />
@@ -678,6 +761,184 @@ export default function AccountPage() {
               )}
             </section>
             <QuoteHistory quotes={quotes} isFetching={isFetching} />
+
+            <section id="payment-options" className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)] scroll-mt-24">
+              <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard size={18} className="text-brand" />
+                  <h2 className="text-[20px] font-semibold text-ink">
+                    Payment Options & Methods
+                  </h2>
+                </div>
+                <span className="text-[12px] font-medium text-steel">
+                  Secure multi-channel payment options
+                </span>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-line bg-offwhite p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-brand">
+                        <Wallet size={15} />
+                      </div>
+                      <p className="font-semibold text-ink text-[14px]">UPI & Instant QR</p>
+                    </div>
+                    <span className="rounded-pill bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700">
+                      Active
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[12.5px] text-steel leading-relaxed">
+                    Google Pay, PhonePe, Paytm, BHIM and all major UPI apps supported with zero payment gateway surcharge.
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line bg-offwhite p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-brand">
+                        <CreditCard size={15} />
+                      </div>
+                      <p className="font-semibold text-ink text-[14px]">Cards & NetBanking</p>
+                    </div>
+                    <span className="rounded-pill bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700">
+                      Active
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[12.5px] text-steel leading-relaxed">
+                    Visa, MasterCard, RuPay, Maestro debit and credit cards, along with internet banking across all major banks.
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line bg-offwhite p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-brand">
+                        <Truck size={15} />
+                      </div>
+                      <p className="font-semibold text-ink text-[14px]">Pay on Delivery (COD)</p>
+                    </div>
+                    <span className="rounded-pill bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10.5px] font-semibold text-blue-700">
+                      Region Eligible
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[12.5px] text-steel leading-relaxed">
+                    Pay cash or scan dynamic QR at the time of delivery for eligible service PIN codes.
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line bg-offwhite p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-brand">
+                        <CheckCircle2 size={15} />
+                      </div>
+                      <p className="font-semibold text-ink text-[14px]">B2B Invoicing & Credit</p>
+                    </div>
+                    <span className="rounded-pill bg-purple-50 border border-purple-200 px-2 py-0.5 text-[10.5px] font-semibold text-purple-700">
+                      Doctors & Dealers
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[12.5px] text-steel leading-relaxed">
+                    GST-compliant commercial tax invoices and post-order billing terms for verified orthodontists and institutional dealers.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section id="settings" className="rounded-md border border-line bg-white p-5 shadow-[0_16px_50px_rgba(31,24,18,0.06)] scroll-mt-24">
+              <div id="account-settings" className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between scroll-mt-24">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={18} className="text-brand" />
+                  <h2 className="text-[20px] font-semibold text-ink">
+                    Login & Account Settings
+                  </h2>
+                </div>
+                <span className="text-[12px] font-medium text-steel">
+                  Manage your authentication and profile controls
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-md border border-line bg-offwhite p-4">
+                    <p className="text-[11.5px] font-semibold uppercase tracking-wider text-steel-2">
+                      Customer ID
+                    </p>
+                    <p className="mt-1 font-mono font-semibold text-ink text-[14px]">
+                      {currentCustomer.id ? `CUST-${currentCustomer.id.slice(-6).toUpperCase()}` : "—"}
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-steel">
+                      Unique reference code
+                    </p>
+                  </div>
+
+                  <div className="rounded-md border border-line bg-offwhite p-4">
+                    <p className="text-[11.5px] font-semibold uppercase tracking-wider text-steel-2">
+                      Sign-in Email
+                    </p>
+                    <p className="mt-1 font-semibold text-ink text-[14px] break-all">
+                      {currentCustomer.email}
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-emerald-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Verified primary login
+                    </p>
+                  </div>
+
+                  <div className="rounded-md border border-line bg-offwhite p-4">
+                    <p className="text-[11.5px] font-semibold uppercase tracking-wider text-steel-2">
+                      Account Role
+                    </p>
+                    <p className="mt-1 font-semibold text-ink text-[14px]">
+                      {currentCustomer.customerRole?.name || currentCustomer.customerType?.replace(/_/g, " ") || "Customer"}
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-steel">
+                      Status: <span className="font-semibold text-ink">{currentCustomer.status ?? "ACTIVE"}</span>
+                    </p>
+                  </div>
+
+                  <div className="rounded-md border border-line bg-offwhite p-4">
+                    <p className="text-[11.5px] font-semibold uppercase tracking-wider text-steel-2">
+                      Password & Security
+                    </p>
+                    <p className="mt-1 font-mono text-[14px] text-ink">
+                      ••••••••••••
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-steel">
+                      Encrypted session active
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-offwhite p-4">
+                  <div>
+                    <p className="text-[14px] font-semibold text-ink">Account Profile & Contact Information</p>
+                    <p className="text-[12.5px] text-steel mt-0.5">
+                      Update your display name, linked phone number, practice/company name, and GSTIN/Tax details.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsEditProfileOpen(true)}
+                      className="flex items-center gap-1.5"
+                    >
+                      <Pencil size={13} />
+                      Edit Profile
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={logout}
+                      className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                    >
+                      Log out
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </section>

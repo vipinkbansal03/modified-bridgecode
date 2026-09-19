@@ -11,6 +11,7 @@ import {
   Minus,
   Plus,
   ShoppingCart,
+  Trash2,
 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
@@ -687,13 +688,18 @@ export default function CheckoutPage() {
     );
   }, [items]);
 
+  const hasMissingCatalogNumber = useMemo(() => {
+    return items.some((item) => !item.sku || !item.sku.trim());
+  }, [items]);
+
   const canPlaceOrder =
     canSubmit &&
     Boolean(shippingEstimate?.available) &&
     Boolean(selectedZoneId) &&
     !approvalBlockMessage &&
     availablePaymentMethods.length > 0 &&
-    !hasStockError;
+    !hasStockError &&
+    !hasMissingCatalogNumber;
 
   const orderPayload = useMemo(
     () => ({
@@ -1253,7 +1259,7 @@ export default function CheckoutPage() {
         {items.length ? (
           <form
             onSubmit={handleSubmit}
-            className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_390px]"
+            className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_460px] xl:grid-cols-[minmax(0,1fr)_520px]"
             noValidate
           >
             <div className="space-y-6">
@@ -1647,111 +1653,142 @@ export default function CheckoutPage() {
                 </h2>
               </div>
 
-              <div className="space-y-4 max-h-[calc(100vh-350px)] overflow-y-auto pr-2 custom-scrollbar">
-                {items.map((item) => {
-                  const estimatedItem = estimate?.items?.find(
-                    (ei) => ei.variantId === item.variantId,
-                  );
-                  const displayUnitPrice = estimatedItem ? estimatedItem.unitPrice : item.unitPrice;
-                  const displayCurrencySymbol =
-                    estimate?.currency?.symbol ?? item.currencySymbol;
-                  const hasError =
-                    Boolean(item.stockErrorMessage) ||
-                    Boolean(item.paymentErrorMessage) ||
-                    Boolean(item.priceUnavailable);
+              <div className="rounded-lg border border-line bg-white overflow-hidden shadow-2xs">
+                {/* Single Header Row */}
+                <div className="grid grid-cols-[minmax(0,1.8fr)_70px_85px_75px_30px] items-center gap-1.5 border-b border-line bg-[#FAFAFA] px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-wider text-steel-2">
+                  <div>Product Details</div>
+                  <div className="text-center">Price / Pc</div>
+                  <div className="text-center">Qty</div>
+                  <div className="text-right">Total</div>
+                  <div></div>
+                </div>
 
-                  return (
-                    <div
-                      key={item.variantId}
-                      className={`rounded-md border p-4 transition-all ${
-                        hasError ? "border-red-300 bg-red-50/50" : "border-line bg-white"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[14px] font-semibold text-ink">
+                <div className="divide-y divide-line max-h-[calc(100vh-350px)] overflow-y-auto custom-scrollbar">
+                  {items.map((item) => {
+                    const estimatedItem = estimate?.items?.find(
+                      (ei) => ei.variantId === item.variantId,
+                    );
+                    const displayUnitPrice = estimatedItem ? estimatedItem.unitPrice : item.unitPrice;
+                    const displayCurrencySymbol =
+                      estimate?.currency?.symbol ?? item.currencySymbol;
+                    const hasError =
+                      Boolean(item.stockErrorMessage) ||
+                      Boolean(item.paymentErrorMessage) ||
+                      Boolean(item.priceUnavailable);
+
+                    return (
+                      <div
+                        key={item.variantId}
+                        className={`grid grid-cols-[minmax(0,1.8fr)_70px_85px_75px_30px] items-start gap-1.5 p-3 text-[13px] transition-colors ${
+                          hasError ? "bg-red-50/50" : "hover:bg-[#FAFAFA]/50"
+                        }`}
+                      >
+                        <div className="min-w-0 pr-1">
+                          <p className="font-semibold text-ink leading-snug line-clamp-2 text-[13px]">
                             {item.productTitle}
                           </p>
-                          <p className="mt-1 text-[12.5px] text-steel">
+                          <p className="mt-0.5 text-[11.5px] text-steel">
                             {item.variantTitle}
                           </p>
-                          <div className="mt-2">
+                          {item.sku ? (
+                            <p className="mt-0.5 text-[11px] font-mono text-steel">
+                              Catalog No: <span className="font-semibold text-ink">{item.sku}</span>
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 text-[11px] font-semibold text-[#E31E24]">
+                              ⚠️ Catalog Number Required
+                            </p>
+                          )}
+                          <div className="mt-1 max-w-[200px]">
                             <CartItemWarehouseSelector 
                               item={item} 
                               updateWarehouse={updateWarehouse} 
                             />
                           </div>
+                          {item.stockErrorMessage && (
+                            <div className="mt-1 rounded bg-red-100 px-1.5 py-0.5 text-[10.5px] font-medium text-red-700">
+                              {item.stockErrorMessage}
+                            </div>
+                          )}
+                          {item.paymentErrorMessage && !item.stockErrorMessage && (
+                            <div className="mt-1 rounded bg-red-100 px-1.5 py-0.5 text-[10.5px] font-medium text-red-700">
+                              ⚠️ {item.paymentErrorMessage}
+                            </div>
+                          )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.variantId)}
-                          className="text-[12px] font-medium text-brand"
-                        >
-                          Remove
-                        </button>
-                      </div>
 
-                      {item.stockErrorMessage && (
-                        <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
-                          {item.stockErrorMessage}
+                        <div className="text-center pt-0.5 text-[12px] font-medium text-ink">
+                          {item.priceUnavailable ? (
+                            <span className="text-red-600 font-semibold">—</span>
+                          ) : (
+                            formatMoney(displayCurrencySymbol, displayUnitPrice)
+                          )}
                         </div>
-                      )}
-                      {item.paymentErrorMessage && !item.stockErrorMessage && (
-                        <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 p-2 text-[11.5px] font-medium text-red-700">
-                          ⚠️ {item.paymentErrorMessage}
+
+                        <div className="flex justify-center pt-0.5">
+                          <div className="inline-flex items-center rounded-full border border-line bg-white p-0.5 shadow-2xs">
+                            <button
+                              type="button"
+                              aria-label="Decrease quantity"
+                              onClick={() =>
+                                updateQuantity(
+                                  item.variantId,
+                                  Math.max(1, item.quantity - 1),
+                                )
+                              }
+                              disabled={item.quantity <= 1}
+                              className="flex h-5 w-5 items-center justify-center rounded-full text-ink hover:bg-grey disabled:opacity-30 transition-colors"
+                            >
+                              <Minus size={10} />
+                            </button>
+                            <span className="w-5 text-center text-[11.5px] font-bold text-ink">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label="Increase quantity"
+                              onClick={() =>
+                                updateQuantity(item.variantId, item.quantity + 1)
+                              }
+                              className="flex h-5 w-5 items-center justify-center rounded-full text-ink hover:bg-grey transition-colors"
+                            >
+                              <Plus size={10} />
+                            </button>
+                          </div>
                         </div>
-                      )}
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="inline-flex items-center rounded-pill border border-line bg-offwhite p-1">
-                          <button
-                            type="button"
-                            aria-label="Decrease quantity"
-                            onClick={() =>
-                              updateQuantity(
-                                item.variantId,
-                                Math.max(1, item.quantity - 1),
-                              )
-                            }
-                            disabled={item.quantity <= 1}
-                            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2 disabled:opacity-40"
-                          >
-                            <Minus size={13} />
-                          </button>
-                          <span className="w-10 text-center text-[13px] font-semibold text-ink">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label="Increase quantity"
-                            onClick={() =>
-                              updateQuantity(item.variantId, item.quantity + 1)
-                            }
-                            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2"
-                          >
-                            <Plus size={13} />
-                          </button>
-                        </div>
-                        <div className="text-right">
+
+                        <div className="text-right pt-0.5">
                           {estimatedItem?.basePrice &&
                             estimatedItem.basePrice > displayUnitPrice && (
-                              <p className="text-[11.5px] text-steel line-through">
+                              <p className="text-[10px] text-steel line-through">
                                 {formatMoney(
                                   displayCurrencySymbol,
                                   estimatedItem.basePrice * item.quantity,
                                 )}
                               </p>
                             )}
-                          <p className="text-[14px] font-semibold text-ink">
+                          <p className="text-[12.5px] font-bold text-ink">
                             {formatMoney(
                               displayCurrencySymbol,
                               displayUnitPrice * item.quantity,
                             )}
                           </p>
                         </div>
+
+                        <div className="flex justify-center pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.variantId)}
+                            className="text-steel hover:text-brand transition-colors p-0.5"
+                            title="Remove item"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="mt-5 space-y-3 border-t border-line pt-4">
@@ -2015,7 +2052,7 @@ export default function CheckoutPage() {
                       )}
                     </strong>
                     <span className="text-[11px] text-steel">
-                      {(estimate as any)?.isTaxInclusive ? "Inclusive of all taxes" : "Tax calculated at checkout"}
+                      {(estimate as any)?.isTaxInclusive ? "Inclusive of all taxes" : "Taxes Included"}
                     </span>
                   </div>
                 </div>
@@ -2110,6 +2147,11 @@ export default function CheckoutPage() {
                 </div>
               ) : (
                 <div className="mt-5 space-y-2">
+                  {hasMissingCatalogNumber && (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 p-2.5 text-center text-[12px] font-semibold text-rose-700">
+                      ⚠️ Catalog Number is required for all items to complete order.
+                    </div>
+                  )}
                   <Button
                     type="submit"
                     variant="primary"

@@ -111,6 +111,15 @@ export async function register(input: CustomerRegisterInput) {
   const country = await resolveCountry(input.country);
   if (!country) throw new AppError("The selected country is not available.", 400);
 
+  if (input.customerType === "DEALER" || input.customerType === "WHOLESALE") {
+    if (!input.companyName || !input.companyName.trim()) {
+      throw new AppError("Business / Company name is required for dealer registration.", 400);
+    }
+    if (!input.taxId || !input.taxId.trim()) {
+      throw new AppError("GSTIN / Tax ID is required for dealer registration.", 400);
+    }
+  }
+
   let taxIdStatus: "PENDING" | "VALID" | "INVALID" | undefined = undefined;
   if (input.taxId) {
     const nextTaxId = input.taxId.trim();
@@ -129,7 +138,9 @@ export async function register(input: CustomerRegisterInput) {
   }
 
   const passwordHash = await bcrypt.hash(input.password, 12);
-  const customerType = input.customerType ?? "RETAIL";
+  const rawCustomerType = input.customerType ?? "RETAIL";
+  const customerType = rawCustomerType === "STUDENT" ? "DOCTOR" : rawCustomerType;
+  const currentPractice = rawCustomerType === "STUDENT" ? (input.currentPractice || "STUDENT") : (input.currentPractice ?? null);
   const requestedRoleKey =
     input.customerRoleKey ??
     (customerType === "DEALER"
@@ -153,7 +164,7 @@ export async function register(input: CustomerRegisterInput) {
         preferredPrescription: input.preferredPrescription ?? null,
         preferredPrescriptionOther: cleanOptional(input.preferredPrescriptionOther),
         preferredSlot: input.preferredSlot ?? null,
-        currentPractice: input.currentPractice ?? null,
+        currentPractice,
         currentPracticeOther: cleanOptional(input.currentPracticeOther),
         usingModernProducts: input.usingModernProducts ?? false,
         status: "ACTIVE",
@@ -170,21 +181,30 @@ export async function register(input: CustomerRegisterInput) {
       },
     });
 
-    await tx.customerAddress.create({
-      data: {
-        customerId: createdCustomer.id,
-        label: "Default",
-        fullName: `${input.firstName} ${input.lastName}`.trim(),
-        phone: input.phone,
-        addressLine1: input.addressLine1,
-        addressLine2: cleanOptional(input.addressLine2),
-        city: input.city,
-        state: input.state,
-        postalCode: input.postalCode,
-        countryId: country.id,
-        isDefault: true,
-      },
-    });
+    const hasAddress = Boolean(
+      input.addressLine1?.trim() ||
+      input.city?.trim() ||
+      input.state?.trim() ||
+      input.postalCode?.trim()
+    );
+
+    if (hasAddress) {
+      await tx.customerAddress.create({
+        data: {
+          customerId: createdCustomer.id,
+          label: "Default",
+          fullName: `${input.firstName} ${input.lastName}`.trim(),
+          phone: input.phone,
+          addressLine1: input.addressLine1?.trim() || "",
+          addressLine2: cleanOptional(input.addressLine2),
+          city: input.city?.trim() || "",
+          state: input.state?.trim() || "",
+          postalCode: input.postalCode?.trim() || "",
+          countryId: country.id,
+          isDefault: true,
+        },
+      });
+    }
 
     await tx.quote.updateMany({
       where: {
@@ -233,6 +253,15 @@ export async function initiateRegister(input: CustomerRegisterInput) {
 
   const country = await resolveCountry(input.country);
   if (!country) throw new AppError("The selected country is not available.", 400);
+
+  if (input.customerType === "DEALER" || input.customerType === "WHOLESALE") {
+    if (!input.companyName || !input.companyName.trim()) {
+      throw new AppError("Business / Company name is required for dealer registration.", 400);
+    }
+    if (!input.taxId || !input.taxId.trim()) {
+      throw new AppError("GSTIN / Tax ID is required for dealer registration.", 400);
+    }
+  }
 
   if (input.taxId) {
     const nextTaxId = input.taxId.trim();

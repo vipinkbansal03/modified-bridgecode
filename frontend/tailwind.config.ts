@@ -5,9 +5,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#1A1A1A",
-        steel: "#6B6B6B",
-        "steel-2": "#9A9A9A",
+        ink: "#000000",
+        steel: "#555555",
+        "steel-2": "#888888",
         brand: {
           DEFAULT: "#E31E24",
           deep: "#B5151B",
@@ -20,8 +20,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-body)", "'Poppins'", "-apple-system", "sans-serif"],
-        heading: ["var(--font-heading)", "'Poppins'", "-apple-system", "sans-serif"],
+        sans: ["var(--font-body)", "'Futura'", "'Futura PT'", "'Trebuchet MS'", "var(--font-poppins)", "'Poppins'", "-apple-system", "sans-serif"],
+        heading: ["var(--font-heading)", "'Futura'", "'Futura PT'", "'Trebuchet MS'", "var(--font-poppins)", "'Poppins'", "-apple-system", "sans-serif"],
+        futura: ["'Futura'", "'Futura PT'", "'Trebuchet MS'", "sans-serif"],
         poppins: ["var(--font-poppins)", "'Poppins'", "sans-serif"],
       },
       maxWidth: {

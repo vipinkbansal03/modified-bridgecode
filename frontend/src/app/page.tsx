@@ -64,11 +64,11 @@ async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide
     });
     if (!res.ok) return [];
     const json = await res.json();
-    const banners = (json.data ?? []) as { image: string; title: string; linkText?: string | null; linkUrl?: string | null }[];
+    const banners = (json.data ?? []) as { image: string; title?: string | null; linkText?: string | null; linkUrl?: string | null }[];
     return banners.map((banner) => ({
       image: banner.image,
-      kicker: "Modern Orthodontics",
-      title: banner.title,
+      kicker: banner.title?.trim() ? "Modern Orthodontics" : null,
+      title: banner.title?.trim() || null,
       ctaLabel: banner.linkText?.trim() || null,
       ctaHref: banner.linkUrl?.trim() || null,
     }));

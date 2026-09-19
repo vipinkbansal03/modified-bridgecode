@@ -254,7 +254,9 @@ export default function BannersPage() {
         label: "Title & Link",
         render: (row: Banner) => (
           <div className="pr-3 min-w-0">
-            <div className="font-semibold text-[#1A1A1A] text-[13px] truncate">{row.title}</div>
+            <div className="font-semibold text-[#1A1A1A] text-[13px] truncate">
+              {row.title?.trim() || <span className="text-gray-400 italic font-normal">Untitled Banner</span>}
+            </div>
             <div className="text-[11px] text-[#9A9A9A] truncate">{row.linkUrl || "No link specified"}</div>
           </div>
         ),
@@ -562,7 +564,9 @@ export default function BannersPage() {
                   Single-Slot Placement (Max 1 Banner)
                 </span>
               </div>
-              <h3 className="text-[17px] font-bold text-gray-900">{singleSlotBanner.title}</h3>
+              <h3 className="text-[17px] font-bold text-gray-900">
+                {singleSlotBanner.title?.trim() || <span className="text-gray-400 italic font-normal">Untitled Banner</span>}
+              </h3>
               <p className="text-[12.5px] text-gray-500">
                 {singleSlotBanner.linkUrl ? (
                   <span>
@@ -736,10 +740,10 @@ export default function BannersPage() {
           <div className="p-6 space-y-5">
             <div className="grid gap-4 md:grid-cols-3">
               <AdminInput
-                label="Banner Title"
+                label="Banner Title (Optional)"
                 value={form.title}
                 onChange={(event) => set("title", event.target.value)}
-                required
+                placeholder="e.g. Precision Engineering"
               />
               <div className="space-y-1">
                 <AdminSelect

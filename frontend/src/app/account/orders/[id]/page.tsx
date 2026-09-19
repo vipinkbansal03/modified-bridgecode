@@ -10,6 +10,7 @@ import {
   Package,
   AlertCircle,
   Clock,
+  Download,
   Layers,
   RotateCcw,
   CheckCircle2,
@@ -23,6 +24,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import {
   fetchCustomerOrderTracking,
+  downloadCustomerInvoice,
   getCustomerErrorMessage,
   submitCustomerReturnRequest,
   cancelCustomerReturnRequest,
@@ -76,6 +78,7 @@ export default function CustomerOrderTrackingPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
   const [, setTick] = useState(0);
   const searchParams = useSearchParams();
 
@@ -307,6 +310,27 @@ export default function CustomerOrderTrackingPage() {
     }
   };
 
+  const handleDownloadInvoice = async () => {
+    if (!orderId || !tracking) return;
+    setDownloadingInvoice(true);
+    try {
+      const blob = await downloadCustomerInvoice(orderId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const invNumber = tracking.orderNumber || orderId.slice(-8);
+      anchor.download = `Invoice-INV-${invNumber}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(getCustomerErrorMessage(err, "Invoice download failed."));
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] py-8 sm:py-12">
       <Container className="max-w-4xl space-y-6">
@@ -394,6 +418,17 @@ export default function CustomerOrderTrackingPage() {
                           <span>Cancel Order</span>
                         </button>
                       )}
+                     {tracking.orderStatus !== "CANCELLED" && tracking.orderStatus !== "REJECTED" && (
+                       <button
+                         type="button"
+                         onClick={handleDownloadInvoice}
+                         disabled={downloadingInvoice}
+                         className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3.5 py-1.5 text-[12.5px] font-medium text-ink hover:bg-grey transition-colors cursor-pointer disabled:opacity-60"
+                       >
+                         <Download size={13} className="text-brand" />
+                         <span>{downloadingInvoice ? "Downloading..." : "Download Invoice"}</span>
+                       </button>
+                     )}
                      <button
                        type="button"
                        onClick={() => loadTracking(true)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Home, Building2, MapPin } from "lucide-react";
+import { Check, Home, Building2, MapPin, Plus, Pencil } from "lucide-react";
 import type { CustomerAddress } from "@/types/delivery.types";
 import { cn } from "@/utils/cn";
 
@@ -8,12 +8,16 @@ interface SavedAddressesProps {
   addresses: CustomerAddress[];
   selectedAddressId?: string;
   onSelect: (address: CustomerAddress) => void;
+  onAddNew?: () => void;
+  onEdit?: (address: CustomerAddress) => void;
 }
 
 export function SavedAddresses({
   addresses,
   selectedAddressId,
   onSelect,
+  onAddNew,
+  onEdit,
 }: SavedAddressesProps) {
   if (addresses.length === 0) {
     return null;
@@ -21,13 +25,25 @@ export function SavedAddresses({
 
   return (
     <div className="space-y-3 pt-2">
-      <div>
-        <h4 className="text-[15px] font-bold text-ink">
-          Saved Addresses
-        </h4>
-        <p className="mt-1 text-[13px] text-steel">
-          Select a default or alternate address to check shipping speed.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-[15px] font-bold text-ink">
+            Saved Addresses
+          </h4>
+          <p className="mt-0.5 text-[12.5px] text-steel">
+            Select a delivery address or add/edit your saved locations.
+          </p>
+        </div>
+        {onAddNew && (
+          <button
+            type="button"
+            onClick={onAddNew}
+            className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/5 px-3 py-1.5 text-[12px] font-semibold text-brand hover:bg-brand hover:text-white transition-colors cursor-pointer"
+          >
+            <Plus size={13} />
+            <span>Add Address</span>
+          </button>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -90,11 +106,27 @@ export function SavedAddresses({
                 </div>
               </div>
 
-              {selected && (
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white ring-4 ring-brand/10 mt-1">
-                  <Check size={14} strokeWidth={3} />
-                </div>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {onEdit && !address.id.startsWith("geo-") && !address.id.startsWith("pin-") && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(address);
+                    }}
+                    title="Edit address"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-white text-steel hover:border-brand hover:text-brand transition-colors shadow-2xs"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
+
+                {selected && (
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white ring-4 ring-brand/10">
+                    <Check size={14} strokeWidth={3} />
+                  </div>
+                )}
+              </div>
             </button>
           );
         })}

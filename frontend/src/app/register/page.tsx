@@ -30,12 +30,19 @@ const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
 const registerSchema = Yup.object({
   customerType: Yup.string()
-    .oneOf(["DOCTOR", "DEALER"])
+    .oneOf(["DOCTOR", "DEALER", "STUDENT"])
     .required("Choose account type"),
   name: Yup.string().trim().required("Name is required"),
-  companyName: Yup.string().trim(),
+  companyName: Yup.string()
+    .trim()
+    .when("customerType", {
+      is: "DEALER",
+      then: (schema) => schema.required("Company / Business name is required"),
+      otherwise: (schema) => schema.optional(),
+    }),
   email: Yup.string()
-    .email("Invalid email address")
+    .trim()
+    .email("Please enter a valid email address")
     .required("Email is required"),
   mobile: Yup.string()
     .trim()
@@ -44,27 +51,61 @@ const registerSchema = Yup.object({
       if (!value) return false;
       return isValidPhoneNumber(value);
     }),
-  address: Yup.string().trim().required("Address is required"),
-  addressLine2: Yup.string().trim(),
-  city: Yup.string().trim().required("City is required"),
-  state: Yup.string().trim().required("State is required"),
+  address: Yup.string().trim().optional(),
+  addressLine2: Yup.string().trim().optional(),
+  city: Yup.string().trim().optional(),
+  state: Yup.string().trim().optional(),
   country: Yup.string().trim().required("Country is required"),
-  zipcode: Yup.string().trim().required("Zipcode is required"),
-  website: Yup.string().trim(),
+  zipcode: Yup.string().trim().optional(),
+  website: Yup.string()
+    .trim()
+    .test("is-valid-url", "Please enter a valid website URL (e.g. https://example.com)", (value) => {
+      if (!value || value.trim() === "") return true;
+      try {
+        const urlToTest = value.startsWith("http://") || value.startsWith("https://") ? value : `https://${value}`;
+        const parsed = new URL(urlToTest);
+        return Boolean(parsed.hostname && parsed.hostname.includes("."));
+      } catch {
+        return false;
+      }
+    })
+    .optional(),
   taxId: Yup.string()
     .trim()
-    .nullable()
-    .test("is-valid-tax-id", function (value) {
-      if (!value) return true;
-      const { taxIdType, country } = this.parent;
-      const type = taxIdType || (country === "India" || country === "IN" ? "GSTIN" : "TAX_ID");
-      if (type === "GSTIN") {
-        const clean = value.trim().toUpperCase();
-        if (!GSTIN_REGEX.test(clean)) {
-          return this.createError({ message: "Invalid GSTIN format (e.g. 27AAAAA1111A1Z5)" });
-        }
-      }
-      return true;
+    .when("customerType", {
+      is: "DEALER",
+      then: (schema) =>
+        schema
+          .required("GSTIN / Tax ID is required for dealers")
+          .test("is-valid-dealer-tax-id", function (value) {
+            if (!value || value.trim() === "") {
+              return this.createError({ message: "GSTIN / Tax ID is required for dealers" });
+            }
+            const { taxIdType, country } = this.parent;
+            const type = taxIdType || (country === "India" || country === "IN" ? "GSTIN" : "TAX_ID");
+            if (type === "GSTIN") {
+              const clean = value.trim().toUpperCase();
+              if (!GSTIN_REGEX.test(clean)) {
+                return this.createError({ message: "Invalid GSTIN format (e.g. 27AAAAA1111A1Z5)" });
+              }
+            } else if (value.trim().length < 3) {
+              return this.createError({ message: "Please enter a valid Tax ID / VAT number" });
+            }
+            return true;
+          }),
+      otherwise: (schema) =>
+        schema.nullable().test("is-valid-tax-id", function (value) {
+          if (!value || value.trim() === "") return true;
+          const { taxIdType, country } = this.parent;
+          const type = taxIdType || (country === "India" || country === "IN" ? "GSTIN" : "TAX_ID");
+          if (type === "GSTIN") {
+            const clean = value.trim().toUpperCase();
+            if (!GSTIN_REGEX.test(clean)) {
+              return this.createError({ message: "Invalid GSTIN format (e.g. 27AAAAA1111A1Z5)" });
+            }
+          }
+          return true;
+        }),
     }),
   taxIdType: Yup.string().trim().nullable(),
   password: Yup.string()
@@ -73,21 +114,24 @@ const registerSchema = Yup.object({
   confirmPassword: Yup.string()
     .oneOf([Yup.ref("password")], "Passwords must match")
     .required("Confirm password is required"),
-  preferredPrescription: Yup.string().oneOf(["MBT", "ROTH", "OTHER"]),
-  preferredPrescriptionOther: Yup.string().trim(),
-  preferredSlot: Yup.string().oneOf(["022", "018"]),
-  currentPractice: Yup.string().oneOf(["STUDENT", "ORTHODONTIST", "OTHER"]),
-  currentPracticeOther: Yup.string().trim(),
-  usingModernProducts: Yup.string().oneOf(["YES", "NO"]),
+  preferredPrescription: Yup.string().oneOf(["MBT", "ROTH", "OTHER"]).optional(),
+  preferredPrescriptionOther: Yup.string().trim().optional(),
+  preferredSlot: Yup.string().oneOf(["022", "018"]).optional(),
+  currentPractice: Yup.string().oneOf(["STUDENT", "ORTHODONTIST", "OTHER"]).optional(),
+  currentPracticeOther: Yup.string().trim().optional(),
+  usingModernProducts: Yup.string().oneOf(["YES", "NO"]).optional(),
   termsAccepted: Yup.boolean().oneOf(
     [true],
     "You must agree to the terms and conditions",
-  ),
-  subscribeNewsletter: Yup.boolean().optional(),
+  ).required("You must agree to the terms and conditions"),
+  subscribeNewsletter: Yup.boolean().oneOf(
+    [true],
+    "You must agree to receive product updates and promotions",
+  ).required("You must agree to receive product updates and promotions"),
 });
 
 type RegisterFormValues = Yup.InferType<typeof registerSchema>;
-type CustomerType = "DOCTOR" | "DEALER";
+type CustomerType = "DOCTOR" | "DEALER" | "STUDENT";
 
 function splitName(fullName: string) {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -97,26 +141,71 @@ function splitName(fullName: string) {
   };
 }
 
+function FieldLabel({
+  label,
+  required,
+  optional,
+}: {
+  label: string;
+  required?: boolean;
+  optional?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between pb-1 text-[12px] font-semibold text-[#2D3748]">
+      <span>{label}</span>
+      {required && (
+        <span className="text-[11px] font-medium text-[#E31E24]">
+          (Mandatory)
+        </span>
+      )}
+      {optional && (
+        <span className="text-[11px] font-normal text-[#718096]">
+          (Optional)
+        </span>
+      )}
+    </div>
+  );
+}
+
 function IconInput({
+  label,
+  required,
+  optional,
   icon,
   error,
   touched,
   className = "",
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & {
-  icon: React.ReactNode;
+  label?: string;
+  required?: boolean;
+  optional?: boolean;
+  icon?: React.ReactNode;
   error?: string;
   touched?: boolean;
 }) {
   const showError = Boolean(touched && error);
   return (
-    <div>
+    <div className="w-full">
+      {label && (
+        <FieldLabel
+          label={label}
+          required={required}
+          optional={optional}
+        />
+      )}
       <div
-        className={`flex h-10 sm:h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${showError ? "border-[#E31E24]" : "border-[#E0E0E0] focus-within:border-[#E31E24]"} ${className}`}
+        className={`flex h-10 sm:h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${
+          showError
+            ? "border-[#E31E24]"
+            : "border-[#E0E0E0] focus-within:border-[#E31E24]"
+        } ${className}`}
       >
-        <span className="flex w-10 shrink-0 items-center justify-center border-r border-[#E0E0E0] bg-white/65 text-[#6B6B6B]">
-          {icon}
-        </span>
+        {icon && (
+          <span className="flex w-10 shrink-0 items-center justify-center border-r border-[#E0E0E0] bg-white/65 text-[#6B6B6B]">
+            {icon}
+          </span>
+        )}
         <input
           {...props}
           className="min-w-0 flex-1 bg-transparent px-3 text-[16px] sm:text-[12.5px] text-[#1A1A1A] outline-none placeholder:text-[#8A8A8A]"
@@ -223,25 +312,25 @@ export default function RegisterPage() {
           password: values.password,
           phone: values.mobile,
           customerType: values.customerType as CustomerType,
-          companyName: values.companyName,
-          website: values.website,
-          addressLine1: values.address,
-          addressLine2: values.addressLine2,
-          city: values.city,
-          state: values.state,
-          postalCode: values.zipcode,
+          companyName: values.companyName || undefined,
+          website: values.website || undefined,
+          addressLine1: values.address || undefined,
+          addressLine2: values.addressLine2 || undefined,
+          city: values.city || undefined,
+          state: values.state || undefined,
+          postalCode: values.zipcode || undefined,
           country: values.country,
-          preferredPrescription: values.preferredPrescription as
+          preferredPrescription: (values.preferredPrescription as
             | "MBT"
             | "ROTH"
-            | "OTHER",
-          preferredPrescriptionOther: values.preferredPrescriptionOther,
-          preferredSlot: values.preferredSlot as "022" | "018",
-          currentPractice: values.currentPractice as
+            | "OTHER") || undefined,
+          preferredPrescriptionOther: values.preferredPrescriptionOther || undefined,
+          preferredSlot: (values.preferredSlot as "022" | "018") || undefined,
+          currentPractice: values.customerType === "STUDENT" ? "STUDENT" : (values.currentPractice as
             | "STUDENT"
             | "ORTHODONTIST"
-            | "OTHER",
-          currentPracticeOther: values.currentPracticeOther,
+            | "OTHER") || undefined,
+          currentPracticeOther: values.currentPracticeOther || undefined,
           usingModernProducts: values.usingModernProducts === "YES",
           taxId: values.taxId || undefined,
           taxIdType: values.taxIdType || undefined,
@@ -289,6 +378,98 @@ export default function RegisterPage() {
     }
   }, [formik.values.country, activeCountries]);
 
+  // Auto-populate location from Pincode / Postal Code (Item 6)
+  useEffect(() => {
+    const pin = formik.values.zipcode?.trim();
+    if (!pin) return;
+
+    const timer = setTimeout(async () => {
+      // 1. If Indian 6-digit Pincode
+      if (/^\d{6}$/.test(pin)) {
+        try {
+          const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+          const data = await res.json();
+          if (data && data[0] && data[0].Status === "Success" && data[0].PostOffice?.[0]) {
+            const po = data[0].PostOffice[0];
+            const city = po.District || po.Block || po.Circle;
+            const state = po.State;
+            const country = po.Country || "India";
+
+            if (city) {
+              formik.setFieldValue("city", city);
+            }
+            if (state) {
+              formik.setFieldValue("state", state);
+            }
+            if (country) {
+              const matchedCountry = activeCountries.find(
+                (c) => c.name.toLowerCase() === country.toLowerCase() || c.code === "IN"
+              );
+              if (matchedCountry) {
+                formik.setFieldValue("country", matchedCountry.name);
+              }
+            }
+          }
+        } catch (e) {
+          // ignore lookup errors
+        }
+      } else if (
+        /^\d{5}(-\d{4})?$/.test(pin) &&
+        (formik.values.country === "United States" || formik.values.country === "US")
+      ) {
+        // 2. US Zipcode lookup
+        try {
+          const cleanZip = pin.split("-")[0];
+          const res = await fetch(`https://api.zippopotam.us/us/${cleanZip}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.places && data.places[0]) {
+              const place = data.places[0];
+              if (place["place name"]) {
+                formik.setFieldValue("city", place["place name"]);
+              }
+              if (place["state"]) {
+                formik.setFieldValue("state", place["state"]);
+              }
+            }
+          }
+        } catch (e) {
+          // ignore lookup errors
+        }
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [formik.values.zipcode, activeCountries, formik.values.country]);
+
+  // Auto-populate state/pincode from City if Pincode is not yet filled (Item 6)
+  useEffect(() => {
+    const city = formik.values.city?.trim();
+    if (!city || city.length < 3 || formik.values.zipcode?.trim()) return;
+
+    const timer = setTimeout(async () => {
+      if (formik.values.country === "India" || !formik.values.country) {
+        try {
+          const res = await fetch(`https://api.postalpincode.in/postoffice/${encodeURIComponent(city)}`);
+          const data = await res.json();
+          if (data && data[0] && data[0].Status === "Success" && data[0].PostOffice?.[0]) {
+            const po = data[0].PostOffice[0];
+            if (po.State && !formik.values.state) {
+              formik.setFieldValue("state", po.State);
+            }
+            if (po.Pincode && !formik.values.zipcode) {
+              formik.setFieldValue("zipcode", po.Pincode);
+            }
+          }
+        } catch (e) {
+          // ignore lookup errors
+        }
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [formik.values.city, formik.values.country, formik.values.zipcode, formik.values.state]);
+
   return (
     <main className="grid min-h-screen grid-cols-1 bg-white lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.3fr)]">
       <section className="sticky top-0 hidden h-screen w-full self-start overflow-hidden lg:block">
@@ -321,7 +502,7 @@ export default function RegisterPage() {
                 Create customer account
               </h1>
               <p className="mt-1 text-[12.5px] sm:text-[13px] text-[#8A8A8A] leading-normal">
-                Register as a doctor / retailer or dealer to access the Modern
+                Register as a doctor, dealer, or student to access the Modern
                 Orthodontics portal.
               </p>
             </div>
@@ -352,9 +533,14 @@ export default function RegisterPage() {
                 <RadioOption
                   name="customerType"
                   value="DOCTOR"
-                  label="Doctor / Retailer"
+                  label="Doctor"
                   checked={formik.values.customerType === "DOCTOR"}
-                  onChange={formik.handleChange}
+                  onChange={(e) => {
+                    formik.handleChange(e);
+                    if (formik.values.currentPractice === "STUDENT") {
+                      formik.setFieldValue("currentPractice", "ORTHODONTIST");
+                    }
+                  }}
                 />
                 <RadioOption
                   name="customerType"
@@ -363,14 +549,26 @@ export default function RegisterPage() {
                   checked={formik.values.customerType === "DEALER"}
                   onChange={formik.handleChange}
                 />
+                <RadioOption
+                  name="customerType"
+                  value="STUDENT"
+                  label="Student"
+                  checked={formik.values.customerType === "STUDENT"}
+                  onChange={(e) => {
+                    formik.handleChange(e);
+                    formik.setFieldValue("currentPractice", "STUDENT");
+                  }}
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <IconInput
+                label={formik.values.customerType === "DEALER" ? "Contact Person Name" : "Full Name"}
+                required
                 icon={<User size={14} />}
                 name="name"
-                placeholder="Name"
+                placeholder="e.g. John Doe"
                 value={formik.values.name}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -378,9 +576,24 @@ export default function RegisterPage() {
                 touched={formik.touched.name}
               />
               <IconInput
+                label={
+                  formik.values.customerType === "DEALER"
+                    ? "Business Name"
+                    : formik.values.customerType === "STUDENT"
+                    ? "College / Institution"
+                    : "Clinic / Hospital Name"
+                }
+                required={formik.values.customerType === "DEALER"}
+                optional={formik.values.customerType !== "DEALER"}
                 icon={<Building2 size={14} />}
                 name="companyName"
-                placeholder="Company Name"
+                placeholder={
+                  formik.values.customerType === "DEALER"
+                    ? "Enter business name"
+                    : formik.values.customerType === "STUDENT"
+                    ? "Enter institution name"
+                    : "Enter clinic / hospital name"
+                }
                 value={formik.values.companyName}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -388,32 +601,39 @@ export default function RegisterPage() {
                 touched={formik.touched.companyName}
               />
               <IconInput
+                label="Email Address"
+                required
                 icon={<AtSign size={14} />}
                 name="email"
                 type="email"
-                placeholder="Email"
+                placeholder="e.g. doctor@example.com"
                 value={formik.values.email}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
                 error={formik.errors.email}
                 touched={formik.touched.email}
               />
-              <PhoneInputField
-                value={formik.values.mobile}
-                onChange={(value) =>
-                  formik.setFieldValue("mobile", value ?? "")
-                }
-                onBlur={() => formik.setFieldTouched("mobile", true)}
-                error={formik.errors.mobile}
-                touched={formik.touched.mobile}
-                defaultCountry={phoneCountry as any}
-                placeholder="Mobile"
-                key={phoneCountry}
-              />
+              <div>
+                <FieldLabel label="Mobile Number" required />
+                <PhoneInputField
+                  value={formik.values.mobile}
+                  onChange={(value) =>
+                    formik.setFieldValue("mobile", value ?? "")
+                  }
+                  onBlur={() => formik.setFieldTouched("mobile", true)}
+                  error={formik.errors.mobile}
+                  touched={formik.touched.mobile}
+                  defaultCountry={phoneCountry as any}
+                  placeholder="Enter mobile number"
+                  key={phoneCountry}
+                />
+              </div>
               <IconInput
+                label="Address Line 1"
+                optional
                 icon={<MapPin size={14} />}
                 name="address"
-                placeholder="Address"
+                placeholder="Street address, P.O. box"
                 value={formik.values.address}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -421,9 +641,11 @@ export default function RegisterPage() {
                 touched={formik.touched.address}
               />
               <IconInput
+                label="Address Line 2"
+                optional
                 icon={<MapPin size={14} />}
                 name="addressLine2"
-                placeholder="Address line 2 (optional)"
+                placeholder="Apartment, suite, unit, floor"
                 value={formik.values.addressLine2}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -431,9 +653,11 @@ export default function RegisterPage() {
                 touched={formik.touched.addressLine2}
               />
               <IconInput
+                label="City"
+                optional
                 icon={<MapPin size={14} />}
                 name="city"
-                placeholder="City"
+                placeholder="City name"
                 value={formik.values.city}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -441,9 +665,11 @@ export default function RegisterPage() {
                 touched={formik.touched.city}
               />
               <IconInput
+                label="State / Province"
+                optional
                 icon={<MapPin size={14} />}
                 name="state"
-                placeholder="State"
+                placeholder="State name"
                 value={formik.values.state}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -451,6 +677,7 @@ export default function RegisterPage() {
                 touched={formik.touched.state}
               />
               <div>
+                <FieldLabel label="Country" required />
                 <div className="flex h-10 sm:h-9 overflow-hidden rounded-md border border-[#E0E0E0] bg-[#EEF4FF] transition-colors focus-within:border-[#E31E24]">
                   <span className="flex w-10 shrink-0 items-center justify-center border-r border-[#E0E0E0] bg-white/65 text-[#6B6B6B]">
                     <MapPin size={14} />
@@ -478,9 +705,11 @@ export default function RegisterPage() {
                 </div>
               </div>
               <IconInput
+                label="Pincode / Postal Code"
+                optional
                 icon={<MapPin size={14} />}
                 name="zipcode"
-                placeholder="Zipcode"
+                placeholder="e.g. 110001 or 90210"
                 value={formik.values.zipcode}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -488,9 +717,11 @@ export default function RegisterPage() {
                 touched={formik.touched.zipcode}
               />
               <IconInput
+                label="Website URL"
+                optional
                 icon={<AtSign size={14} />}
                 name="website"
-                placeholder="Website if any"
+                placeholder="https://example.com"
                 value={formik.values.website}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
@@ -498,6 +729,11 @@ export default function RegisterPage() {
                 touched={formik.touched.website}
               />
               <div>
+                <FieldLabel
+                  label={formik.values.taxIdType === "GSTIN" ? "GSTIN / Tax ID" : "Tax ID / VAT"}
+                  required={formik.values.customerType === "DEALER"}
+                  optional={formik.values.customerType !== "DEALER"}
+                />
                 <div
                   className={`flex h-10 sm:h-9 overflow-hidden rounded-md border bg-[#EEF4FF] transition-colors ${
                     Boolean(formik.touched.taxId && formik.errors.taxId)
@@ -522,12 +758,15 @@ export default function RegisterPage() {
                     name="taxId"
                     placeholder={
                       formik.values.taxIdType === "GSTIN"
-                        ? "GSTIN (e.g. 27AAAAA1111A1Z5)"
-                        : "Tax ID (optional)"
+                        ? "e.g. 27AAAAA1111A1Z5"
+                        : "Tax ID / VAT number"
                     }
                     value={formik.values.taxId || ""}
                     onChange={(e) => {
-                      const val = formik.values.taxIdType === "GSTIN" ? e.target.value.toUpperCase() : e.target.value;
+                      const val =
+                        formik.values.taxIdType === "GSTIN"
+                          ? e.target.value.toUpperCase()
+                          : e.target.value;
                       formik.setFieldValue("taxId", val);
                     }}
                     onBlur={formik.handleBlur}
@@ -540,10 +779,12 @@ export default function RegisterPage() {
               </div>
               <div className="relative">
                 <IconInput
+                  label="Password"
+                  required
                   icon={<KeyRound size={14} />}
                   name="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Password"
+                  placeholder="Min 8 characters"
                   value={formik.values.password}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
@@ -553,17 +794,19 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-3 top-[11px] sm:top-[9px] text-[#8A8A8A] hover:text-[#1A1A1A]"
+                  className="absolute right-3 top-[29px] sm:top-[27px] text-[#8A8A8A] hover:text-[#1A1A1A]"
                 >
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
               <div className="relative">
                 <IconInput
+                  label="Confirm Password"
+                  required
                   icon={<KeyRound size={14} />}
                   name="confirmPassword"
                   type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Confirm Password"
+                  placeholder="Re-enter password"
                   value={formik.values.confirmPassword}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
@@ -573,7 +816,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword((value) => !value)}
-                  className="absolute right-3 top-[11px] sm:top-[9px] text-[#8A8A8A] hover:text-[#1A1A1A]"
+                  className="absolute right-3 top-[29px] sm:top-[27px] text-[#8A8A8A] hover:text-[#1A1A1A]"
                 >
                   {showConfirmPassword ? (
                     <EyeOff size={14} />
@@ -584,12 +827,13 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-start">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-start pt-1">
               {/* Preferred Prescription */}
               <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
-                <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
-                  Preferred prescription
-                </p>
+                <div className="mb-2 flex items-center justify-between text-[12px] font-semibold text-[#1A1A1A]">
+                  <span>Preferred prescription</span>
+                  <span className="text-[11px] font-normal text-[#718096]">(Optional)</span>
+                </div>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
                   <RadioOption
@@ -629,9 +873,10 @@ export default function RegisterPage() {
 
               {/* Preferred Slot */}
               <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
-                <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
-                  Preferred slot
-                </p>
+                <div className="mb-2 flex items-center justify-between text-[12px] font-semibold text-[#1A1A1A]">
+                  <span>Preferred slot</span>
+                  <span className="text-[11px] font-normal text-[#718096]">(Optional)</span>
+                </div>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
                   <RadioOption
@@ -651,52 +896,49 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Current Practice */}
-              <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
-                <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
-                  Current practice
-                </p>
+              {/* Current Practice / Business */}
+              {formik.values.customerType !== "STUDENT" && (
+                <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
+                  <div className="mb-2 flex items-center justify-between text-[12px] font-semibold text-[#1A1A1A]">
+                    <span>{formik.values.customerType === "DEALER" ? "Current practice / business" : "Current practice"}</span>
+                    <span className="text-[11px] font-normal text-[#718096]">(Optional)</span>
+                  </div>
 
-                <div className="flex flex-wrap gap-x-4 gap-y-2">
-                  <RadioOption
-                    name="currentPractice"
-                    value="STUDENT"
-                    label="Student"
-                    checked={formik.values.currentPractice === "STUDENT"}
-                    onChange={formik.handleChange}
-                  />
-                  <RadioOption
-                    name="currentPractice"
-                    value="ORTHODONTIST"
-                    label="Orthodontist"
-                    checked={formik.values.currentPractice === "ORTHODONTIST"}
-                    onChange={formik.handleChange}
-                  />
-                  <RadioOption
-                    name="currentPractice"
-                    value="OTHER"
-                    label="Other"
-                    checked={formik.values.currentPractice === "OTHER"}
-                    onChange={formik.handleChange}
-                  />
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    <RadioOption
+                      name="currentPractice"
+                      value="ORTHODONTIST"
+                      label={formik.values.customerType === "DEALER" ? "Dealer / Distributor" : "Orthodontist"}
+                      checked={formik.values.currentPractice === "ORTHODONTIST"}
+                      onChange={formik.handleChange}
+                    />
+                    <RadioOption
+                      name="currentPractice"
+                      value="OTHER"
+                      label="Other"
+                      checked={formik.values.currentPractice === "OTHER"}
+                      onChange={formik.handleChange}
+                    />
+                  </div>
+
+                  {formik.values.currentPractice === "OTHER" && (
+                    <input
+                      name="currentPracticeOther"
+                      placeholder="Specify other practice / business"
+                      value={formik.values.currentPracticeOther}
+                      onChange={formik.handleChange}
+                      className="mt-2.5 h-10 sm:h-9 w-full rounded-md border border-[#E0E0E0] bg-white px-3 text-[16px] sm:text-[12.5px] outline-none transition-colors placeholder:text-[#9A9A9A] focus:border-[#E31E24]"
+                    />
+                  )}
                 </div>
-
-                {formik.values.currentPractice === "OTHER" && (
-                  <input
-                    name="currentPracticeOther"
-                    placeholder="Specify other practice"
-                    value={formik.values.currentPracticeOther}
-                    onChange={formik.handleChange}
-                    className="mt-2.5 h-10 sm:h-9 w-full rounded-md border border-[#E0E0E0] bg-white px-3 text-[16px] sm:text-[12.5px] outline-none transition-colors placeholder:text-[#9A9A9A] focus:border-[#E31E24]"
-                  />
-                )}
-              </div>
+              )}
 
               {/* Using Modern Products */}
               <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3">
-                <p className="mb-2 text-[12px] font-semibold text-[#1A1A1A]">
-                  Already using Modern products?
-                </p>
+                <div className="mb-2 flex items-center justify-between text-[12px] font-semibold text-[#1A1A1A]">
+                  <span>Already using Modern products?</span>
+                  <span className="text-[11px] font-normal text-[#718096]">(Optional)</span>
+                </div>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
                   <RadioOption
@@ -717,20 +959,30 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="space-y-3 pt-2">
-              <label className="flex items-start gap-2.5 text-[12.5px] text-[#1A1A1A] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  name="subscribeNewsletter"
-                  checked={formik.values.subscribeNewsletter}
-                  onChange={formik.handleChange}
-                  onBlur={formik.handleBlur}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#E31E24] cursor-pointer"
-                />
-                <span className="leading-snug">
-                  Get the latest product updates, promotions, and news.
-                </span>
-              </label>
+            <div className="space-y-2.5 pt-2">
+              <div>
+                <label className="flex items-start gap-2.5 text-[12.5px] text-[#1A1A1A] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    name="subscribeNewsletter"
+                    checked={formik.values.subscribeNewsletter}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#E31E24] cursor-pointer"
+                  />
+                  <span className="leading-snug">
+                    I agree to receive product updates, promotions, and news.{" "}
+                    <span className="text-[11px] font-semibold text-[#E31E24]">
+                      (Mandatory)
+                    </span>
+                  </span>
+                </label>
+                {formik.touched.subscribeNewsletter && formik.errors.subscribeNewsletter && (
+                  <p className="ml-6.5 mt-0.5 text-[11.5px] text-[#E31E24]">
+                    {formik.errors.subscribeNewsletter}
+                  </p>
+                )}
+              </div>
 
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-1">
                 <div className="min-w-0 flex-1">
@@ -751,11 +1003,14 @@ export default function RegisterPage() {
                       >
                         Terms and Conditions
                       </Link>
-                      .
+                      .{" "}
+                      <span className="text-[11px] font-semibold text-[#E31E24]">
+                        (Mandatory)
+                      </span>
                     </span>
                   </label>
                   {formik.touched.termsAccepted && formik.errors.termsAccepted && (
-                    <p className="ml-6.5 mt-1 text-[11.5px] text-[#E31E24]">
+                    <p className="ml-6.5 mt-0.5 text-[11.5px] text-[#E31E24]">
                       {formik.errors.termsAccepted}
                     </p>
                   )}

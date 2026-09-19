@@ -13,6 +13,7 @@ export interface ShareButtonProps {
   description?: string;
   className?: string;
   iconSize?: number;
+  showText?: boolean;
 }
 
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -54,6 +55,7 @@ export function ShareButton({
   description,
   className,
   iconSize = 16,
+  showText = true,
 }: ShareButtonProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -132,14 +134,15 @@ export function ShareButton({
           e.stopPropagation();
           setOpen(true);
         }}
-        aria-label="Share product"
-        title="Share product"
+        aria-label="Share Product"
+        title="Share Product"
         className={cn(
-          "inline-flex items-center justify-center rounded-full p-1.5 text-steel hover:text-brand hover:bg-[#F3F4F6] transition-all active:scale-95 cursor-pointer",
+          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-medium text-steel hover:text-brand hover:bg-[#F3F4F6] transition-all active:scale-95 cursor-pointer",
           className
         )}
       >
         <Share2 size={iconSize} />
+        {showText && <span>Share Product</span>}
       </button>
 
       <Modal

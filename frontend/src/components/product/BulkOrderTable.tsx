@@ -4,6 +4,7 @@ import type { ApiAttribute, ApiProductPrice, ApiVariant } from "@/types/api.type
 import { QuantityInput } from "./QuantityInput";
 import { StockBadge } from "./StockBadge";
 import { formatPrice } from "@/utils/formatPrice";
+import { formatAttributeLabel } from "@/utils/attributeUtils";
 
 interface Props {
   variants: ApiVariant[];
@@ -30,7 +31,7 @@ export function BulkOrderTable({ variants, attributes, quantityMap, priceMap, on
             <tr className="border-b border-[#E6E6E6] text-left text-[11px] font-semibold uppercase tracking-wider text-[#9A9A9A]">
               {attrKeys.map((k) => (
                 <th key={k} className="pb-2.5 pr-4">
-                  {k}
+                  {formatAttributeLabel(k)}
                 </th>
               ))}
               <th className="pb-2.5 pr-4">SKU</th>
@@ -110,7 +111,7 @@ export function BulkOrderTable({ variants, attributes, quantityMap, priceMap, on
                   <div className="mt-1 space-y-0.5">
                     {attrKeys.map((key) => (
                       <p key={key} className="text-[11.5px] text-[#9A9A9A]">
-                        {key}: {variant.attributeCombination[key] ?? "—"}
+                        {formatAttributeLabel(key)}: {variant.attributeCombination[key] ?? "—"}
                       </p>
                     ))}
                   </div>
