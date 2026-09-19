@@ -1646,6 +1646,10 @@ export async function updateProductCountries(productId: string, items: { country
         data: enabledCountryIds.map((countryId) => ({ productId, countryId, enabled: true })),
         skipDuplicates: true,
       });
+      await tx.productPrice.updateMany({
+        where: { productId, countryId: { in: enabledCountryIds } },
+        data: { status: "ACTIVE" },
+      });
     }
 
     if (disabledCountryIds.length) {
@@ -1656,6 +1660,10 @@ export async function updateProductCountries(productId: string, items: { country
       await tx.productCountry.createMany({
         data: disabledCountryIds.map((countryId) => ({ productId, countryId, enabled: false })),
         skipDuplicates: true,
+      });
+      await tx.productPrice.updateMany({
+        where: { productId, countryId: { in: disabledCountryIds } },
+        data: { status: "INACTIVE" },
       });
     }
 

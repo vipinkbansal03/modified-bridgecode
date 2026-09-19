@@ -225,7 +225,7 @@ function ruleIsActive(row: NormalizedPricingRow) {
 async function assertActiveProduct(productId: string) {
   const product = await prisma.product.findUnique({
     where: { id: productId, deletedAt: null },
-    select: { id: true, title: true, status: true, hasVariants: true, defaultCurrencyId: true },
+    select: { id: true, title: true, status: true, hasVariants: true, defaultCurrencyId: true, defaultCountryId: true },
   });
   if (!product) throw new AppError("Product not found.", 404);
   return product;
@@ -1937,7 +1937,7 @@ export async function generateCountryPrices(
 
   if (!baseCurrency) throw new AppError("No base currency configured.", 400);
 
-  const [countries, variants] = await Promise.all([
+  const [countries, variants, productCountries] = await Promise.all([
     prisma.country.findMany({
       where: { status: "ACTIVE" },
       include: { currency: true },
@@ -1946,12 +1946,25 @@ export async function generateCountryPrices(
       where: { productId, status: { not: "INACTIVE" } },
       select: { id: true },
     }),
+    prisma.productCountry.findMany({
+      where: { productId },
+      select: { countryId: true, enabled: true },
+    }),
   ]);
 
+  const enabledCountryIds = new Set(
+    productCountries.filter((pc) => pc.enabled).map((pc) => pc.countryId)
+  );
+  const hasConfiguredAvailability = productCountries.length > 0;
   const baseCurrencyRate = Number(baseCurrency.exchangeRate) || 1;
 
   const priceRows = countries.flatMap((country) => {
     if (!country.currencyId) return [];
+
+    const isCountryEnabled = hasConfiguredAvailability
+      ? enabledCountryIds.has(country.id)
+      : (product.defaultCountryId ? product.defaultCountryId === country.id : true);
+    const countryStatus: "ACTIVE" | "INACTIVE" = isCountryEnabled ? "ACTIVE" : "INACTIVE";
 
     const landedMRP = computeLandedPrice(input.mrp, country, baseCurrencyRate).mrp;
     const landedSelling = input.sellingPrice != null 
@@ -1972,7 +1985,7 @@ export async function generateCountryPrices(
       sellingPrice: landedSelling,
       dealerPrice: landedDealer,
       distributorPrice: landedDistributor,
-      status: "ACTIVE" as const,
+      status: countryStatus,
       variantId: null as string | null,
     };
 
