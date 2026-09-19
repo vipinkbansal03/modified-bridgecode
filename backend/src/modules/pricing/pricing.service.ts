@@ -1239,12 +1239,17 @@ async function bulkPricingAction(input: PricingBulkInput) {
             reason: check.reason || "Cannot deactivate this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.",
           });
         } else {
-          await prisma.productPrice.update({
-            where: { id: rule.id },
-            data: { status: "INACTIVE" },
-          });
           updatedIds.push(rule.id);
         }
+      }
+
+      if (updatedIds.length > 0) {
+        await prisma.$transaction(async (tx) => {
+          await tx.productPrice.updateMany({
+            where: { id: { in: updatedIds } },
+            data: { status: "INACTIVE" },
+          });
+        });
       }
 
       return {

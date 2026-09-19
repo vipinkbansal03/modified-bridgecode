@@ -333,42 +333,40 @@ export async function permanentDeleteCategory(id: string, options?: { force?: bo
       });
     }
 
-    // 2. Cascade delete all products under this category (and their relations)
-    for (const prod of category.products) {
-      await tx.wishlist.deleteMany({ where: { productId: prod.id } });
-      await tx.discountProduct.deleteMany({ where: { productId: prod.id } });
-      await tx.collectionProduct.deleteMany({ where: { productId: prod.id } });
-      await tx.productCountry.deleteMany({ where: { productId: prod.id } });
-      await tx.productPaymentMethod.deleteMany({ where: { productId: prod.id } });
-      await tx.productPrice.deleteMany({ where: { productId: prod.id } });
-      await tx.moqPricing.deleteMany({ where: { productId: prod.id } });
-      await tx.tierPricing.deleteMany({ where: { productId: prod.id } });
-      await tx.productReview.deleteMany({ where: { productId: prod.id } });
-      await tx.productTranslation.deleteMany({ where: { productId: prod.id } });
-      await tx.inventoryAdjustment.deleteMany({ where: { inventory: { productId: prod.id } } });
+    // 2. Cascade delete all products under this category (and their relations in batch)
+    const productIds = category.products.map((p) => p.id);
+    if (productIds.length > 0) {
+      const allVariantIds = category.products.flatMap((p) => p.variants.map((v) => v.id));
 
-      const variantIds = prod.variants.map((v) => v.id);
-      if (variantIds.length > 0) {
-        await tx.productVariantAttributeValue.deleteMany({ where: { variantId: { in: variantIds } } });
-        await tx.variantCountry.deleteMany({ where: { variantId: { in: variantIds } } });
-        await tx.variantPaymentMethod.deleteMany({ where: { variantId: { in: variantIds } } });
-        await tx.productPrice.deleteMany({ where: { variantId: { in: variantIds } } });
-        await tx.inventory.deleteMany({ where: { variantId: { in: variantIds } } });
-        await tx.productVariant.deleteMany({ where: { productId: prod.id } });
+      await tx.wishlist.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.discountProduct.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.collectionProduct.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.productCountry.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.productPaymentMethod.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.productPrice.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.moqPricing.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.tierPricing.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.productReview.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.productTranslation.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.inventoryAdjustment.deleteMany({ where: { inventory: { productId: { in: productIds } } } });
+
+      if (allVariantIds.length > 0) {
+        await tx.productVariantAttributeValue.deleteMany({ where: { variantId: { in: allVariantIds } } });
+        await tx.variantCountry.deleteMany({ where: { variantId: { in: allVariantIds } } });
+        await tx.variantPaymentMethod.deleteMany({ where: { variantId: { in: allVariantIds } } });
+        await tx.productPrice.deleteMany({ where: { variantId: { in: allVariantIds } } });
+        await tx.inventory.deleteMany({ where: { variantId: { in: allVariantIds } } });
+        await tx.productVariant.deleteMany({ where: { id: { in: allVariantIds } } });
       }
 
       await tx.productAttributeValueSelection.deleteMany({
-        where: { productAttribute: { productId: prod.id } },
+        where: { productAttribute: { productId: { in: productIds } } },
       });
-      await tx.productAttribute.deleteMany({ where: { productId: prod.id } });
-      await tx.productPackage.deleteMany({ where: { productId: prod.id } });
-      await tx.inventory.deleteMany({ where: { productId: prod.id } });
-      await tx.productMedia.deleteMany({ where: { productId: prod.id } });
-      await tx.product.update({
-        where: { id: prod.id },
-        data: { taxRules: { set: [] } },
-      });
-      await tx.product.delete({ where: { id: prod.id } });
+      await tx.productAttribute.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.productPackage.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.inventory.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.productMedia.deleteMany({ where: { productId: { in: productIds } } });
+      await tx.product.deleteMany({ where: { id: { in: productIds } } });
     }
 
     // 3. Clean up category relations

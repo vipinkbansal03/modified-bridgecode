@@ -941,12 +941,21 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   const updatedProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });
     await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
+
+    if (data.activeCountryIds && Array.isArray(data.activeCountryIds) && data.activeCountryIds.length > 0) {
+      const activeIds = data.activeCountryIds;
+      await tx.productCountry.updateMany({
+        where: { productId: product.id, countryId: { in: activeIds } },
+        data: { enabled: true },
+      });
+      await tx.productCountry.createMany({
+        data: activeIds.map((countryId) => ({ productId: product.id, countryId, enabled: true })),
+        skipDuplicates: true,
+      });
+    }
+
     return product;
   });
-
-  if (data.activeCountryIds?.length) {
-    await updateProductCountries(updatedProduct.id, data.activeCountryIds.map(id => ({ countryId: id, enabled: true })));
-  }
 
   return updatedProduct;
 }
@@ -1465,63 +1474,83 @@ export async function bulkUpdateProducts(data: {
     const finalProductIds = Array.from(allImplicatedProductIds);
 
     await prisma.$transaction(async (tx) => {
-      for (const productId of finalProductIds) {
-        // Base product inventory creation
-        const existing = await tx.inventory.findFirst({
-          where: { productId, variantId: null, warehouseId: data.warehouseId },
+      // 1. Batch fetch variants for all products in 1 query
+      let variantsToAssign: Array<{ id: string; productId: string }> = [];
+      if (data.includeVariants || data.fullVariantProductIds?.length) {
+        variantsToAssign = await tx.productVariant.findMany({
+          where: { productId: { in: finalProductIds } },
+          select: { id: true, productId: true },
         });
+      } else if (variantIds.length) {
+        variantsToAssign = await tx.productVariant.findMany({
+          where: { productId: { in: finalProductIds }, id: { in: variantIds } },
+          select: { id: true, productId: true },
+        });
+      }
+
+      // 2. Batch fetch existing inventory in 1 query
+      const allVariantIds = variantsToAssign.map((v) => v.id);
+      const existingInvs = await tx.inventory.findMany({
+        where: {
+          warehouseId: data.warehouseId!,
+          OR: [
+            { productId: { in: finalProductIds }, variantId: null },
+            ...(allVariantIds.length ? [{ variantId: { in: allVariantIds } }] : []),
+          ],
+        },
+        select: { id: true, productId: true, variantId: true, stock: true },
+      });
+
+      const existingMap = new Map<string, typeof existingInvs[0]>();
+      for (const inv of existingInvs) {
+        existingMap.set(`${inv.productId}:${inv.variantId ?? "__base__"}`, inv);
+      }
+
+      const toCreate: Array<{ productId: string; variantId: string | null; warehouseId: string; stock: number }> = [];
+      const toUpdate: Array<{ id: string; stock: number }> = [];
+
+      for (const productId of finalProductIds) {
+        const existing = existingMap.get(`${productId}:__base__`);
         const providedStock = data.productStock?.[productId];
         if (!existing) {
-          await tx.inventory.create({
-            data: {
-              productId,
-              variantId: null,
-              warehouseId: data.warehouseId!,
-              stock: providedStock ?? 0,
-            },
+          toCreate.push({
+            productId,
+            variantId: null,
+            warehouseId: data.warehouseId!,
+            stock: providedStock ?? 0,
           });
-        } else if (providedStock !== undefined) {
-          await tx.inventory.update({
-            where: { id: existing.id },
-            data: { stock: providedStock },
-          });
+        } else if (providedStock !== undefined && existing.stock !== providedStock) {
+          toUpdate.push({ id: existing.id, stock: providedStock });
         }
-        
-        let variantsToAssign: { id: string }[] = [];
-        
-        if (data.includeVariants || data.fullVariantProductIds?.includes(productId)) {
-          variantsToAssign = await tx.productVariant.findMany({
-            where: { productId },
-            select: { id: true },
-          });
-        } else if (variantIds.length) {
-          variantsToAssign = await tx.productVariant.findMany({
-            where: { productId, id: { in: variantIds } },
-            select: { id: true },
-          });
-        }
+      }
 
-        for (const variant of variantsToAssign) {
-          const existingVariantInv = await tx.inventory.findFirst({
-            where: { productId, variantId: variant.id, warehouseId: data.warehouseId },
+      for (const variant of variantsToAssign) {
+        const existing = existingMap.get(`${variant.productId}:${variant.id}`);
+        const vProvidedStock = data.variantStock?.[variant.id];
+        if (!existing) {
+          toCreate.push({
+            productId: variant.productId,
+            variantId: variant.id,
+            warehouseId: data.warehouseId!,
+            stock: vProvidedStock ?? 0,
           });
-          const vProvidedStock = data.variantStock?.[variant.id];
-          if (!existingVariantInv) {
-            await tx.inventory.create({
-              data: {
-                productId,
-                variantId: variant.id,
-                warehouseId: data.warehouseId!,
-                stock: vProvidedStock ?? 0,
-              },
-            });
-          } else if (vProvidedStock !== undefined) {
-            await tx.inventory.update({
-              where: { id: existingVariantInv.id },
-              data: { stock: vProvidedStock },
-            });
-          }
+        } else if (vProvidedStock !== undefined && existing.stock !== vProvidedStock) {
+          toUpdate.push({ id: existing.id, stock: vProvidedStock });
         }
+      }
+
+      for (let i = 0; i < toCreate.length; i += 1000) {
+        await tx.inventory.createMany({
+          data: toCreate.slice(i, i + 1000),
+          skipDuplicates: true,
+        });
+      }
+
+      for (const item of toUpdate) {
+        await tx.inventory.update({
+          where: { id: item.id },
+          data: { stock: item.stock },
+        });
       }
     });
     return { updated: finalProductIds.length };
@@ -1549,25 +1578,25 @@ export async function bulkUpdateProducts(data: {
 
     let deletedCount = 0;
     await prisma.$transaction(async (tx) => {
-      for (const productId of finalProductIds) {
-        if (ids.includes(productId)) {
-           const del = await tx.inventory.deleteMany({
-             where: { productId, variantId: null, warehouseId: data.warehouseId }
-           });
-           deletedCount += del.count;
-        }
+      const baseProductIds = finalProductIds.filter((pId) => ids.includes(pId));
+      if (baseProductIds.length > 0) {
+        const del = await tx.inventory.deleteMany({
+          where: { productId: { in: baseProductIds }, variantId: null, warehouseId: data.warehouseId! }
+        });
+        deletedCount += del.count;
+      }
 
-        if (data.fullVariantProductIds?.includes(productId) || data.includeVariants) {
-           const del = await tx.inventory.deleteMany({
-             where: { productId, variantId: { not: null }, warehouseId: data.warehouseId }
-           });
-           deletedCount += del.count;
-        } else if (variantIds.length > 0) {
-           const del = await tx.inventory.deleteMany({
-             where: { productId, variantId: { in: variantIds }, warehouseId: data.warehouseId }
-           });
-           deletedCount += del.count;
-        }
+      const fullVariantProductIds = finalProductIds.filter((pId) => data.fullVariantProductIds?.includes(pId) || data.includeVariants);
+      if (fullVariantProductIds.length > 0) {
+        const del = await tx.inventory.deleteMany({
+          where: { productId: { in: fullVariantProductIds }, variantId: { not: null }, warehouseId: data.warehouseId! }
+        });
+        deletedCount += del.count;
+      } else if (variantIds.length > 0) {
+        const del = await tx.inventory.deleteMany({
+          where: { variantId: { in: variantIds }, warehouseId: data.warehouseId! }
+        });
+        deletedCount += del.count;
       }
     });
     return { updated: deletedCount };

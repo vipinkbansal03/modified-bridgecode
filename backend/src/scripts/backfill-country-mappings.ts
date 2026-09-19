@@ -11,54 +11,41 @@ async function main() {
     where: { countryId: { not: null } },
     select: { id: true, countryId: true },
   });
-  let couponCount = 0;
-  for (const coupon of coupons) {
-    if (coupon.countryId) {
-      await prisma.couponCountry.upsert({
-        where: { couponId_countryId: { couponId: coupon.id, countryId: coupon.countryId } },
-        create: { couponId: coupon.id, countryId: coupon.countryId },
-        update: {},
-      });
-      couponCount++;
-    }
-  }
-  console.log(`Backfilled ${couponCount} coupon country mappings.`);
+  const couponRows = coupons
+    .filter((c) => c.countryId)
+    .map((c) => ({ couponId: c.id, countryId: c.countryId! }));
 
   // 2. Backfill Banners
   const banners = await prisma.banner.findMany({
     where: { countryId: { not: null } },
     select: { id: true, countryId: true },
   });
-  let bannerCount = 0;
-  for (const banner of banners) {
-    if (banner.countryId) {
-      await prisma.bannerCountry.upsert({
-        where: { bannerId_countryId: { bannerId: banner.id, countryId: banner.countryId } },
-        create: { bannerId: banner.id, countryId: banner.countryId },
-        update: {},
-      });
-      bannerCount++;
-    }
-  }
-  console.log(`Backfilled ${bannerCount} banner country mappings.`);
+  const bannerRows = banners
+    .filter((b) => b.countryId)
+    .map((b) => ({ bannerId: b.id, countryId: b.countryId! }));
 
   // 3. Backfill Tax Rules
   const taxRules = await prisma.taxRule.findMany({
     where: { countryId: { not: null } },
     select: { id: true, countryId: true },
   });
-  let taxCount = 0;
-  for (const rule of taxRules) {
-    if (rule.countryId) {
-      await prisma.taxRuleCountry.upsert({
-        where: { taxRuleId_countryId: { taxRuleId: rule.id, countryId: rule.countryId } },
-        create: { taxRuleId: rule.id, countryId: rule.countryId },
-        update: {},
-      });
-      taxCount++;
+  const taxRows = taxRules
+    .filter((t) => t.countryId)
+    .map((t) => ({ taxRuleId: t.id, countryId: t.countryId! }));
+
+  await prisma.$transaction(async (tx) => {
+    if (couponRows.length) {
+      await tx.couponCountry.createMany({ data: couponRows, skipDuplicates: true });
     }
-  }
-  console.log(`Backfilled ${taxCount} tax rule country mappings.`);
+    if (bannerRows.length) {
+      await tx.bannerCountry.createMany({ data: bannerRows, skipDuplicates: true });
+    }
+    if (taxRows.length) {
+      await tx.taxRuleCountry.createMany({ data: taxRows, skipDuplicates: true });
+    }
+  });
+
+  console.log(`Backfilled ${couponRows.length} coupon, ${bannerRows.length} banner, ${taxRows.length} tax rule country mappings.`);
 
   console.log("Backfill complete!");
 }

@@ -649,26 +649,26 @@ export async function bulkPermanentDeleteAttributes(ids: string[]) {
   const deletedIds: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
-  for (const id of ids) {
+  const uniqueIds = Array.from(new Set(ids));
+  const attributes = await prisma.attribute.findMany({
+    where: { id: { in: uniqueIds } },
+    select: { id: true, name: true },
+  });
+  const attributeMap = new Map(attributes.map((a) => [a.id, a]));
+
+  for (const id of uniqueIds) {
+    const attr = attributeMap.get(id);
+    if (!attr) {
+      blocked.push({ id, name: id, reason: "Attribute not found." });
+      continue;
+    }
     try {
-      const attr = await prisma.attribute.findUnique({
-        where: { id },
-        select: { id: true, name: true },
-      });
-      if (!attr) {
-        blocked.push({ id, name: id, reason: "Attribute not found." });
-        continue;
-      }
       await permanentDeleteAttribute(id);
       deletedIds.push(id);
     } catch (error: any) {
-      const attr = await prisma.attribute.findUnique({
-        where: { id },
-        select: { name: true },
-      });
       blocked.push({
         id,
-        name: attr?.name || id,
+        name: attr.name,
         reason: error?.message || "Failed to permanently delete attribute.",
       });
     }

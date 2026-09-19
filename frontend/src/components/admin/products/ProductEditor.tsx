@@ -5172,68 +5172,76 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </tr>
         </thead>
         <tbody>
-          {filteredVariantRows.map((variant) => {
-            const draft = getBulkVariantDraft(variant);
-            return (
-              <tr key={variant.id} className="border-b border-[#F0F0F0] last:border-b-0">
-                <td className="px-4 py-3">
-                  <div className="font-medium text-[#1A1A1A]">{variant.title}</div>
-                  {bulkRowErrors[variant.id] && <div className="mt-1 text-[11.5px] text-red-600">{bulkRowErrors[variant.id]}</div>}
-                </td>
-                <td className="px-4 py-3 text-[#555]">{variant.package?.title ?? "Default"}</td>
-                <td className="px-4 py-3 text-[#555]">{variant.sku || "No SKU"}</td>
-                <td className="px-4 py-3">
-                  <input
-                    type="text"
-                    value={draft.mrp}
-                    onChange={(e) => updateBulkDraft(variant.id, { mrp: e.target.value.replace(/[^0-9.]/g, "") })}
-                    className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <input
-                    type="text"
-                    value={draft.price}
-                    onChange={(e) => updateBulkDraft(variant.id, { price: e.target.value.replace(/[^0-9.]/g, "") })}
-                    className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <input
-                    type="text"
-                    value={draft.dealerPrice}
-                    onChange={(e) => updateBulkDraft(variant.id, { dealerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
-                    className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <input
-                    type="text"
-                    value={draft.doctorRetailerPrice}
-                    onChange={(e) => updateBulkDraft(variant.id, { doctorRetailerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
-                    className="w-32 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <input
-                    type="text"
-                    value={draft.stock}
-                    onChange={(e) => updateBulkDraft(variant.id, { stock: e.target.value.replace(/\D/g, "") })}
-                    className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
-                  />
-                </td>
-                <td className="px-4 py-3"><StatusBadge status={variant.status} /></td>
-                <td className="px-4 py-3">
-                  <button onClick={() => openEditVariantModal(variant)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]">
-                    <Pencil size={12} />
-                  </button>
-                  <button onClick={() => openVariantCountriesModal(variant)} className="ml-2 rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]" title="Country availability">
-                    <Globe2 size={12} />
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
+          {paginatedVariantRows.length === 0 ? (
+            <tr>
+              <td colSpan={10} className="px-4 py-8 text-center text-[#9A9A9A]">
+                No variants match filters.
+              </td>
+            </tr>
+          ) : (
+            paginatedVariantRows.map((variant) => {
+              const draft = getBulkVariantDraft(variant);
+              return (
+                <tr key={variant.id} className="border-b border-[#F0F0F0] last:border-b-0">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-[#1A1A1A]">{variant.title}</div>
+                    {bulkRowErrors[variant.id] && <div className="mt-1 text-[11.5px] text-red-600">{bulkRowErrors[variant.id]}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-[#555]">{variant.package?.title ?? "Default"}</td>
+                  <td className="px-4 py-3 text-[#555]">{variant.sku || "No SKU"}</td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={draft.mrp}
+                      onChange={(e) => updateBulkDraft(variant.id, { mrp: e.target.value.replace(/[^0-9.]/g, "") })}
+                      className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={draft.price}
+                      onChange={(e) => updateBulkDraft(variant.id, { price: e.target.value.replace(/[^0-9.]/g, "") })}
+                      className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={draft.dealerPrice}
+                      onChange={(e) => updateBulkDraft(variant.id, { dealerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
+                      className="w-28 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={draft.doctorRetailerPrice}
+                      onChange={(e) => updateBulkDraft(variant.id, { doctorRetailerPrice: e.target.value.replace(/[^0-9.]/g, "") })}
+                      className="w-32 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={draft.stock}
+                      onChange={(e) => updateBulkDraft(variant.id, { stock: e.target.value.replace(/\D/g, "") })}
+                      className="w-24 rounded border border-[#E6E6E6] px-2 py-1.5 text-[13px] outline-none focus:border-[#E31E24]"
+                    />
+                  </td>
+                  <td className="px-4 py-3"><StatusBadge status={variant.status} /></td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => openEditVariantModal(variant)} className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]">
+                      <Pencil size={12} />
+                    </button>
+                    <button onClick={() => openVariantCountriesModal(variant)} className="ml-2 rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]" title="Country availability">
+                      <Globe2 size={12} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
+          )}
         </tbody>
       </table>
     </div>
