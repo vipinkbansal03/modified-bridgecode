@@ -692,6 +692,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const lastSelectedMediaIndexRef = useRef<number | null>(null);
   const [previewMediaIndex, setPreviewMediaIndex] = useState<number | null>(null);
   const [isDragOverMedia, setIsDragOverMedia] = useState(false);
+  const [reorderingMedia, setReorderingMedia] = useState(false);
+  const [draggedMediaIndex, setDraggedMediaIndex] = useState<number | null>(null);
+  const [dragOverMediaIndex, setDragOverMediaIndex] = useState<number | null>(null);
   const [deletingBulkMedia, setDeletingBulkMedia] = useState(false);
   const [deletingAllMedia, setDeletingAllMedia] = useState(false);
   const [deletingPackage, setDeletingPackage] = useState<PackageRow | null>(null);
@@ -714,6 +717,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [deletingBulkVariantPrices, setDeletingBulkVariantPrices] = useState(false);
   const [deletingAllBasePrices, setDeletingAllBasePrices] = useState(false);
   const [deletingBulkVariantsModal, setDeletingBulkVariantsModal] = useState(false);
+  const [exportingVariants, setExportingVariants] = useState(false);
 
   // Modals state for Product Info tab sections
   const [featureModalOpen, setFeatureModalOpen] = useState(false);
@@ -4440,6 +4444,25 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     }
   };
 
+  const handleAttachMultipleProductImagesFromMedia = async (mediaList: MediaItem[]) => {
+    try {
+      setUploadingMedia(true);
+      const validIds = mediaList.map((m) => m.id).filter(Boolean);
+      if (productId && productId !== "new" && validIds.length > 0) {
+        await adminApi.post(`/products/${productId}/media`, {
+          mediaIds: validIds,
+        });
+        refetch();
+      }
+      showToast(`${validIds.length} image${validIds.length === 1 ? "" : "s"} added to product gallery.`);
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to attach images to product gallery."), "error");
+    } finally {
+      setUploadingMedia(false);
+      setImageMediaSelectorOpen(false);
+    }
+  };
+
   const handleToggleSelectMedia = (mediaId: string) => {
     setSelectedMediaIds((prev) => {
       const next = new Set(prev);
@@ -4455,6 +4478,31 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     } else {
       setSelectedMediaIds(new Set(allIds));
     }
+  };
+
+  const handleReorderMedia = async (newOrderedList: any[]) => {
+    if (reorderingMedia || !productId) return;
+    const mediaIds = newOrderedList.map((m: any) => m.id).filter(Boolean);
+    if (mediaIds.length === 0) return;
+
+    setReorderingMedia(true);
+    try {
+      await adminApi.put(`/products/${productId}/media/reorder`, { mediaIds });
+      showToast("Images reordered successfully.");
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to reorder images."), "error");
+    } finally {
+      setReorderingMedia(false);
+    }
+  };
+
+  const handleMoveMedia = (currentIndex: number, targetIndex: number, currentList: any[]) => {
+    if (targetIndex < 0 || targetIndex >= currentList.length || currentIndex === targetIndex) return;
+    const reordered = [...currentList];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    handleReorderMedia(reordered);
   };
 
   const handleSetCoverMedia = async (mediaId: string) => {
@@ -4514,6 +4562,30 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       showToast("Failed to delete product media.", "error");
     } finally {
       setDeletingAllMedia(false);
+    }
+  };
+
+  const handleExportVariants = async () => {
+    if (!productId || exportingVariants) return;
+    setExportingVariants(true);
+    try {
+      const params = selectedVariantIds.length > 0 ? { variantIds: selectedVariantIds.join(",") } : undefined;
+      const response = await adminApi.get(`/products/${productId}/variants/export`, {
+        params,
+        responseType: "blob",
+      });
+      const countPrefix = selectedVariantIds.length > 0 ? `${selectedVariantIds.length}-selected-` : "";
+      downloadBlob(response.data as Blob, `${product.slug || productId}-${countPrefix}variants.xlsx`);
+      showToast(
+        selectedVariantIds.length > 0
+          ? `${selectedVariantIds.length} variant(s) exported successfully.`
+          : "Variants exported successfully.",
+        "success"
+      );
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to export variants."), "error");
+    } finally {
+      setExportingVariants(false);
     }
   };
 
@@ -5774,7 +5846,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   <div>
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Images</h3>
                     <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">
-                      Upload and manage product photos for the gallery. First image acts as cover photo.
+                      Upload and manage gallery photos. Drag cards or use arrows to change order. The first image acts as the cover photo.
                     </p>
                   </div>
 
@@ -5872,8 +5944,44 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       return (
                         <div
                           key={media.id ?? media.url}
+                          draggable={!reorderingMedia && Boolean(media.id)}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/plain", String(index));
+                            e.dataTransfer.effectAllowed = "move";
+                            setDraggedMediaIndex(index);
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                            if (dragOverMediaIndex !== index) {
+                              setDragOverMediaIndex(index);
+                            }
+                          }}
+                          onDragLeave={() => {
+                            if (dragOverMediaIndex === index) {
+                              setDragOverMediaIndex(null);
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverMediaIndex(null);
+                            const sourceIdxStr = e.dataTransfer.getData("text/plain");
+                            const sourceIdx = sourceIdxStr ? parseInt(sourceIdxStr, 10) : draggedMediaIndex;
+                            setDraggedMediaIndex(null);
+                            if (sourceIdx !== null && sourceIdx !== undefined && !isNaN(sourceIdx) && sourceIdx !== index) {
+                              handleMoveMedia(sourceIdx, index, imageMedia);
+                            }
+                          }}
+                          onDragEnd={() => {
+                            setDraggedMediaIndex(null);
+                            setDragOverMediaIndex(null);
+                          }}
                           className={`group relative flex flex-col overflow-hidden rounded-xl border transition-all ${
-                            isSelected
+                            draggedMediaIndex === index
+                              ? "opacity-40 scale-95 border-dashed border-[#E31E24]"
+                              : dragOverMediaIndex === index
+                              ? "border-[#E31E24] ring-2 ring-[#E31E24]/40 scale-102 shadow-lg"
+                              : isSelected
                               ? "border-[#E31E24] ring-2 ring-[#E31E24]/20 shadow-md"
                               : "border-[#E6E6E6] bg-white hover:border-[#D1D5DB] hover:shadow-sm"
                           }`}
@@ -5934,24 +6042,59 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               alt={media.altText ?? product.title}
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
-                            {/* Hover Overlay with Preview Icon */}
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
-                              <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[12px] font-medium text-[#1A1A1A] shadow-md backdrop-blur-sm">
-                                <ZoomIn size={14} /> View
+                            {/* Hover Overlay with Preview & Drag Hint */}
+                            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                              <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[11.5px] font-medium text-[#1A1A1A] shadow-md backdrop-blur-sm">
+                                <ZoomIn size={13} /> View
+                              </span>
+                              <span className="flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[11.5px] font-medium text-[#4B5563] shadow-md backdrop-blur-sm cursor-grab">
+                                <GripVertical size={13} /> Drag
                               </span>
                             </div>
                           </div>
 
                           {/* Card Footer Actions */}
-                          <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-white px-3 py-2">
-                            <span className="truncate text-[11.5px] font-medium text-[#6B6B6B]" title={media.altText ?? `Image ${index + 1}`}>
+                          <div className="flex items-center justify-between border-t border-[#E6E6E6] bg-white px-2.5 py-2">
+                            <span className="truncate text-[11px] font-medium text-[#6B6B6B] max-w-[90px] sm:max-w-[110px]" title={media.altText ?? `Image ${index + 1}`}>
                               {index + 1}. {media.altText || `Image ${index + 1}`}
                             </span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5">
+                              {/* Move Left */}
+                              {index > 0 && (
+                                <button
+                                  type="button"
+                                  disabled={reorderingMedia}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveMedia(index, index - 1, imageMedia);
+                                  }}
+                                  className="rounded p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A] disabled:cursor-not-allowed disabled:opacity-30 transition-colors cursor-pointer"
+                                  title="Move Left (←)"
+                                  aria-label="Move image left"
+                                >
+                                  <ChevronLeft size={13} />
+                                </button>
+                              )}
+                              {/* Move Right */}
+                              {index < imageMedia.length - 1 && (
+                                <button
+                                  type="button"
+                                  disabled={reorderingMedia}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveMedia(index, index + 1, imageMedia);
+                                  }}
+                                  className="rounded p-1 text-[#6B6B6B] hover:bg-[#F2F2F2] hover:text-[#1A1A1A] disabled:cursor-not-allowed disabled:opacity-30 transition-colors cursor-pointer"
+                                  title="Move Right (→)"
+                                  aria-label="Move image right"
+                                >
+                                  <ChevronRight size={13} />
+                                </button>
+                              )}
                               {!isCover && media.id && (
                                 <button
                                   type="button"
-                                  disabled={settingCoverMediaId !== null}
+                                  disabled={settingCoverMediaId !== null || reorderingMedia}
                                   onClick={() => media.id && handleSetCoverMedia(media.id)}
                                   className="rounded p-1 text-[#6B6B6B] hover:bg-amber-50 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-40 transition-colors cursor-pointer"
                                   title="Set as cover photo"
@@ -5974,7 +6117,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                               </button>
                               <button
                                 type="button"
-                                disabled={!media.id}
+                                disabled={!media.id || reorderingMedia}
                                 onClick={() => media.id && setDeletingMedia(media.id)}
                                 className="rounded p-1 text-[#6B6B6B] hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                                 title={media.id ? "Delete image" : "Media ID missing"}
@@ -6144,6 +6287,20 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 >
                   <Upload size={14} />
                   Bulk Import
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportVariants}
+                  disabled={!product.hasVariants || exportingVariants || !(product.variants?.length ?? 0)}
+                  className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40 shadow-2xs transition-colors cursor-pointer"
+                  title={selectedVariantIds.length > 0 ? `Export ${selectedVariantIds.length} selected variant(s) to Excel` : "Export all variants to Excel"}
+                >
+                  <Download size={14} />
+                  {exportingVariants
+                    ? "Exporting..."
+                    : selectedVariantIds.length > 0
+                    ? `Export (${selectedVariantIds.length})`
+                    : "Export"}
                 </button>
               </div>
             </div>
@@ -11299,8 +11456,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={imageMediaSelectorOpen}
         title="Media Library"
         initialType="image"
+        multiple={true}
         onClose={() => setImageMediaSelectorOpen(false)}
         onSelect={handleAttachProductImageFromMedia}
+        onSelectMultiple={handleAttachMultipleProductImagesFromMedia}
       />
 
       <MediaSelectorModal

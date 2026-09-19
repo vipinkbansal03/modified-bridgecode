@@ -906,6 +906,7 @@ export default function CheckoutPage() {
       const finalPayload = {
         ...orderPayload,
         shippingZoneId: selectedZoneId ?? undefined,
+        paymentMethod: selectedPaymentCode,
       };
       if (overrideAddress) {
         finalPayload.shippingAddress = {

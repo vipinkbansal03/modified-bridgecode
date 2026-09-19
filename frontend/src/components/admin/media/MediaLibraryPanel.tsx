@@ -29,6 +29,8 @@ type Props = {
   value?: string;
   initialType?: "all" | "image" | "document";
   onSelect?: (media: MediaItem) => void;
+  multiple?: boolean;
+  onSelectMultiple?: (mediaList: MediaItem[]) => void;
 };
 
 function formatBytes(bytes?: number) {
@@ -76,7 +78,14 @@ function getFormat(media?: MediaItem | null) {
   return ext ? ext.toUpperCase() : "FILE";
 }
 
-export default function MediaLibraryPanel({ mode = "select", value = "", initialType, onSelect }: Props) {
+export default function MediaLibraryPanel({
+  mode = "select",
+  value = "",
+  initialType,
+  onSelect,
+  multiple = false,
+  onSelectMultiple,
+}: Props) {
   const { hasPermission } = useAdminAuth();
   const canCreate = hasPermission("media.create") || hasPermission("media.manage") || hasPermission("*");
   const canEdit = hasPermission("media.update") || hasPermission("media.manage") || hasPermission("*");
@@ -106,8 +115,24 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState("");
+  const [selectedItemsMap, setSelectedItemsMap] = useState<Map<string, MediaItem>>(new Map());
   const [detailsOpen, setDetailsOpen] = useState(mode === "select");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
+  const selectedList = useMemo(() => Array.from(selectedItemsMap.values()), [selectedItemsMap]);
+
+  const toggleSelect = (item: MediaItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedItemsMap((prev) => {
+      const next = new Map(prev);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.set(item.id, item);
+      }
+      return next;
+    });
+  };
 
   const [meta, setMeta] = useState({
     title: "",
@@ -119,9 +144,66 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
   const { showToast, ToastComponent } = useToast();
 
   const selectedMedia = useMemo(
-    () => items.find((item) => item.id === selectedId) || null,
-    [items, selectedId]
+    () => selectedItemsMap.get(selectedId) || items.find((item) => item.id === selectedId) || null,
+    [selectedItemsMap, items, selectedId]
   );
+
+  const carouselItems = useMemo(() => {
+    if (multiple && selectedList.length > 0) {
+      return selectedList;
+    }
+    return selectedMedia ? [selectedMedia] : [];
+  }, [multiple, selectedList, selectedMedia]);
+
+  const currentIndex = useMemo(
+    () => carouselItems.findIndex((item) => item.id === selectedId),
+    [carouselItems, selectedId]
+  );
+
+  const handlePrev = () => {
+    if (carouselItems.length <= 1) return;
+    const safeIdx = currentIndex >= 0 ? currentIndex : 0;
+    const newIdx = safeIdx > 0 ? safeIdx - 1 : carouselItems.length - 1;
+    setSelectedId(carouselItems[newIdx].id);
+  };
+
+  const handleNext = () => {
+    if (carouselItems.length <= 1) return;
+    const safeIdx = currentIndex >= 0 ? currentIndex : 0;
+    const newIdx = safeIdx < carouselItems.length - 1 && safeIdx !== -1 ? safeIdx + 1 : 0;
+    setSelectedId(carouselItems[newIdx].id);
+  };
+
+  useEffect(() => {
+    if (multiple && selectedList.length > 0) {
+      if (!selectedItemsMap.has(selectedId)) {
+        setSelectedId(selectedList[0].id);
+      }
+    }
+  }, [multiple, selectedList, selectedId, selectedItemsMap]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if (carouselItems.length <= 1) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        handlePrev();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        handleNext();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [carouselItems, currentIndex]);
 
   const loadMedia = async (targetPage = page) => {
     try {
@@ -142,13 +224,31 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
 
       // Select active or first item
       const preferredId =
-        res.items.find((item) => item.id === selectedId)?.id ||
+        (selectedId && (res.items.some((item) => item.id === selectedId) || selectedItemsMap.has(selectedId))
+          ? selectedId
+          : null) ||
         res.items.find((item) => item.url === value)?.id ||
         res.items[0]?.id ||
         "";
-      setSelectedId(preferredId);
+      if (preferredId) {
+        setSelectedId(preferredId);
+      }
       if (mode === "select" && preferredId) {
         setDetailsOpen(true);
+      }
+
+      if (value && multiple) {
+        const matched = res.items.find((item) => item.url === value || item.id === value);
+        if (matched) {
+          setSelectedItemsMap((prev) => {
+            if (!prev.has(matched.id)) {
+              const next = new Map(prev);
+              next.set(matched.id, matched);
+              return next;
+            }
+            return prev;
+          });
+        }
       }
     } catch (e: unknown) {
       const msg = getAdminErrorMessage(e, "Failed to load media");
@@ -222,6 +322,14 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
       setItems((current) =>
         current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
       );
+      setSelectedItemsMap((prev) => {
+        if (prev.has(updated.id)) {
+          const next = new Map(prev);
+          next.set(updated.id, { ...prev.get(updated.id)!, ...updated });
+          return next;
+        }
+        return prev;
+      });
       setSuccess("Media details updated successfully.");
       showToast("Media details updated successfully.");
     } catch (e: unknown) {
@@ -265,9 +373,9 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
   };
 
   return (
-    <div className="flex flex-col gap-4 font-sans text-[#1A1A1A]">
+    <div className={`flex flex-col gap-4 font-sans text-[#1A1A1A] ${mode === "select" ? "h-full min-h-0 flex-1 overflow-hidden" : ""}`}>
       {/* ─── Top Toolbar ─── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#E6E6E6] shadow-xs">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-[#E6E6E6] shadow-xs">
         {/* Search */}
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search
@@ -366,239 +474,296 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
 
       {/* Alerts */}
       {error && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 text-[13px] rounded-lg">
+        <div className="shrink-0 flex items-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 text-[13px] rounded-lg">
           <AlertCircle size={16} className="shrink-0" />
           <span>{error}</span>
         </div>
       )}
       {success && (
-        <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg">
+        <div className="shrink-0 flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg">
           <Check size={16} className="shrink-0" />
           <span>{success}</span>
         </div>
       )}
 
       {/* ─── Main Content Layout ─── */}
-      <div className={`grid grid-cols-1 gap-5 items-start ${mode === "select" ? "md:grid-cols-12" : "xl:grid-cols-12"}`}>
+      <div
+        className={`grid grid-cols-1 gap-4 items-stretch ${
+          mode === "select"
+            ? "md:grid-cols-12 flex-1 min-h-0 overflow-hidden"
+            : "xl:grid-cols-12"
+        }`}
+      >
         {/* Left: Media Grid Column */}
         <div
-          className={`flex flex-col gap-4 bg-white p-4 rounded-xl border border-[#E6E6E6] transition-all ${
+          className={`flex flex-col gap-3 bg-white p-3 sm:p-4 rounded-xl border border-[#E6E6E6] transition-all ${
             mode === "select"
-              ? "md:col-span-6 lg:col-span-6 xl:col-span-6"
-              : detailsOpen && selectedMedia ? "xl:col-span-7 2xl:col-span-8" : "xl:col-span-12"
+              ? "md:col-span-6 lg:col-span-6 xl:col-span-6 h-full min-h-0 overflow-hidden"
+              : detailsOpen && selectedMedia
+              ? "xl:col-span-7 2xl:col-span-8"
+              : "xl:col-span-12"
           }`}
         >
           {/* Header Status */}
-          <div className="flex items-center justify-between text-[12.5px] text-[#6B6B6B] border-b border-[#F0F0F0] pb-3">
-            <span>
-              <strong>{totalItems}</strong> items
-            </span>
+          <div className="shrink-0 flex items-center justify-between text-[12.5px] text-[#6B6B6B] border-b border-[#F0F0F0] pb-2.5">
+            <div className="flex items-center gap-2.5">
+              <span>
+                <strong>{totalItems}</strong> items
+              </span>
+              {multiple && selectedList.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-[#1E5AF9] bg-blue-50 px-2 py-0.5 rounded">
+                    {selectedList.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedItemsMap(new Map())}
+                    className="text-xs text-[#6B6B6B] hover:text-[#D32F2F] underline cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
             <span>
               Page <strong>{page}</strong> of <strong>{totalPages}</strong>
             </span>
           </div>
 
           {/* Grid or Empty/Loading State */}
-          {loading ? (
-            <div className={`grid gap-3.5 py-4 ${mode === "select" ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"}`}>
-              {[...Array(mode === "select" ? 8 : 18)].map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-square animate-pulse rounded-lg bg-[#F2F2F2] border border-[#E6E6E6]"
-                />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-[#E6E6E6] rounded-xl bg-[#FAFAFA]">
-              <div className="w-12 h-12 rounded-full bg-[#EEEEEE] flex items-center justify-center text-[#9A9A9A] mb-3">
-                <ImageIcon size={24} />
-              </div>
-              <h4 className="text-[14px] font-semibold text-[#1A1A1A]">No media found</h4>
-              <p className="text-[12.5px] text-[#6B6B6B] mt-1 max-w-sm">
-                Upload files using the button above or broaden your search and filter criteria.
-              </p>
-              {canCreate && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#E31E24] hover:bg-[#B5151B] text-white text-[12.5px] font-semibold"
-                >
-                  <Upload size={14} /> Upload First File
-                </button>
-              )}
-            </div>
-          ) : (
-            <div
-              className={`grid gap-3.5 ${
-                mode === "select"
-                  ? "grid-cols-2"
-                  : detailsOpen && selectedMedia
-                  ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5"
-                  : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
-              }`}
-            >
-              {items.map((item) => {
-                const active = item.id === selectedId;
-                const isItemImage = isImage(item);
-                const isItemVideo = isVideo(item);
-                const formatLabel = getFormat(item);
-
-                return (
+          <div className={mode === "select" ? "flex-1 min-h-0 overflow-y-auto pr-1" : ""}>
+            {loading ? (
+              <div
+                className={`grid gap-3 py-1 ${
+                  mode === "select"
+                    ? "grid-cols-2"
+                    : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+                }`}
+              >
+                {[...Array(mode === "select" ? 8 : 18)].map((_, i) => (
                   <div
-                    key={item.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      setSelectedId(item.id);
-                      setDetailsOpen(true);
-                    }}
-                    onDoubleClick={() => {
-                      if (mode === "select" && onSelect) onSelect(item);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
+                    key={i}
+                    className="aspect-square animate-pulse rounded-lg bg-[#F2F2F2] border border-[#E6E6E6]"
+                  />
+                ))}
+              </div>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-[#E6E6E6] rounded-xl bg-[#FAFAFA]">
+                <div className="w-12 h-12 rounded-full bg-[#EEEEEE] flex items-center justify-center text-[#9A9A9A] mb-3">
+                  <ImageIcon size={24} />
+                </div>
+                <h4 className="text-[14px] font-semibold text-[#1A1A1A]">No media found</h4>
+                <p className="text-[12.5px] text-[#6B6B6B] mt-1 max-w-sm">
+                  Upload files using the button above or broaden your search and filter criteria.
+                </p>
+                {canCreate && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#E31E24] hover:bg-[#B5151B] text-white text-[12.5px] font-semibold"
+                  >
+                    <Upload size={14} /> Upload First File
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                className={`grid gap-3 py-1 ${
+                  mode === "select"
+                    ? "grid-cols-2"
+                    : detailsOpen && selectedMedia
+                    ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5"
+                    : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
+                }`}
+              >
+                {items.map((item) => {
+                  const active = item.id === selectedId;
+                  const isSelected = selectedItemsMap.has(item.id);
+                  const isItemImage = isImage(item);
+                  const isItemVideo = isVideo(item);
+                  const formatLabel = getFormat(item);
+
+                  return (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
                         setSelectedId(item.id);
                         setDetailsOpen(true);
-                      }
-                    }}
-                    className={`group relative flex flex-col rounded-lg border bg-white overflow-hidden text-left cursor-pointer transition-all ${
-                      active
-                        ? "border-[#1E5AF9] ring-2 ring-[#1E5AF9]/25 shadow-sm"
-                        : "border-[#E6E6E6] hover:border-[#9A9A9A] hover:shadow-xs"
-                    }`}
-                  >
-                    {/* Top Action Menu (Manage Mode) */}
-                    {mode === "manage" && (
-                      <div className="absolute top-1.5 right-1.5 z-20">
+                        if (multiple && !selectedItemsMap.has(item.id)) {
+                          toggleSelect(item);
+                        }
+                      }}
+                      onDoubleClick={() => {
+                        if (mode === "select" && !multiple && onSelect) onSelect(item);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedId(item.id);
+                          setDetailsOpen(true);
+                          if (multiple && !selectedItemsMap.has(item.id)) {
+                            toggleSelect(item);
+                          }
+                        }
+                      }}
+                      className={`group relative flex flex-col rounded-lg border bg-white overflow-hidden text-left cursor-pointer transition-all ${
+                        multiple && isSelected
+                          ? "border-[#1E5AF9] ring-2 ring-[#1E5AF9]/30 shadow-sm"
+                          : active
+                          ? "border-[#1E5AF9] ring-2 ring-[#1E5AF9]/25 shadow-sm"
+                          : "border-[#E6E6E6] hover:border-[#9A9A9A] hover:shadow-xs"
+                      }`}
+                    >
+                      {/* Multi-select Checkbox Badge */}
+                      {multiple && (
                         <button
                           type="button"
-                          aria-label="Open actions"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setSelectedId(item.id);
-                            setMenuOpenId(menuOpenId === item.id ? null : item.id);
-                          }}
-                          className="flex items-center justify-center w-7 h-7 rounded-md bg-white/90 backdrop-blur-xs border border-[#E6E6E6] text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white shadow-xs transition-colors"
+                          aria-label={isSelected ? "Deselect item" : "Select item"}
+                          onClick={(e) => toggleSelect(item, e)}
+                          className={`absolute top-2 left-2 z-10 w-5 h-5 rounded flex items-center justify-center transition-all ${
+                            isSelected
+                              ? "bg-[#1E5AF9] text-white shadow-xs"
+                              : "bg-white/90 border border-[#D1D5DB] text-transparent hover:border-[#1E5AF9]"
+                          }`}
                         >
-                          <MoreVertical size={14} />
+                          <Check size={12} strokeWidth={3} className={isSelected ? "opacity-100" : "opacity-0"} />
                         </button>
+                      )}
 
-                        {menuOpenId === item.id && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-20"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuOpenId(null);
-                              }}
-                            />
-                            <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-lg border border-[#E6E6E6] py-1 z-30">
-                              {canEdit && (
+                      {/* Top Action Menu (Manage Mode) */}
+                      {mode === "manage" && (
+                        <div className="absolute top-1.5 right-1.5 z-20">
+                          <button
+                            type="button"
+                            aria-label="Open actions"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedId(item.id);
+                              setMenuOpenId(menuOpenId === item.id ? null : item.id);
+                            }}
+                            className="flex items-center justify-center w-7 h-7 rounded-md bg-white/90 backdrop-blur-xs border border-[#E6E6E6] text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white shadow-xs transition-colors"
+                          >
+                            <MoreVertical size={14} />
+                          </button>
+
+                          {menuOpenId === item.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-20"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMenuOpenId(null);
+                                }}
+                              />
+                              <div className="absolute right-0 top-8 w-32 bg-white rounded-lg shadow-lg border border-[#E6E6E6] py-1 z-30">
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDetailsForItem(item);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
+                                  >
+                                    <Pencil size={13} className="text-[#6B6B6B]" /> Edit
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    openDetailsForItem(item);
+                                    copyUrl(item.id, item.url);
+                                    setMenuOpenId(null);
                                   }}
                                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
                                 >
-                                  <Pencil size={13} className="text-[#6B6B6B]" /> Edit
+                                  {copiedId === item.id ? (
+                                    <Check size={13} className="text-emerald-600" />
+                                  ) : (
+                                    <Copy size={13} className="text-[#6B6B6B]" />
+                                  )}
+                                  <span>Copy Link</span>
                                 </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyUrl(item.id, item.url);
-                                  setMenuOpenId(null);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
-                              >
-                                {copiedId === item.id ? (
-                                  <Check size={13} className="text-emerald-600" />
-                                ) : (
-                                  <Copy size={13} className="text-[#6B6B6B]" />
+                                {canDelete && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedId(item.id);
+                                      setDetailsOpen(true);
+                                      setMenuOpenId(null);
+                                      setDeleting(item.id);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[#E31E24] hover:bg-red-50"
+                                  >
+                                    <Trash2 size={13} /> Delete
+                                  </button>
                                 )}
-                                <span>Copy Link</span>
-                              </button>
-                              {canDelete && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedId(item.id);
-                                    setDetailsOpen(true);
-                                    setMenuOpenId(null);
-                                    setDeleting(item.id);
-                                  }}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[#E31E24] hover:bg-red-50"
-                                >
-                                  <Trash2 size={13} /> Delete
-                                </button>
-                              )}
-                            </div>
-                          </>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Preview Thumbnail */}
+                      <div className="relative aspect-square w-full bg-[#F8F8F8] flex items-center justify-center overflow-hidden border-b border-[#F0F0F0]">
+                        {isItemImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.url}
+                            alt={item.altText || item.title || item.originalName}
+                            loading="lazy"
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : isItemVideo ? (
+                          <div className="flex flex-col items-center justify-center gap-1.5 text-[#9A9A9A]">
+                            <Video size={26} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-white/80 px-1.5 py-0.5 rounded border border-[#E6E6E6]">
+                              {formatLabel}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center gap-1.5 text-[#9A9A9A]">
+                            <FileText size={26} />
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-white/80 px-1.5 py-0.5 rounded border border-[#E6E6E6]">
+                              {formatLabel}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Status indicator if pending */}
+                        {item.status && item.status !== "READY" && (
+                          <div className="absolute top-1.5 left-1.5 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                            {item.status.replace("_", " ")}
+                          </div>
                         )}
                       </div>
-                    )}
 
-                    {/* Preview Thumbnail */}
-                    <div className="relative aspect-square w-full bg-[#F8F8F8] flex items-center justify-center overflow-hidden border-b border-[#F0F0F0]">
-                      {isItemImage ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.url}
-                          alt={item.altText || item.title || item.originalName}
-                          loading="lazy"
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                      ) : isItemVideo ? (
-                        <div className="flex flex-col items-center justify-center gap-1.5 text-[#9A9A9A]">
-                          <Video size={26} />
-                          <span className="text-[10px] font-bold uppercase tracking-wider bg-white/80 px-1.5 py-0.5 rounded border border-[#E6E6E6]">
-                            {formatLabel}
-                          </span>
+                      {/* Card Meta */}
+                      <div className="p-2.5">
+                        <p
+                          className="text-[12.5px] font-medium text-[#1A1A1A] truncate"
+                          title={item.title || item.originalName}
+                        >
+                          {item.title || item.originalName}
+                        </p>
+                        <div className="flex items-center justify-between text-[11px] text-[#9A9A9A] mt-1">
+                          <span>{formatBytes(item.size)}</span>
+                          <span>{formatLabel}</span>
                         </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center gap-1.5 text-[#9A9A9A]">
-                          <FileText size={26} />
-                          <span className="text-[10px] font-bold uppercase tracking-wider bg-white/80 px-1.5 py-0.5 rounded border border-[#E6E6E6]">
-                            {formatLabel}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Status indicator if pending */}
-                      {item.status && item.status !== "READY" && (
-                        <div className="absolute top-1.5 left-1.5 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
-                          {item.status.replace("_", " ")}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Card Meta */}
-                    <div className="p-2.5">
-                      <p
-                        className="text-[12.5px] font-medium text-[#1A1A1A] truncate"
-                        title={item.title || item.originalName}
-                      >
-                        {item.title || item.originalName}
-                      </p>
-                      <div className="flex items-center justify-between text-[11px] text-[#9A9A9A] mt-1">
-                        <span>{formatBytes(item.size)}</span>
-                        <span>{formatLabel}</span>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Bottom Pagination */}
-          <div className="flex items-center justify-between pt-3 border-t border-[#F0F0F0]">
+          <div className="shrink-0 flex items-center justify-between pt-2.5 border-t border-[#F0F0F0]">
             <button
               type="button"
               disabled={loading || page <= 1}
@@ -624,9 +789,9 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
         {/* Right: Details Panel */}
         {detailsOpen && (
           <div
-            className={`bg-white p-4 rounded-xl border border-[#E6E6E6] shadow-xs flex flex-col ${
+            className={`bg-white p-3 sm:p-4 rounded-xl border border-[#E6E6E6] shadow-xs flex flex-col ${
               mode === "select"
-                ? "md:col-span-6 lg:col-span-6 xl:col-span-6 md:sticky md:top-0 md:max-h-[calc(80vh-2rem)]"
+                ? "md:col-span-6 lg:col-span-6 xl:col-span-6 h-full min-h-0 max-h-full overflow-hidden"
                 : "xl:col-span-5 2xl:col-span-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-6rem)] max-h-[85vh]"
             }`}
           >
@@ -641,8 +806,15 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
             ) : (
               <>
                 {/* Header */}
-                <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3 shrink-0">
-                  <h3 className="text-[14px] font-bold text-[#1A1A1A]">Media Details</h3>
+                <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-2.5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[14px] font-bold text-[#1A1A1A]">Media Details</h3>
+                    {multiple && selectedList.length > 1 && (
+                      <span className="text-[11px] font-semibold text-[#1E5AF9] bg-blue-50 px-2 py-0.5 rounded">
+                        {selectedList.length} Selected
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -679,33 +851,106 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
                 </div>
 
                 {/* Form with scrollable content and pinned actions */}
-                <form onSubmit={handleSaveDetails} className="flex flex-col flex-1 min-h-0">
+                <form onSubmit={handleSaveDetails} className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   {/* Scrollable Content Area */}
-                  <div className="flex-1 overflow-y-auto overscroll-contain pr-1.5 pt-3.5 pb-1 space-y-3.5">
-                    {/* Preview Box */}
-                    <div className="aspect-16/10 w-full rounded-lg bg-[#F8F8F8] border border-[#E6E6E6] flex items-center justify-center overflow-hidden p-2 shrink-0">
-                      {isImage(selectedMedia) ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={selectedMedia.url}
-                          alt={selectedMedia.altText || selectedMedia.title || selectedMedia.originalName}
-                          className="max-h-full max-w-full object-contain"
-                        />
-                      ) : isVideo(selectedMedia) ? (
-                        <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
-                          <Video size={36} />
-                          <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
-                            {selectedMedia.originalName}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
-                          <FileText size={36} />
-                          <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
-                            {selectedMedia.originalName}
-                          </span>
-                        </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1.5 pt-3 pb-2 space-y-3">
+
+                    {/* ─── Carousel Preview Box ─── */}
+                    <div className="relative group h-44 sm:h-48 w-full rounded-xl bg-[#0D1117]/5 border border-[#E6E6E6] flex items-center justify-center overflow-hidden shrink-0 select-none">
+                      {/* Media Display */}
+                      <div className="w-full h-full flex items-center justify-center p-2">
+                        {isImage(selectedMedia) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={selectedMedia.id}
+                            src={selectedMedia.url}
+                            alt={selectedMedia.altText || selectedMedia.title || selectedMedia.originalName}
+                            className="max-h-full max-w-full object-contain rounded transition-all duration-200"
+                          />
+                        ) : isVideo(selectedMedia) ? (
+                          <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
+                            <Video size={36} />
+                            <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
+                              {selectedMedia.originalName}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
+                            <FileText size={36} />
+                            <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
+                              {selectedMedia.originalName}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Carousel Arrow: Prev */}
+                      {carouselItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handlePrev();
+                          }}
+                          aria-label="Previous image"
+                          className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition-all shadow-md cursor-pointer hover:scale-105 active:scale-95 z-20"
+                          title="Previous image (←)"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
                       )}
+
+                      {/* Carousel Arrow: Next */}
+                      {carouselItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleNext();
+                          }}
+                          aria-label="Next image"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition-all shadow-md cursor-pointer hover:scale-105 active:scale-95 z-20"
+                          title="Next image (→)"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      )}
+
+                      {/* Carousel Top Badges: Counter + Select Toggle */}
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5 z-10">
+                        {carouselItems.length > 1 && (
+                          <span className="px-2 py-0.5 rounded-md bg-black/70 text-white text-[10.5px] font-semibold tracking-wider backdrop-blur-xs">
+                            {(currentIndex >= 0 ? currentIndex : 0) + 1} / {carouselItems.length}
+                          </span>
+                        )}
+                        {multiple && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSelect(selectedMedia);
+                            }}
+                            className={`px-2 py-0.5 rounded-md text-[10.5px] font-semibold tracking-wide flex items-center gap-1 cursor-pointer transition-colors shadow-xs ${
+                              selectedItemsMap.has(selectedMedia.id)
+                                ? "bg-[#1E5AF9] text-white"
+                                : "bg-white/90 text-[#4B5563] hover:bg-white hover:text-[#1A1A1A]"
+                            }`}
+                          >
+                            <Check size={11} strokeWidth={3} className={selectedItemsMap.has(selectedMedia.id) ? "opacity-100" : "opacity-0"} />
+                            <span>{selectedItemsMap.has(selectedMedia.id) ? "Selected" : "Select"}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Carousel Bottom Label */}
+                      <div className="absolute bottom-2 inset-x-2 flex items-center justify-center pointer-events-none">
+                        <span className="px-2.5 py-0.5 rounded-full bg-black/60 text-white text-[10.5px] font-medium truncate max-w-[85%] backdrop-blur-xs shadow-xs text-center">
+                          {selectedMedia.title || selectedMedia.originalName}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Metadata Summary */}
@@ -784,26 +1029,38 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
                   </div>
 
                   {/* Pinned Actions Footer */}
-                  <div className="shrink-0 pt-3 border-t border-[#F0F0F0] bg-white flex flex-col gap-2.5">
+                  <div className="shrink-0 pt-3 border-t border-[#F0F0F0] bg-white flex flex-col gap-2 mt-auto">
                     {canEdit && (
                       <button
                         type="submit"
                         disabled={saving}
-                        className="w-full h-10 rounded bg-[#102A43] hover:bg-[#0B1E30] text-white text-[12px] font-bold tracking-wider uppercase transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                        className="w-full h-9 rounded bg-[#102A43] hover:bg-[#0B1E30] text-white text-[12px] font-bold tracking-wider uppercase transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
                       >
                         {saving ? "Saving..." : "Save Details"}
                       </button>
                     )}
 
                     <div className="grid grid-cols-2 gap-2 w-full">
-                      {mode === "select" && onSelect && (
+                      {mode === "select" && (onSelect || onSelectMultiple) && (
                         <button
                           type="button"
-                          disabled={!selectedMedia}
-                          onClick={() => selectedMedia && onSelect(selectedMedia)}
-                          className="w-full h-10 rounded bg-[#1E5AF9] hover:bg-[#1546CC] text-white text-[12px] font-bold tracking-wider uppercase transition-colors shadow-2xs cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={multiple ? selectedList.length === 0 : !selectedMedia}
+                          onClick={() => {
+                            if (multiple && onSelectMultiple) {
+                              if (selectedList.length > 0) {
+                                onSelectMultiple(selectedList);
+                              } else if (selectedMedia) {
+                                onSelectMultiple([selectedMedia]);
+                              }
+                            } else if (onSelect && selectedMedia) {
+                              onSelect(selectedMedia);
+                            }
+                          }}
+                          className="w-full h-9 rounded bg-[#1E5AF9] hover:bg-[#1546CC] text-white text-[12px] font-bold tracking-wider uppercase transition-colors shadow-2xs cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Attach Selected
+                          {multiple && selectedList.length > 0
+                            ? `Attach Selected (${selectedList.length})`
+                            : "Attach Selected"}
                         </button>
                       )}
 
@@ -811,8 +1068,8 @@ export default function MediaLibraryPanel({ mode = "select", value = "", initial
                         <button
                           type="button"
                           onClick={() => setDeleting(selectedMedia.id)}
-                          className={`h-10 rounded bg-[#D32F2F] hover:bg-[#B71C1C] text-white text-[12px] font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
-                            mode === "select" && onSelect ? "w-full" : "w-full col-span-2"
+                          className={`h-9 rounded bg-[#D32F2F] hover:bg-[#B71C1C] text-white text-[12px] font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
+                            mode === "select" && (onSelect || onSelectMultiple) ? "w-full" : "w-full col-span-2"
                           }`}
                         >
                           <Trash2 size={14} />

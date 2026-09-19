@@ -598,13 +598,15 @@ export default function AccountPage() {
                               </div>
                             </div>
                             <div className="mt-4 flex flex-wrap justify-end items-center gap-2">
-                              <Link
-                                href={`/account/orders/${order.id}`}
-                                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line bg-white px-3.5 text-[13px] font-semibold text-ink hover:bg-grey hover:text-brand shadow-sm transition-colors"
-                              >
-                                <Truck size={14} className="text-brand" />
-                                Track Order
-                              </Link>
+                              {order.status !== "CANCELLED" && (
+                                <Link
+                                  href={`/account/orders/${order.id}`}
+                                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line bg-white px-3.5 text-[13px] font-semibold text-ink hover:bg-grey hover:text-brand shadow-sm transition-colors"
+                                >
+                                  <Truck size={14} className="text-brand" />
+                                  Track Order
+                                </Link>
+                              )}
                               {["PENDING", "CONFIRMED", "PROCESSING"].includes(order.status) && (
                                 <Link
                                   href={`/account/orders/${order.id}?cancel=true`}
@@ -623,15 +625,21 @@ export default function AccountPage() {
                                   Return Order
                                 </Link>
                               )}
-                              {order.paymentStatus === "PENDING" && order.status === "PENDING" && (
-                                <Link
-                                  href={`/orders/${order.id}/pay`}
-                                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2A6A40] px-3.5 text-[13px] font-semibold text-white hover:bg-[#225533] shadow-sm transition-colors"
-                                >
-                                  <CreditCard size={14} />
-                                  Pay Now
-                                </Link>
-                              )}
+                              {order.status !== "CANCELLED" &&
+                                order.status !== "DELIVERED" &&
+                                order.paymentStatus !== "PAID" && (
+                                  <Link
+                                    href={`/orders/${order.id}/pay`}
+                                    className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3.5 text-[13px] font-semibold text-white shadow-sm transition-colors ${
+                                      order.paymentStatus === "FAILED"
+                                        ? "bg-[#D97706] hover:bg-[#B45309]"
+                                        : "bg-[#2A6A40] hover:bg-[#225533]"
+                                    }`}
+                                  >
+                                    <CreditCard size={14} />
+                                    {order.paymentStatus === "FAILED" ? "Retry Payment" : "Pay Now"}
+                                  </Link>
+                                )}
                               {canDownloadInvoice(order) ? (
                                 <button
                                   type="button"

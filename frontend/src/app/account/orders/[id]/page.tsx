@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  CreditCard,
 } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
@@ -381,6 +382,21 @@ export default function CustomerOrderTrackingPage() {
                          <span>Request Return</span>
                        </button>
                      )}
+                      {tracking.orderStatus !== "CANCELLED" &&
+                        tracking.orderStatus !== "DELIVERED" &&
+                        tracking.paymentStatus !== "PAID" && (
+                          <Link
+                            href={`/orders/${tracking.orderId}/pay`}
+                            className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-sm transition-colors ${
+                              tracking.paymentStatus === "FAILED"
+                                ? "bg-[#D97706] hover:bg-[#B45309]"
+                                : "bg-[#2A6A40] hover:bg-[#225533]"
+                            }`}
+                          >
+                            <CreditCard size={13} />
+                            <span>{tracking.paymentStatus === "FAILED" ? "Retry Payment" : "Pay Now"}</span>
+                          </Link>
+                        )}
                      {["PENDING", "CONFIRMED", "PROCESSING"].includes(tracking.orderStatus) && (
                         <button
                           type="button"

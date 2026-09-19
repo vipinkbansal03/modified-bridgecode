@@ -221,7 +221,17 @@ export default function CategoriesPage() {
   const [countrySearch, setCountrySearch] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const [categoryMediaOpen, setCategoryMediaOpen] = useState(false);
+  const [categoryImageName, setCategoryImageName] = useState("");
   const { showToast, ToastComponent } = useToast();
+
+  useEffect(() => {
+    if (editing?.image) {
+      const cleanName = editing.image.split("/").pop()?.split("?")[0] || "";
+      setCategoryImageName(cleanName);
+    } else {
+      setCategoryImageName("");
+    }
+  }, [editing]);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState("");
@@ -433,6 +443,7 @@ export default function CategoriesPage() {
     setCategoryEditorTab("content");
     setSlugEdited(false);
     setCountryOverrides({});
+    setCategoryImageName("");
     form.reset();
   };
 
@@ -450,8 +461,10 @@ export default function CategoriesPage() {
         entityId: editing?.id || undefined,
       });
       const uploaded = results[0];
-      if (uploaded?.url) form.setFieldValue("image", uploaded.url);
-      else throw new Error("Upload completed, but no image URL was returned.");
+      if (uploaded?.url) {
+        form.setFieldValue("image", uploaded.url);
+        setCategoryImageName(file.name);
+      } else throw new Error("Upload completed, but no image URL was returned.");
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Image upload failed."), "error");
     } finally {
@@ -603,6 +616,7 @@ export default function CategoriesPage() {
     setSlugEdited(false);
     setCountryOverrides({});
     setCountrySearch("");
+    setCategoryImageName("");
     form.reset();
   };
 
@@ -613,6 +627,7 @@ export default function CategoriesPage() {
     setSlugEdited(false);
     setCountryOverrides({});
     setCountrySearch("");
+    setCategoryImageName("");
     form.reset();
   };
 
@@ -1049,26 +1064,69 @@ export default function CategoriesPage() {
                   />
                 </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-[120px_1fr]">
-                <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                  {form.values.image ? (
-                    <img src={form.values.image} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <ImageIcon size={22} className="text-[#9A9A9A]" />
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
-                  <div className="flex flex-wrap items-center gap-2">
+              <div className="space-y-1.5">
+                <label className="block text-[12px] font-semibold text-[#1A1A1A]">
+                  Category Image
+                </label>
+                {form.values.image ? (
+                  <div className="flex items-center gap-3.5 p-3 rounded-lg border border-[#E6E6E6] bg-white">
+                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={form.values.image}
+                        alt={categoryImageName || "Category"}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-[#1A1A1A] truncate" title={categoryImageName || form.values.image}>
+                        {categoryImageName || form.values.image.split("/").pop()}
+                      </p>
+                      <p className="text-[11px] text-[#6B6B6B] truncate mt-0.5" title={form.values.image}>
+                        {form.values.image}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setCategoryMediaOpen(true)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#D1D5DB] text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F9FAFB] transition-colors cursor-pointer"
+                      >
+                        Change
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          form.setFieldValue("image", "");
+                          setCategoryImageName("");
+                        }}
+                        className="p-1.5 rounded-md text-[#D32F2F] hover:bg-red-50 transition-colors cursor-pointer"
+                        title="Remove image"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-[#D1D5DB] bg-[#FAFAFA]">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-md bg-[#F0F0F0] flex items-center justify-center text-[#9A9A9A]">
+                        <ImageIcon size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[12.5px] font-medium text-[#1A1A1A]">No image selected</p>
+                        <p className="text-[11px] text-[#6B6B6B]">Select an image from media library</p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setCategoryMediaOpen(true)}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
                     >
-                      <ImageIcon size={14} /> Browse Media Library
+                      <ImageIcon size={14} /> Browse Media
                     </button>
                   </div>
-                </div>
+                )}
               </div>
 
               {editing ? (
@@ -1322,26 +1380,69 @@ export default function CategoriesPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[120px_1fr]">
-              <div className="flex h-[92px] w-[120px] items-center justify-center overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
-                {form.values.image ? (
-                  <img src={form.values.image} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <ImageIcon size={22} className="text-[#9A9A9A]" />
-                )}
-              </div>
-              <div className="space-y-2">
-                <AdminInput label="Image URL" placeholder="/uploads/category.jpg" {...form.getFieldProps("image")} />
-                <div className="flex flex-wrap items-center gap-2">
+            <div className="space-y-1.5">
+              <label className="block text-[12px] font-semibold text-[#1A1A1A]">
+                Category Image
+              </label>
+              {form.values.image ? (
+                <div className="flex items-center gap-3.5 p-3 rounded-lg border border-[#E6E6E6] bg-white">
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-[#E6E6E6] bg-[#F8F8F8]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={form.values.image}
+                      alt={categoryImageName || "Category"}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-[#1A1A1A] truncate" title={categoryImageName || form.values.image}>
+                      {categoryImageName || form.values.image.split("/").pop()}
+                    </p>
+                    <p className="text-[11px] text-[#6B6B6B] truncate mt-0.5" title={form.values.image}>
+                      {form.values.image}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setCategoryMediaOpen(true)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-[#D1D5DB] text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F9FAFB] transition-colors cursor-pointer"
+                    >
+                      Change
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        form.setFieldValue("image", "");
+                        setCategoryImageName("");
+                      }}
+                      className="p-1.5 rounded-md text-[#D32F2F] hover:bg-red-50 transition-colors cursor-pointer"
+                      title="Remove image"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-[#D1D5DB] bg-[#FAFAFA]">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-md bg-[#F0F0F0] flex items-center justify-center text-[#9A9A9A]">
+                      <ImageIcon size={20} />
+                    </div>
+                    <div>
+                      <p className="text-[12.5px] font-medium text-[#1A1A1A]">No image selected</p>
+                      <p className="text-[11px] text-[#6B6B6B]">Select an image from media library</p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setCategoryMediaOpen(true)}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
                   >
-                    <ImageIcon size={14} /> Browse Media Library
+                    <ImageIcon size={14} /> Browse Media
                   </button>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </form>
@@ -1402,6 +1503,7 @@ export default function CategoriesPage() {
         initialType="image"
         onSelect={(media) => {
           form.setFieldValue("image", media.url);
+          setCategoryImageName(media.originalName || media.title || media.filename);
           showToast("Category image selected.");
         }}
       />

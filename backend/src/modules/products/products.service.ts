@@ -1945,6 +1945,52 @@ export async function setProductCoverMedia(productId: string, mediaId: string) {
   });
 }
 
+// ─── Reorder product media ────────────────────────────────
+
+export async function reorderProductMedia(productId: string, mediaIds: string[]) {
+  await assertProductExists(productId);
+
+  if (!Array.isArray(mediaIds) || mediaIds.length === 0) {
+    throw new AppError("Invalid media order payload.", 400);
+  }
+
+  // Fetch all existing media for this product
+  const allMedia = await prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  const existingMap = new Map(allMedia.map((m) => [m.id, m]));
+
+  // Build the reordered list starting with the specified order
+  const specifiedMedia: typeof allMedia = [];
+  for (const id of mediaIds) {
+    const item = existingMap.get(id);
+    if (item) {
+      specifiedMedia.push(item);
+      existingMap.delete(id);
+    }
+  }
+
+  // Any remaining media not explicitly mentioned maintain their relative sequence at the end
+  const remainingMedia = Array.from(existingMap.values());
+  const finalSequence = [...specifiedMedia, ...remainingMedia];
+
+  await prisma.$transaction(
+    finalSequence.map((m, index) =>
+      prisma.productMedia.update({
+        where: { id: m.id },
+        data: { sortOrder: index },
+      })
+    )
+  );
+
+  return prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+}
+
 // ─── Delete product media ─────────────────────────────────
 
 export async function deleteProductMedia(mediaId: string) {
@@ -3995,6 +4041,18 @@ function normalizeVariantAttributeValue(value: unknown): string {
   return normalized;
 }
 
+function getVariantImportField(row: Record<string, string>, ...fieldNames: string[]): string | undefined {
+  for (const name of fieldNames) {
+    const direct = row[name];
+    if (direct !== undefined && String(direct).trim() !== "") return String(direct).trim();
+    const lowerKey = Object.keys(row).find((k) => k.toLowerCase() === name.toLowerCase());
+    if (lowerKey && row[lowerKey] !== undefined && String(row[lowerKey]).trim() !== "") {
+      return String(row[lowerKey]).trim();
+    }
+  }
+  return undefined;
+}
+
 export async function previewVariantsImport(productId: string, filePath: string) {
   const product = await assertProductExists(productId);
   if (!product.hasVariants) throw new AppError("Product does not use variants.", 400);
@@ -4002,27 +4060,82 @@ export async function previewVariantsImport(productId: string, filePath: string)
   const productAttributeMappings = await listProductAttributes(productId);
   const rows = readSpreadsheetRows(filePath);
 
+  const existingVariants = await prisma.productVariant.findMany({
+    where: { productId, deletedAt: null },
+    include: {
+      inventories: { where: { countryId: null } },
+      prices: { where: { deletedAt: null }, include: { currency: true } },
+      attributeValues: { include: { attribute: true, attributeValue: true } },
+    },
+  });
+  const existingVariantBySku = new Map(
+    existingVariants.filter((v) => v.sku).map((v) => [v.sku!.trim().toLowerCase(), v])
+  );
+
   const parsedRows: any[] = [];
   const skuSet = new Set<string>();
 
   for (const [index, row] of rows.entries()) {
-    const rawSku = row["SKU"] || row["sku"] || "";
-    const sku = rawSku.trim();
+    const rawSku = getVariantImportField(row, "SKU", "sku");
+    const sku = rawSku || "";
 
-    const rawStock = row["Stock"] || row["Stock Level"] || row["stock"] || "0";
-    const stock = parseInt(rawStock);
+    const existingVariant = sku ? existingVariantBySku.get(sku.toLowerCase()) : null;
 
-    const rawLowStock = row["Low Stock"] || row["Low Stock Threshold"] || row["lowStock"] || "10";
-    const lowStockThreshold = parseInt(rawLowStock);
+    const rawStock = getVariantImportField(row, "Stock", "Stock Level", "stock");
+    let stock: number = 0;
+    if (rawStock !== undefined) {
+      stock = parseInt(rawStock);
+    } else if (existingVariant) {
+      stock = existingVariant.inventories[0]?.stock ?? 0;
+    } else {
+      stock = 0;
+    }
 
-    const rawPrice = row["Price"] || row["Selling Price"] || row["Base Price"] || row["price"] || "0";
-    const price = parseFloat(rawPrice);
+    const rawLowStock = getVariantImportField(row, "Low Stock", "Low Stock Threshold", "lowStock");
+    let lowStockThreshold: number = 10;
+    if (rawLowStock !== undefined) {
+      lowStockThreshold = parseInt(rawLowStock);
+    } else if (existingVariant) {
+      lowStockThreshold = existingVariant.inventories[0]?.lowStockThreshold ?? 10;
+    } else {
+      lowStockThreshold = 10;
+    }
 
-    const rawMRP = row["MRP"] || row["mrp"] || rawPrice || "0";
-    const mrp = parseFloat(rawMRP);
+    const rawPrice = getVariantImportField(row, "Price", "Selling Price", "Base Price", "price");
+    const defaultPriceObj = existingVariant
+      ? (product.defaultCountryId ? existingVariant.prices.find((p) => p.countryId === product.defaultCountryId) : null) || existingVariant.prices[0]
+      : null;
 
-    const rawStatus = row["Status"] || row["status"] || "ACTIVE";
-    const status = rawStatus.trim().toUpperCase() === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+    let price: number = 0;
+    if (rawPrice !== undefined) {
+      price = parseFloat(rawPrice);
+    } else if (existingVariant && defaultPriceObj) {
+      price = Number(defaultPriceObj.sellingPrice);
+    } else {
+      price = 0;
+    }
+
+    const rawMRP = getVariantImportField(row, "MRP", "mrp");
+    let mrp: number = price;
+    if (rawMRP !== undefined) {
+      mrp = parseFloat(rawMRP);
+    } else if (rawPrice !== undefined) {
+      mrp = price;
+    } else if (existingVariant && defaultPriceObj) {
+      mrp = defaultPriceObj.mrp ? Number(defaultPriceObj.mrp) : (price ?? 0);
+    } else {
+      mrp = price ?? 0;
+    }
+
+    const rawStatus = getVariantImportField(row, "Status", "status");
+    let status: string = "ACTIVE";
+    if (rawStatus !== undefined) {
+      status = rawStatus.toUpperCase() === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+    } else if (existingVariant) {
+      status = existingVariant.status;
+    } else {
+      status = "ACTIVE";
+    }
 
     const errors: string[] = [];
     const attributeValues: any[] = [];
@@ -4051,21 +4164,50 @@ export async function previewVariantsImport(productId: string, filePath: string)
 
     // Map attributes
     for (const mapping of productAttributeMappings) {
-      let cellValue = "";
-      for (const key of Object.keys(row)) {
-        const normalizedKey = key.toLowerCase();
-        if (
-          normalizedKey === mapping.attribute.name.toLowerCase() ||
-          normalizedKey === `attr: ${mapping.attribute.name.toLowerCase()}` ||
-          normalizedKey === `attribute: ${mapping.attribute.name.toLowerCase()}`
-        ) {
-          cellValue = row[key].trim();
-          break;
+      let cellValue = getVariantImportField(
+        row,
+        mapping.attribute.name,
+        `attr: ${mapping.attribute.name}`,
+        `attribute: ${mapping.attribute.name}`
+      ) || "";
+
+      if (!cellValue) {
+        const rawAttributes = getVariantImportField(row, "Attributes", "attributes", "Attribute", "Variant Attributes") || "";
+        if (rawAttributes) {
+          const escapedName = mapping.attribute.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const attrRegex = new RegExp(`(?:^|[,;|])\\s*${escapedName}\\s*[:=]\\s*([^,;|]+)`, "i");
+          const match = rawAttributes.match(attrRegex);
+          if (match && match[1]) {
+            cellValue = match[1].trim();
+          } else {
+            const parts = rawAttributes.split(/[,;|]/).map((p: string) => p.trim());
+            for (const part of parts) {
+              const normalizedPart = normalizeVariantAttributeValue(part);
+              const matched = mapping.allowedValues.find(
+                (v) => normalizeVariantAttributeValue(v.attributeValue.value) === normalizedPart
+              );
+              if (matched) {
+                cellValue = part;
+                break;
+              }
+            }
+          }
         }
       }
 
       if (!cellValue) {
-        if (mapping.required) {
+        // If this variant already exists in DB, retain its existing attribute value!
+        const existingAv = existingVariant?.attributeValues.find(
+          (av) => av.attributeId === mapping.attributeId
+        );
+        if (existingAv && existingAv.attribute && existingAv.attributeValue) {
+          attributeValues.push({
+            attributeId: existingAv.attributeId,
+            attributeName: existingAv.attribute.name,
+            attributeValueId: existingAv.attributeValueId,
+            value: existingAv.attributeValue.value,
+          });
+        } else if (mapping.required) {
           errors.push(`Attribute "${mapping.attribute.name}" is required.`);
         }
       } else {
@@ -4090,7 +4232,7 @@ export async function previewVariantsImport(productId: string, filePath: string)
     }
 
     const attrValuesText = attributeValues.map((v) => v.value).join(" / ");
-    const variantTitle = attrValuesText || `Variant ${sku}`;
+    const variantTitle = attrValuesText || (existingVariant?.title ?? `Variant ${sku}`);
 
     parsedRows.push({
       rowNumber: index + 2,
@@ -4145,12 +4287,39 @@ export async function executeVariantsImport(productId: string, rows: any[]) {
       let variantId = "";
 
       if (existingVariant) {
-        await tx.productVariant.update({
-          where: { id: existingVariant.id },
-          data: {
-            status: row.status || existingVariant.status,
-          },
-        });
+        const attributeValues = Array.isArray(row.attributeValues)
+          ? row.attributeValues.filter(
+              (v: any) => v?.attributeId && v?.attributeValueId
+            )
+          : [];
+
+        if (attributeValues.length > 0) {
+          const attrValueIds = attributeValues.map((v: any) => v.attributeValueId);
+          const variantKey = [...attrValueIds].sort().join("-");
+          await tx.productVariantAttributeValue.deleteMany({ where: { variantId: existingVariant.id } });
+          await tx.productVariantAttributeValue.createMany({
+            data: attributeValues.map((v: any) => ({
+              variantId: existingVariant.id,
+              attributeId: v.attributeId,
+              attributeValueId: v.attributeValueId,
+            })),
+          });
+          await tx.productVariant.update({
+            where: { id: existingVariant.id },
+            data: {
+              variantKey,
+              title: row.variantTitle || existingVariant.title,
+              status: row.status || existingVariant.status,
+            },
+          });
+        } else {
+          await tx.productVariant.update({
+            where: { id: existingVariant.id },
+            data: {
+              status: row.status || existingVariant.status,
+            },
+          });
+        }
         variantId = existingVariant.id;
         summary.updated += 1;
       } else {
@@ -4233,14 +4402,18 @@ export async function executeVariantsImport(productId: string, rows: any[]) {
         });
       }
 
-      const priceCountryId = product.defaultCountryId;
+      const priceCountryId =
+        product.defaultCountryId ||
+        (await tx.productCountry.findFirst({ where: { productId, enabled: true }, select: { countryId: true } }))?.countryId ||
+        (await tx.country.findFirst({ where: { isDefault: true }, select: { id: true } }))?.id ||
+        (await tx.country.findFirst({ select: { id: true } }))?.id;
 
-if (!priceCountryId) {
-  throw new AppError(
-    "Product default country is required before importing variant prices.",
-    400
-  );
-}
+      if (!priceCountryId) {
+        throw new AppError(
+          "Product country is required before importing variant prices.",
+          400
+        );
+      }
 
 const priceCountry = await tx.country.findUnique({
   where: { id: priceCountryId },
@@ -4308,6 +4481,126 @@ for (const pc of productCountries) {
   });
 
   return summary;
+}
+
+export async function exportProductVariantsSpreadsheet(productId: string, variantIds?: string[]) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: {
+      defaultCountry: true,
+      defaultCurrency: true,
+    },
+  });
+  if (!product) throw new AppError("Product not found.", 404);
+
+  const productAttributeMappings = await listProductAttributes(productId);
+
+  const productBasePrices = await prisma.productPrice.findMany({
+    where: {
+      productId,
+      variantId: null,
+      deletedAt: null,
+    },
+    include: {
+      currency: true,
+      country: true,
+    },
+  });
+
+  const defaultProductBasePrice =
+    (product.defaultCountryId
+      ? productBasePrices.find((p) => p.countryId === product.defaultCountryId)
+      : null) ||
+    productBasePrices.find((p) => p.country?.name === "United States" || p.currency?.code === "USD") ||
+    productBasePrices[0];
+
+  const where: Prisma.ProductVariantWhereInput = {
+    productId,
+    deletedAt: null,
+    status: { not: "INACTIVE" },
+  };
+
+  if (Array.isArray(variantIds) && variantIds.length > 0) {
+    where.id = { in: variantIds };
+    delete (where as any).status;
+  }
+
+  const variants = await prisma.productVariant.findMany({
+    where,
+    orderBy: [{ title: "asc" }, { sku: "asc" }],
+    include: {
+      attributeValues: {
+        include: {
+          attribute: true,
+          attributeValue: true,
+        },
+      },
+      inventories: true,
+      prices: {
+        where: { deletedAt: null },
+        include: { currency: true, country: true },
+      },
+    },
+  });
+
+  const columns: { key: string; header: string }[] = [
+    { key: "Product", header: "Product" },
+    { key: "SKU", header: "SKU" },
+    { key: "Stock", header: "Stock" },
+    { key: "Low Stock", header: "Low Stock" },
+    { key: "Price", header: "Price" },
+    { key: "MRP", header: "MRP" },
+    { key: "Status", header: "Status" },
+  ];
+
+  for (const mapping of productAttributeMappings) {
+    columns.push({ key: mapping.attribute.name, header: mapping.attribute.name });
+  }
+
+  const rows = variants.map((variant) => {
+    const totalStock = variant.inventories.reduce((sum, inv) => sum + (inv.stock || 0), 0);
+    const lowStock = variant.inventories[0]?.lowStockThreshold ?? 10;
+
+    const directPriceObj =
+      (product.defaultCountryId ? variant.prices.find((p) => p.countryId === product.defaultCountryId) : null) ||
+      variant.prices[0];
+    const effectivePriceObj = directPriceObj || defaultProductBasePrice;
+    const price = effectivePriceObj ? Number(effectivePriceObj.sellingPrice) : 0;
+    const mrp = effectivePriceObj?.mrp ? Number(effectivePriceObj.mrp) : price;
+
+    const rowObj: Record<string, any> = {
+      Product: product.title,
+      SKU: variant.sku || "",
+      Stock: totalStock,
+      "Low Stock": lowStock,
+      Price: price,
+      MRP: mrp,
+      Status: variant.status,
+    };
+
+    const attrValuesMap = new Map<string, string[]>();
+    for (const av of variant.attributeValues) {
+      if (av.attribute && av.attributeValue) {
+        const key = av.attribute.name.toLowerCase();
+        const existing = attrValuesMap.get(key) || [];
+        existing.push(av.attributeValue.value);
+        attrValuesMap.set(key, existing);
+      }
+    }
+
+    for (const mapping of productAttributeMappings) {
+      const values = attrValuesMap.get(mapping.attribute.name.toLowerCase()) || [];
+      rowObj[mapping.attribute.name] = values.join(", ");
+    }
+
+    return rowObj;
+  });
+
+  const buffer = writeSpreadsheetBuffer(rows, "Variants", columns);
+  const sanitizedTitle = (product.slug || product.title || "product").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  const filename = `${sanitizedTitle}-variants-${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+  return { buffer, filename };
 }
 
 export async function bulkPermanentDeleteProducts(ids: string[]) {

@@ -121,6 +121,7 @@ export interface CreateCustomerOrderPayload {
   couponCode?: string;
   notes?: string;
   shippingZoneId?: string;
+  paymentMethod?: string;
 }
 
 export interface CustomerOrderSummary {

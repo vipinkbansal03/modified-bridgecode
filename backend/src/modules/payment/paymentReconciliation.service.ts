@@ -173,8 +173,9 @@ export async function reconcilePaymentFailure(params: {
       });
     }
 
-    // Check if order has expired
-    const isExpired = order.paymentExpiresAt && order.paymentExpiresAt < new Date();
+    // Check if order has expired (COD orders never expire)
+    const isCod = order.paymentMethod === "PAY_ON_DELIVERY" || order.paymentMethod === "COD";
+    const isExpired = !isCod && order.paymentExpiresAt && order.paymentExpiresAt < new Date();
     let updatedOrder = order;
     if (isExpired && order.status === "PENDING") {
       await releaseOrderReservation(order.id, tx);
@@ -190,7 +191,7 @@ export async function reconcilePaymentFailure(params: {
       updatedOrder = await tx.order.update({
         where: { id: order.id },
         data: {
-          paymentStatus: "PENDING",
+          paymentStatus: isCod ? "PENDING" : "FAILED",
         },
       });
     }
@@ -214,9 +215,9 @@ export async function expireOrderAndReleaseStock(orderId: string) {
 
     if (!order) return null;
 
-    // Do not expire if already PAID
-    if (order.paymentStatus === "PAID") {
-      logger.info(`[paymentReconciliation] Order ${orderId} is already PAID. Skipping expiration.`);
+    // Do not expire if already PAID or if Cash on Delivery
+    if (order.paymentStatus === "PAID" || order.paymentMethod === "PAY_ON_DELIVERY" || order.paymentMethod === "COD") {
+      logger.info(`[paymentReconciliation] Order ${orderId} is ${order.paymentStatus === "PAID" ? "PAID" : "COD"}. Skipping expiration.`);
       return order;
     }
 
@@ -263,6 +264,7 @@ export async function processExpiredOrders(): Promise<number> {
       status: "PENDING",
       paymentStatus: { not: "PAID" },
       paymentExpiresAt: { lte: now },
+      paymentMethod: { notIn: ["PAY_ON_DELIVERY", "COD"] },
     },
     select: { id: true, orderNumber: true, paymentExpiresAt: true },
     take: 50,
@@ -315,7 +317,10 @@ export async function getPaymentSession(customerId: string, orderId: string) {
     : 0;
 
   const latestTransaction = order.paymentTransactions[0] || null;
-  const isRetryable = order.paymentStatus !== "PAID" && order.status !== "CANCELLED" && secondsRemaining > 0;
+  const isRetryable =
+    order.paymentStatus !== "PAID" &&
+    order.status !== "CANCELLED" &&
+    (order.paymentExpiresAt ? secondsRemaining > 0 : true);
 
   return {
     orderId: order.id,

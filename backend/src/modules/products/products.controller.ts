@@ -155,6 +155,16 @@ export const setCoverMedia = asyncHandler(async (req: AuthRequest, res: Response
   return ApiResponse.success(res, "Cover image updated.", result);
 });
 
+export const reorderMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const mediaIds = Array.isArray(req.body.mediaIds)
+    ? req.body.mediaIds
+    : Array.isArray(req.body)
+    ? req.body
+    : [];
+  const result = await ProductService.reorderProductMedia(req.params.id as string, mediaIds);
+  return ApiResponse.success(res, "Media reordered successfully.", result);
+});
+
 export const removeMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
   await ProductService.deleteProductMedia(req.params.mediaId as string);
   return ApiResponse.success(res, "Media deleted.");
@@ -442,6 +452,25 @@ export const previewVariantsImport = asyncHandler(async (req: AuthRequest, res: 
 export const executeVariantsImport = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await ProductService.executeVariantsImport(req.params.id as string, req.body.rows);
   return ApiResponse.success(res, "Variants imported successfully.", result);
+});
+
+export const exportProductVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rawVariantIds = req.query.variantIds;
+  let variantIds: string[] | undefined;
+  if (typeof rawVariantIds === "string" && rawVariantIds.trim()) {
+    variantIds = rawVariantIds.split(",").map((id) => id.trim()).filter(Boolean);
+  } else if (Array.isArray(rawVariantIds)) {
+    variantIds = (rawVariantIds as string[]).map((id) => String(id).trim()).filter(Boolean);
+  }
+
+  const { buffer, filename } = await ProductService.exportProductVariantsSpreadsheet(
+    req.params.id as string,
+    variantIds
+  );
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.status(200).send(buffer);
 });
 
 export const updateShippingInfo = asyncHandler(async (req: AuthRequest, res: Response) => {

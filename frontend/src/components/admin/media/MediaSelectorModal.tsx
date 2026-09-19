@@ -10,6 +10,8 @@ export type MediaSelectorModalProps = {
   value?: string;
   onClose: () => void;
   onSelect: (media: MediaItem) => void;
+  multiple?: boolean;
+  onSelectMultiple?: (mediaList: MediaItem[]) => void;
   title?: string;
   initialType?: "all" | "image" | "document";
   acceptTypes?: string[];
@@ -21,6 +23,8 @@ export function MediaSelectorModal({
   value = "",
   onClose,
   onSelect,
+  multiple = false,
+  onSelectMultiple,
   title = "Media Library",
   initialType = "image",
   acceptTypes,
@@ -40,13 +44,22 @@ export function MediaSelectorModal({
     onClose();
   };
 
+  const handleSelectMultiple = (mediaList: MediaItem[]) => {
+    if (onSelectMultiple) {
+      onSelectMultiple(mediaList);
+    } else if (mediaList.length > 0) {
+      onSelect(mediaList[0]);
+    }
+    onClose();
+  };
+
   return (
     <Modal
       open={isModalOpen}
       onClose={onClose}
       title={title}
-      size="3xl"
-      bodyClassName="max-h-[80vh] overflow-y-auto p-4 sm:p-5"
+      size="4xl"
+      bodyClassName="h-[82vh] max-h-[82vh] flex flex-col overflow-hidden p-3 sm:p-4"
       footer={
         <div className="flex items-center justify-end w-full">
           <button
@@ -64,6 +77,8 @@ export function MediaSelectorModal({
         value={value}
         initialType={resolvedInitialType}
         onSelect={handleSelect}
+        multiple={multiple}
+        onSelectMultiple={handleSelectMultiple}
       />
     </Modal>
   );

@@ -24,6 +24,7 @@ export const createCustomerOrderSchema = z.object({
   couponCode: z.string().trim().optional(),
   notes: z.string().trim().optional(),
   shippingZoneId: z.string().optional(),
+  paymentMethod: z.string().trim().optional(),
 });
 
 export type CreateCustomerOrderInput = z.infer<typeof createCustomerOrderSchema>;

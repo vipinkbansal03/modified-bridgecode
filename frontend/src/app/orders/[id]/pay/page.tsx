@@ -39,7 +39,7 @@ export default function OrderPayPage() {
         .then((data) => {
           if (!isMounted) return;
           setSession(data);
-          if (data.isExpired || data.status === "CANCELLED" || data.secondsRemaining <= 0) {
+          if (data.isExpired || data.status === "CANCELLED" || (Boolean(data.paymentExpiresAt) && data.secondsRemaining <= 0)) {
             setIsExpiredLocally(true);
           }
         })
@@ -242,7 +242,7 @@ export default function OrderPayPage() {
               </div>
 
               {/* Countdown Timer */}
-              {!isExpired && (
+              {!isExpired && Boolean(session.paymentExpiresAt) && (
                 <div className="pt-2">
                   <PaymentCountdownTimer
                     expiresAt={session.paymentExpiresAt}

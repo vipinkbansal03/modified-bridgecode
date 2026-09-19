@@ -479,6 +479,8 @@ export async function createCustomerOrder(
   const isExempt = orderItems.every((item) => item.resolvedPrice.taxBreakdownStructure?.taxType === "EXEMPT");
   const taxLabel = hasVatReverseCharge ? "VAT Reverse Charge" : isExempt ? "Tax Exempt" : hasVat ? "VAT" : "GST";
   const primaryTaxMode = orderItems[0]?.resolvedPrice.taxMode || "EXCLUSIVE";
+  const resolvedPaymentMethod = (input.paymentMethod || CUSTOMER_CHECKOUT_PAYMENT_METHOD).toUpperCase();
+  const isCod = resolvedPaymentMethod === "PAY_ON_DELIVERY" || resolvedPaymentMethod === "COD";
 
   const createdOrder = await prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
@@ -510,13 +512,15 @@ export async function createCustomerOrder(
         couponId: couponValidation?.coupon.id ?? null,
         couponCode: couponValidation?.coupon.code ?? null,
         couponDiscount: discount,
-        status: "PENDING",
+        status: isCod ? "CONFIRMED" : "PENDING",
         paymentStatus: "PENDING",
-        paymentMethod: CUSTOMER_CHECKOUT_PAYMENT_METHOD,
-        paymentExpiresAt: new Date(
-          Date.now() +
-            parseInt(process.env.ORDER_PAYMENT_RESERVATION_MINUTES || "4", 10) * 60 * 1000,
-        ),
+        paymentMethod: isCod ? "PAY_ON_DELIVERY" : resolvedPaymentMethod,
+        paymentExpiresAt: isCod
+          ? null
+          : new Date(
+              Date.now() +
+                parseInt(process.env.ORDER_PAYMENT_RESERVATION_MINUTES || "15", 10) * 60 * 1000,
+            ),
         shippingProvider: shipping.provider,
         shippingZoneId: shipping.zoneId,
         shippingBoxId: packaging.box?.id ?? null,
