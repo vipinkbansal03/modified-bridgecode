@@ -318,7 +318,7 @@ function parseProductImportRow(raw: Record<string, string>): ProductImportRow {
     productCode: raw.productCode?.trim() || null,
     imageUrl: rawImage,
     imageUrls,
-    categorySlug: (raw.categorySlug || raw.category || raw.categoryName || raw.Category || raw["Category Slug"] || raw["category_slug"])?.trim() || null,
+    categorySlug: (raw.categoryName || raw["categoryName"] || raw["category Name"] || raw["Category Name"] || raw.category || raw.Category || raw.categorySlug || raw["Category Slug"] || raw["category_slug"])?.trim() || null,
     brand: raw.brand?.trim() || null,
     status: raw.status?.trim().toUpperCase() || null,
     sortOrder: parseNumberish(raw.sortOrder),
@@ -3596,7 +3596,7 @@ const PRODUCT_EXPORT_COLUMNS = [
   { key: "sku", header: "sku" },
   { key: "productCode", header: "productCode" },
   { key: "imageUrl", header: "imageUrl" },
-  { key: "categorySlug", header: "categorySlug" },
+  { key: "categoryName", header: "categoryName" },
   { key: "brand", header: "brand" },
   { key: "status", header: "status" },
   { key: "sortOrder", header: "sortOrder" },
@@ -3630,7 +3630,7 @@ async function getProductSpreadsheetPreview(rows: Record<string, string>[]) {
   for (const [index, row] of parsedRows.entries()) {
     const rowNumber = index + 2;
     if (!row.title) issues.push({ row: rowNumber, field: "title", message: "Title is required." });
-    if (!row.categorySlug) issues.push({ row: rowNumber, field: "categorySlug", message: "Category slug is required." });
+    if (!row.categorySlug) issues.push({ row: rowNumber, field: "categoryName", message: "Category name is required." });
     if (row.status && !["DRAFT", "ACTIVE", "INACTIVE", "ARCHIVED"].includes(row.status)) {
       issues.push({ row: rowNumber, field: "status", message: "Status must be DRAFT, ACTIVE, INACTIVE, or ARCHIVED." });
     }
@@ -3717,9 +3717,9 @@ async function getProductSpreadsheetPreview(rows: Record<string, string>[]) {
     const categoryKey = row.categorySlug?.toLowerCase().trim();
     const category = categoryKey ? categoryBySlug.get(categoryKey) : null;
     if (!category) {
-      issues.push({ row: rowNumber, field: "categorySlug", message: `Category '${row.categorySlug || ""}' was not found.` });
+      issues.push({ row: rowNumber, field: "categoryName", message: `Category '${row.categorySlug || ""}' was not found.` });
     } else if (category.status !== "ACTIVE") {
-      issues.push({ row: rowNumber, field: "categorySlug", message: `Category '${row.categorySlug}' is inactive.` });
+      issues.push({ row: rowNumber, field: "categoryName", message: `Category '${row.categorySlug}' is inactive.` });
     }
 
     for (const code of row.countryCodes ?? []) {
@@ -3760,7 +3760,16 @@ async function getProductSpreadsheetPreview(rows: Record<string, string>[]) {
 export async function previewProductImport(filePath: string) {
   const rows = readSpreadsheetRows(filePath);
   const preview = await getProductSpreadsheetPreview(rows);
-  const sampleRows = preview.rows.slice(0, 10).map((row, index) => ({ row: index + 2, ...row }));
+  const sampleRows = preview.rows.slice(0, 10).map((row, index) => {
+    const categoryKey = row.categorySlug?.toLowerCase().trim();
+    const matchedCategory = categoryKey ? preview.categoryBySlug.get(categoryKey) : null;
+    return {
+      row: index + 2,
+      ...row,
+      categorySlug: matchedCategory ? matchedCategory.slug : (row.categorySlug || ""),
+      categoryName: matchedCategory ? matchedCategory.name : (row.categorySlug || ""),
+    };
+  });
   const previewRows = preview.rows.map((row, index) => {
     const rowNumber = index + 2;
     const rowIssues = preview.issues.filter((iss) => iss.row === rowNumber);
@@ -3769,6 +3778,7 @@ export async function previewProductImport(filePath: string) {
     return {
       ...row,
       categorySlug: matchedCategory ? matchedCategory.slug : (row.categorySlug || ""),
+      categoryName: matchedCategory ? matchedCategory.name : (row.categorySlug || ""),
       rowNumber,
       isValid: rowIssues.length === 0,
       errors: rowIssues.map((iss) => (iss.field ? `[${iss.field}] ${iss.message}` : iss.message)),
@@ -3792,7 +3802,7 @@ function buildProductExportRow(product: any) {
     sku: product.sku ?? "",
     productCode: product.productCode ?? "",
     imageUrl: (product.media || []).map((m: any) => m.url).join(", "),
-    categorySlug: product.category?.slug ?? "",
+    categoryName: product.category?.name || product.category?.slug || "",
     brand: product.brand ?? "",
     status: product.status,
     sortOrder: product.sortOrder,
@@ -3813,7 +3823,7 @@ export async function exportProductsSpreadsheet(query: ProductListQuery) {
     where,
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     include: {
-      category: { select: { slug: true } },
+      category: { select: { slug: true, name: true } },
       countries: { where: { enabled: true }, include: { country: { select: { code: true } } } },
       media: { orderBy: { sortOrder: "asc" }, select: { url: true } },
     },
@@ -3842,7 +3852,7 @@ export async function generateSampleProductsTemplate() {
       sku: "PRD-MB-001",
       productCode: "BRK-MBT-22",
       imageUrl: "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&w=800&q=80",
-      categorySlug: cat1,
+      categoryName: cat1,
       brand: "Modern Orthodontics",
       status: "ACTIVE",
       sortOrder: 1,
@@ -3860,7 +3870,7 @@ export async function generateSampleProductsTemplate() {
       sku: "PRD-NW-002",
       productCode: "WIR-NT-16U",
       imageUrl: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=800&q=80",
-      categorySlug: cat2,
+      categoryName: cat2,
       brand: "Modern Orthodontics",
       status: "ACTIVE",
       sortOrder: 2,
@@ -4273,212 +4283,268 @@ export async function executeVariantsImport(productId: string, rows: any[]) {
     (await prisma.currency.findFirst());
   if (!baseCurrency) throw new AppError("Base currency not configured.", 400);
 
-  const summary = { created: 0, updated: 0 };
+  const priceCountryId =
+    product.defaultCountryId ||
+    productCountries[0]?.countryId ||
+    (await prisma.country.findFirst({ where: { isDefault: true }, select: { id: true } }))?.id ||
+    (await prisma.country.findFirst({ select: { id: true } }))?.id;
 
-  await prisma.$transaction(async (tx) => {
-    for (const row of rows) {
-      const normalizedSku = row.sku?.trim();
-      if (!normalizedSku) continue;
-
-      const existingVariant = await tx.productVariant.findFirst({
-        where: { productId, sku: normalizedSku, deletedAt: null },
-      });
-
-      let variantId = "";
-
-      if (existingVariant) {
-        const attributeValues = Array.isArray(row.attributeValues)
-          ? row.attributeValues.filter(
-              (v: any) => v?.attributeId && v?.attributeValueId
-            )
-          : [];
-
-        if (attributeValues.length > 0) {
-          const attrValueIds = attributeValues.map((v: any) => v.attributeValueId);
-          const variantKey = [...attrValueIds].sort().join("-");
-          await tx.productVariantAttributeValue.deleteMany({ where: { variantId: existingVariant.id } });
-          await tx.productVariantAttributeValue.createMany({
-            data: attributeValues.map((v: any) => ({
-              variantId: existingVariant.id,
-              attributeId: v.attributeId,
-              attributeValueId: v.attributeValueId,
-            })),
-          });
-          await tx.productVariant.update({
-            where: { id: existingVariant.id },
-            data: {
-              variantKey,
-              title: row.variantTitle || existingVariant.title,
-              status: row.status || existingVariant.status,
-            },
-          });
-        } else {
-          await tx.productVariant.update({
-            where: { id: existingVariant.id },
-            data: {
-              status: row.status || existingVariant.status,
-            },
-          });
-        }
-        variantId = existingVariant.id;
-        summary.updated += 1;
-      } else {
-  const attributeValues = Array.isArray(row.attributeValues)
-    ? row.attributeValues.filter(
-        (v: any) => v?.attributeId && v?.attributeValueId
-      )
-    : [];
-
-  const attrValueIds = attributeValues.map(
-    (v: any) => v.attributeValueId
-  );
-
-  const variantKey = [...attrValueIds].sort().join("-");
-
-  const duplicateKeyVariant = await tx.productVariant.findFirst({
-    where: { productId, variantKey, deletedAt: null },
-  });
-
-  if (duplicateKeyVariant) {
-    await tx.productVariant.update({
-      where: { id: duplicateKeyVariant.id },
-      data: {
-        sku: normalizedSku,
-        status: row.status || duplicateKeyVariant.status,
-      },
-    });
-
-    variantId = duplicateKeyVariant.id;
-    summary.updated += 1;
-  } else {
-    const variant = await tx.productVariant.create({
-      data: {
-        productId,
-        title: row.variantTitle || "Imported Variant",
-        variantKey,
-        sku: normalizedSku,
-        status: row.status || "ACTIVE",
-      },
-    });
-
-    variantId = variant.id;
-
-    if (attributeValues.length > 0) {
-      await tx.productVariantAttributeValue.createMany({
-        data: attributeValues.map((v: any) => ({
-          variantId: variant.id,
-          attributeId: v.attributeId,
-          attributeValueId: v.attributeValueId,
-        })),
-      });
-    }
-
-    summary.created += 1;
+  if (!priceCountryId) {
+    throw new AppError(
+      "Product country is required before importing variant prices.",
+      400
+    );
   }
-}
 
-      const existingInventory = await tx.inventory.findFirst({
-        where: { variantId, countryId: null },
-      });
+  const priceCountry = await prisma.country.findUnique({
+    where: { id: priceCountryId },
+    select: {
+      id: true,
+      currencyId: true,
+    },
+  });
 
-      if (existingInventory) {
-        await tx.inventory.update({
-          where: { id: existingInventory.id },
-          data: {
-            stock: row.stock ?? existingInventory.stock,
-            lowStockThreshold: row.lowStockThreshold ?? existingInventory.lowStockThreshold,
-          },
-        });
-      } else {
-        await tx.inventory.create({
-          data: {
-            productId,
-            variantId,
-            countryId: null,
-            stock: row.stock ?? 0,
-            lowStockThreshold: row.lowStockThreshold ?? 10,
-            status: (row.stock ?? 0) > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
-          },
-        });
-      }
+  if (!priceCountry) {
+    throw new AppError("Product default country was not found.", 400);
+  }
 
-      const priceCountryId =
-        product.defaultCountryId ||
-        (await tx.productCountry.findFirst({ where: { productId, enabled: true }, select: { countryId: true } }))?.countryId ||
-        (await tx.country.findFirst({ where: { isDefault: true }, select: { id: true } }))?.id ||
-        (await tx.country.findFirst({ select: { id: true } }))?.id;
+  const summary = { created: 0, updated: 0 };
+  const CHUNK_SIZE = 500;
 
-      if (!priceCountryId) {
-        throw new AppError(
-          "Product country is required before importing variant prices.",
-          400
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE);
+
+    await prisma.$transaction(
+      async (tx) => {
+        const chunkSkus: string[] = [];
+        const chunkVariantKeys: string[] = [];
+        for (const row of chunk) {
+          const sku = row.sku?.trim();
+          if (sku) chunkSkus.push(sku);
+
+          const attributeValues = Array.isArray(row.attributeValues)
+            ? row.attributeValues.filter((v: any) => v?.attributeId && v?.attributeValueId)
+            : [];
+          if (attributeValues.length > 0) {
+            const attrValueIds = attributeValues.map((v: any) => v.attributeValueId);
+            chunkVariantKeys.push([...attrValueIds].sort().join("-"));
+          }
+        }
+
+        const existingBySkuList = chunkSkus.length > 0
+          ? await tx.productVariant.findMany({
+              where: { productId, sku: { in: chunkSkus }, deletedAt: null },
+              select: { id: true, sku: true, title: true, status: true, variantKey: true },
+            })
+          : [];
+        const variantBySku = new Map(
+          existingBySkuList.filter((v) => v.sku).map((v) => [v.sku!.trim().toLowerCase(), v])
         );
-      }
 
-const priceCountry = await tx.country.findUnique({
-  where: { id: priceCountryId },
-  select: {
-    id: true,
-    currencyId: true,
-  },
-});
+        const existingByKeyList = chunkVariantKeys.length > 0
+          ? await tx.productVariant.findMany({
+              where: { productId, variantKey: { in: chunkVariantKeys }, deletedAt: null },
+              select: { id: true, sku: true, title: true, status: true, variantKey: true },
+            })
+          : [];
+        const variantByKey = new Map(
+          existingByKeyList.filter((v) => v.variantKey).map((v) => [v.variantKey!, v])
+        );
 
-if (!priceCountry) {
-  throw new AppError("Product default country was not found.", 400);
-}
+        const allMatchedIds = [
+          ...existingBySkuList.map((v) => v.id),
+          ...existingByKeyList.map((v) => v.id),
+        ];
 
-const existingPrice = await tx.productPrice.findFirst({
-  where: {
-    productId,
-    variantId,
-    countryId: priceCountryId,
-  },
-});
+        const existingInventories = allMatchedIds.length > 0
+          ? await tx.inventory.findMany({
+              where: { variantId: { in: allMatchedIds }, countryId: null },
+            })
+          : [];
+        const inventoryByVariantId = new Map(
+          existingInventories.filter((inv) => inv.variantId).map((inv) => [inv.variantId!, inv])
+        );
 
-if (existingPrice) {
-  await tx.productPrice.update({
-    where: { id: existingPrice.id },
-    data: {
-      mrp: row.mrp ?? existingPrice.mrp,
-      sellingPrice:
-        row.price ??
-        row.sellingPrice ??
-        existingPrice.sellingPrice,
-    },
-  });
-} else {
-  await tx.productPrice.create({
-    data: {
-      productId,
-      variantId,
-      countryId: priceCountryId,
-      currencyId: priceCountry.currencyId || baseCurrency.id,
-      mrp: row.mrp ?? row.price ?? 0,
-      sellingPrice: row.price ?? row.sellingPrice ?? 0,
-      status: "ACTIVE",
-    },
-  });
-}
+        const existingPrices = allMatchedIds.length > 0
+          ? await tx.productPrice.findMany({
+              where: { variantId: { in: allMatchedIds }, countryId: priceCountryId, deletedAt: null },
+            })
+          : [];
+        const priceByVariantId = new Map(
+          existingPrices.filter((p) => p.variantId).map((p) => [p.variantId!, p])
+        );
 
-// Automatically sync country visibility from the parent product
-for (const pc of productCountries) {
-  await tx.variantCountry.upsert({
-    where: {
-      variantId_countryId: {
-        variantId,
-        countryId: pc.countryId,
+        for (const row of chunk) {
+          const normalizedSku = row.sku?.trim();
+          if (!normalizedSku) continue;
+
+          const existingVariant = variantBySku.get(normalizedSku.toLowerCase());
+          let variantId = "";
+
+          if (existingVariant) {
+            const attributeValues = Array.isArray(row.attributeValues)
+              ? row.attributeValues.filter(
+                  (v: any) => v?.attributeId && v?.attributeValueId
+                )
+              : [];
+
+            if (attributeValues.length > 0) {
+              const attrValueIds = attributeValues.map((v: any) => v.attributeValueId);
+              const variantKey = [...attrValueIds].sort().join("-");
+              await tx.productVariantAttributeValue.deleteMany({ where: { variantId: existingVariant.id } });
+              await tx.productVariantAttributeValue.createMany({
+                data: attributeValues.map((v: any) => ({
+                  variantId: existingVariant.id,
+                  attributeId: v.attributeId,
+                  attributeValueId: v.attributeValueId,
+                })),
+              });
+              await tx.productVariant.update({
+                where: { id: existingVariant.id },
+                data: {
+                  variantKey,
+                  title: row.variantTitle || existingVariant.title,
+                  status: row.status || existingVariant.status,
+                },
+              });
+            } else {
+              await tx.productVariant.update({
+                where: { id: existingVariant.id },
+                data: {
+                  status: row.status || existingVariant.status,
+                },
+              });
+            }
+            variantId = existingVariant.id;
+            summary.updated += 1;
+          } else {
+            const attributeValues = Array.isArray(row.attributeValues)
+              ? row.attributeValues.filter(
+                  (v: any) => v?.attributeId && v?.attributeValueId
+                )
+              : [];
+
+            const attrValueIds = attributeValues.map(
+              (v: any) => v.attributeValueId
+            );
+            const variantKey = [...attrValueIds].sort().join("-");
+
+            const duplicateKeyVariant = variantKey ? variantByKey.get(variantKey) : null;
+
+            if (duplicateKeyVariant) {
+              await tx.productVariant.update({
+                where: { id: duplicateKeyVariant.id },
+                data: {
+                  sku: normalizedSku,
+                  status: row.status || duplicateKeyVariant.status,
+                },
+              });
+
+              variantId = duplicateKeyVariant.id;
+              summary.updated += 1;
+            } else {
+              const variant = await tx.productVariant.create({
+                data: {
+                  productId,
+                  title: row.variantTitle || "Imported Variant",
+                  variantKey,
+                  sku: normalizedSku,
+                  status: row.status || "ACTIVE",
+                },
+              });
+
+              variantId = variant.id;
+
+              if (attributeValues.length > 0) {
+                await tx.productVariantAttributeValue.createMany({
+                  data: attributeValues.map((v: any) => ({
+                    variantId: variant.id,
+                    attributeId: v.attributeId,
+                    attributeValueId: v.attributeValueId,
+                  })),
+                });
+              }
+
+              variantBySku.set(normalizedSku.toLowerCase(), variant as any);
+              if (variantKey) variantByKey.set(variantKey, variant as any);
+
+              summary.created += 1;
+            }
+          }
+
+          const existingInventory = inventoryByVariantId.get(variantId);
+
+          if (existingInventory) {
+            await tx.inventory.update({
+              where: { id: existingInventory.id },
+              data: {
+                stock: row.stock ?? existingInventory.stock,
+                lowStockThreshold: row.lowStockThreshold ?? existingInventory.lowStockThreshold,
+              },
+            });
+          } else {
+            const newInv = await tx.inventory.create({
+              data: {
+                productId,
+                variantId,
+                countryId: null,
+                stock: row.stock ?? 0,
+                lowStockThreshold: row.lowStockThreshold ?? 10,
+                status: (row.stock ?? 0) > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+              },
+            });
+            inventoryByVariantId.set(variantId, newInv as any);
+          }
+
+          const existingPrice = priceByVariantId.get(variantId);
+
+          if (existingPrice) {
+            await tx.productPrice.update({
+              where: { id: existingPrice.id },
+              data: {
+                mrp: row.mrp ?? existingPrice.mrp,
+                sellingPrice:
+                  row.price ??
+                  row.sellingPrice ??
+                  existingPrice.sellingPrice,
+              },
+            });
+          } else {
+            const newPrice = await tx.productPrice.create({
+              data: {
+                productId,
+                variantId,
+                countryId: priceCountryId,
+                currencyId: priceCountry.currencyId || baseCurrency.id,
+                mrp: row.mrp ?? row.price ?? 0,
+                sellingPrice: row.price ?? row.sellingPrice ?? 0,
+                status: "ACTIVE",
+              },
+            });
+            priceByVariantId.set(variantId, newPrice as any);
+          }
+
+          for (const pc of productCountries) {
+            await tx.variantCountry.upsert({
+              where: {
+                variantId_countryId: {
+                  variantId,
+                  countryId: pc.countryId,
+                },
+              },
+              update: { enabled: true },
+              create: {
+                variantId,
+                countryId: pc.countryId,
+                enabled: true,
+              },
+            });
+          }
+        }
       },
-    },
-    update: { enabled: true },
-    create: {
-      variantId,
-      countryId: pc.countryId,
-      enabled: true,
-    },
-  });
-}
-    }
-  });
+      { maxWait: 20000, timeout: 60000 }
+    );
+  }
 
   return summary;
 }

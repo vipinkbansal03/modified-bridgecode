@@ -155,10 +155,20 @@ export function BulkVariantImportWizard({
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<"all" | "valid" | "invalid">("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
   const [editingCell, setEditingCell] = useState<{ row: number; field: string } | null>(null);
 
   // Step 3: Execute
   const [executing, setExecuting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    current: number;
+    total: number;
+    batch: number;
+    totalBatches: number;
+    created: number;
+    updated: number;
+  } | null>(null);
   const [executeResult, setExecuteResult] = useState<ExecuteResult | null>(null);
   const [executeError, setExecuteError] = useState("");
 
@@ -181,8 +191,11 @@ export function BulkVariantImportWizard({
         setRows([]);
         setSelectedIds(new Set());
         setFilter("all");
+        setCurrentPage(1);
+        setPageSize(100);
         setEditingCell(null);
         setExecuting(false);
+        setImportProgress(null);
         setExecuteResult(null);
         setExecuteError("");
       }, 300);
@@ -454,6 +467,12 @@ export function BulkVariantImportWizard({
     return rows.filter((r) => r.isValid && selectedIds.has(r.rowNumber)).length;
   }, [rows, selectedIds]);
 
+  /* ── Filter change handler (resets page) ── */
+  const handleFilterChange = useCallback((f: "all" | "valid" | "invalid") => {
+    setFilter(f);
+    setCurrentPage(1);
+  }, []);
+
   /* ── Execute Import ── */
   const executeImport = useCallback(async () => {
     const selectedRows = rows.filter(
@@ -465,16 +484,61 @@ export function BulkVariantImportWizard({
     setExecuteError("");
     setStep(2);
 
+    const BATCH_SIZE = 1000;
+    const totalBatches = Math.ceil(selectedRows.length / BATCH_SIZE);
+    let totalCreated = 0;
+    let totalUpdated = 0;
+
+    setImportProgress({
+      current: 0,
+      total: selectedRows.length,
+      batch: 1,
+      totalBatches,
+      created: 0,
+      updated: 0,
+    });
+
     try {
-      const res = await adminApi.post(
-        `/products/${productId}/variants/import-execute`,
-        { rows: selectedRows },
-        { timeout: 120000 }
-      );
-      setExecuteResult(res.data.data);
+      for (let b = 0; b < totalBatches; b++) {
+        const batchRows = selectedRows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+        setImportProgress({
+          current: b * BATCH_SIZE,
+          total: selectedRows.length,
+          batch: b + 1,
+          totalBatches,
+          created: totalCreated,
+          updated: totalUpdated,
+        });
+
+        const res = await adminApi.post(
+          `/products/${productId}/variants/import-execute`,
+          { rows: batchRows },
+          { timeout: 120000 }
+        );
+
+        const data = res.data?.data;
+        totalCreated += data?.created ?? 0;
+        totalUpdated += data?.updated ?? 0;
+
+        setImportProgress({
+          current: Math.min((b + 1) * BATCH_SIZE, selectedRows.length),
+          total: selectedRows.length,
+          batch: b + 1,
+          totalBatches,
+          created: totalCreated,
+          updated: totalUpdated,
+        });
+      }
+
+      setExecuteResult({ created: totalCreated, updated: totalUpdated });
     } catch (err) {
       setExecuteError(
-        getAdminErrorMessage(err, "Import failed. Please try again.")
+        getAdminErrorMessage(
+          err,
+          totalCreated > 0 || totalUpdated > 0
+            ? `Import stopped after ${totalCreated} created, ${totalUpdated} updated. Please check error and retry remaining.`
+            : "Import failed. Please try again."
+        )
       );
     } finally {
       setExecuting(false);
@@ -591,10 +655,14 @@ export function BulkVariantImportWizard({
                       filteredRows={filteredRows}
                       selectedIds={selectedIds}
                       filter={filter}
+                      currentPage={currentPage}
+                      pageSize={pageSize}
+                      onPageChange={setCurrentPage}
+                      onPageSizeChange={setPageSize}
                       editingCell={editingCell}
                       selectedValidCount={selectedValidCount}
                       productName={productName}
-                      onFilterChange={setFilter}
+                      onFilterChange={handleFilterChange}
                       onToggleRow={toggleRow}
                       onSelectAllValid={selectAllValid}
                       onClearSelection={clearSelection}
@@ -613,12 +681,13 @@ export function BulkVariantImportWizard({
                     key="step-execute"
                     initial={{ opacity: 0, x: 30 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 30 }}
+                    exit={{ opacity: 0, x: -30 }}
                     transition={{ duration: 0.2 }}
                     className="h-full flex flex-col"
                   >
                     <ExecuteStep
                       executing={executing}
+                      progress={importProgress}
                       result={executeResult}
                       error={executeError}
                       onClose={handleSuccessClose}
@@ -857,6 +926,10 @@ interface PreviewStepProps {
   filteredRows: PreviewRow[];
   selectedIds: Set<number>;
   filter: "all" | "valid" | "invalid";
+  currentPage: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
   editingCell: { row: number; field: string } | null;
   selectedValidCount: number;
   productName?: string;
@@ -878,6 +951,10 @@ function PreviewStep({
   filteredRows,
   selectedIds,
   filter,
+  currentPage,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
   editingCell,
   selectedValidCount,
   productName = "",
@@ -894,6 +971,15 @@ function PreviewStep({
 }: PreviewStepProps) {
   const validCount = rows.filter((r) => r.isValid).length;
   const invalidCount = rows.filter((r) => !r.isValid).length;
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(safeCurrentPage * pageSize, filteredRows.length);
+  const paginatedRows = useMemo(
+    () => filteredRows.slice(startIndex, endIndex),
+    [filteredRows, startIndex, endIndex]
+  );
 
   return (
     <>
@@ -1010,7 +1096,7 @@ function PreviewStep({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F3F4F6]">
-              {filteredRows.map((row) => (
+              {paginatedRows.map((row) => (
                 <tr
                   key={row.rowNumber}
                   className={cn(
@@ -1186,6 +1272,59 @@ function PreviewStep({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Toolbar */}
+        {filteredRows.length > 0 && (
+          <div className="shrink-0 flex flex-wrap items-center justify-between border-t border-[#E5E7EB] bg-[#F9FAFB] px-6 py-2.5 text-[12px] text-[#6B7280]">
+            <div className="flex items-center gap-3">
+              <span>
+                Showing <strong className="text-[#1A1A1A]">{startIndex + 1}</strong> to{" "}
+                <strong className="text-[#1A1A1A]">{endIndex}</strong> of{" "}
+                <strong className="text-[#1A1A1A]">{filteredRows.length.toLocaleString()}</strong> rows
+              </span>
+              <div className="flex items-center gap-1.5 pl-3 border-l border-[#E5E7EB]">
+                <span className="text-[11px]">Rows per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    onPageSizeChange(Number(e.target.value));
+                    onPageChange(1);
+                  }}
+                  className="rounded border border-[#D1D5DB] bg-white px-2 py-0.5 text-[11px] font-medium text-[#1A1A1A] outline-none cursor-pointer"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onPageChange(safeCurrentPage - 1)}
+                  disabled={safeCurrentPage <= 1}
+                  className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  Previous
+                </button>
+                <span className="text-[11px] font-medium text-[#374151]">
+                  Page {safeCurrentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onPageChange(safeCurrentPage + 1)}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Footer */}
@@ -1294,6 +1433,14 @@ function EditableCell({
 
 interface ExecuteStepProps {
   executing: boolean;
+  progress: {
+    current: number;
+    total: number;
+    batch: number;
+    totalBatches: number;
+    created: number;
+    updated: number;
+  } | null;
   result: ExecuteResult | null;
   error: string;
   onClose: () => void;
@@ -1302,11 +1449,16 @@ interface ExecuteStepProps {
 
 function ExecuteStep({
   executing,
+  progress,
   result,
   error,
   onClose,
   onRetry,
 }: ExecuteStepProps) {
+  const percent = progress && progress.total > 0
+    ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+    : 0;
+
   return (
     <div className="flex-1 flex items-center justify-center px-6 py-12">
       <AnimatePresence mode="wait">
@@ -1316,18 +1468,41 @@ function ExecuteStep({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex flex-col items-center gap-5"
+            className="flex flex-col items-center gap-5 w-full max-w-md"
           >
             <div className="relative">
               <div className="h-16 w-16 rounded-full border-4 border-[#F3F4F6] border-t-[#E31E24] animate-spin" />
             </div>
-            <div className="text-center">
-              <p className="text-[15px] font-bold text-[#1A1A1A]">
+            <div className="text-center w-full">
+              <p className="text-[16px] font-bold text-[#1A1A1A]">
                 Importing Variants...
               </p>
-              <p className="text-[12px] text-[#6B6B6B] mt-1">
-                Creating and updating variant records
-              </p>
+              {progress ? (
+                <div className="mt-4 w-full">
+                  <div className="flex items-center justify-between text-[12px] font-semibold text-[#4B5563] mb-1.5">
+                    <span>Batch {progress.batch} of {progress.totalBatches}</span>
+                    <span className="font-bold text-[#E31E24]">{percent}%</span>
+                  </div>
+                  <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#E31E24] to-[#B5151B] transition-all duration-300 rounded-full"
+                      style={{ width: `${Math.max(percent, 4)}%` }}
+                    />
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between text-[11.5px] text-[#6B7280]">
+                    <span>
+                      {progress.current.toLocaleString()} of {progress.total.toLocaleString()} rows processed
+                    </span>
+                    <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      +{progress.created} created / +{progress.updated} updated
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[12px] text-[#6B6B6B] mt-1">
+                  Creating and updating variant records
+                </p>
+              )}
             </div>
             {/* Pulsing dots */}
             <div className="flex items-center gap-1.5">

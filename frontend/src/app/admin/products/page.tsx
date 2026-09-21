@@ -115,7 +115,7 @@ const PRODUCT_COLUMNS_STORAGE_KEY = "admin-products-columns-v3";
 
 const productExpectedColumns = [
   { name: "title", required: true, hint: "Full title of the product" },
-  { name: "categorySlug", required: true, hint: "Category Name (e.g. Brackets) or Category Slug" },
+  { name: "categoryName", required: true, hint: "Category Name (e.g. Brackets) or Category Slug" },
   { name: "sku", hint: "Unique SKU identifier" },
   { name: "productCode", hint: "Unique internal product code" },
   { name: "imageUrl", hint: "Direct image URL or comma-separated image URLs" },
@@ -259,7 +259,7 @@ export default function AdminProductsPage() {
   const categoryOptions = useMemo(() => {
     return (categories as Array<{ id: string; name: string; slug: string }>).map((c) => ({
       label: c.name,
-      value: c.slug,
+      value: c.name,
     }));
   }, [categories]);
 
@@ -268,7 +268,7 @@ export default function AdminProductsPage() {
     { key: "sku", header: "SKU", minWidth: "140px" },
     { key: "productCode", header: "Product Code", minWidth: "140px" },
     {
-      key: "categorySlug",
+      key: "categoryName",
       header: "Category",
       required: true,
       type: "select",

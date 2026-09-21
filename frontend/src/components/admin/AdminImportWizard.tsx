@@ -449,10 +449,18 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
   const [selectedRowNumbers, setSelectedRowNumbers] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<"all" | "valid" | "invalid">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
   const [editingCell, setEditingCell] = useState<{ rowNumber: number; field: string } | null>(null);
 
   // Step 3: Execute state
   const [executing, setExecuting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    current: number;
+    total: number;
+    batch: number;
+    totalBatches: number;
+  } | null>(null);
   const [executeResult, setExecuteResult] = useState<{ created: number; updated: number } | null>(null);
   const [executeError, setExecuteError] = useState("");
 
@@ -475,8 +483,11 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
         setSelectedRowNumbers(new Set());
         setFilter("all");
         setSearchQuery("");
+        setCurrentPage(1);
+        setPageSize(100);
         setEditingCell(null);
         setExecuting(false);
+        setImportProgress(null);
         setExecuteResult(null);
         setExecuteError("");
       }, 300);
@@ -586,9 +597,11 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
           if (field === "name") nextRow.attributeName = value;
           if (field === "attributeName") nextRow.name = value;
           if (field === "role") nextRow.displayType = value;
-          if (field === "displayType") nextRow.role = value;
-          if (field === "categorySlug") nextRow.category = value;
-          if (field === "category") nextRow.categorySlug = value;
+          if (field === "categorySlug" || field === "category" || field === "categoryName") {
+            nextRow.category = value;
+            nextRow.categorySlug = value;
+            nextRow.categoryName = value;
+          }
           if (field === "values") nextRow.allowedValues = value;
           if (field === "allowedValues") nextRow.values = value;
           if (field === "parentCategory" || field === "parentSlug" || field === "parent") {
@@ -692,6 +705,16 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
     setSelectedRowNumbers(new Set(validRowNums));
   }, [rows]);
 
+  // Pagination calculations for Step 2
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(safeCurrentPage * pageSize, filteredRows.length);
+  const paginatedRows = useMemo(
+    () => filteredRows.slice(startIndex, endIndex),
+    [filteredRows, startIndex, endIndex]
+  );
+
   // Execute Import
   const executeImport = useCallback(async () => {
     const selectedRows = rows.filter((r) => selectedRowNumbers.has(r.rowNumber));
@@ -701,27 +724,64 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
     setExecuteError("");
     setStep(2);
 
+    const BATCH_SIZE = 1000;
+    const totalBatches = Math.ceil(selectedRows.length / BATCH_SIZE);
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let lastResultData: any = null;
+
+    setImportProgress({
+      current: 0,
+      total: selectedRows.length,
+      batch: 1,
+      totalBatches,
+    });
+
     try {
-      const payload = transformExecutePayload ? transformExecutePayload(selectedRows) : { rows: selectedRows };
+      for (let b = 0; b < totalBatches; b++) {
+        const batch = selectedRows.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+        setImportProgress({
+          current: b * BATCH_SIZE,
+          total: selectedRows.length,
+          batch: b + 1,
+          totalBatches,
+        });
 
-      const res = await adminApi.post(executeEndpoint, payload, { timeout: 120000 });
-      const resultData = res.data?.data;
+        const payload = transformExecutePayload ? transformExecutePayload(batch) : { rows: batch };
+        const res = await adminApi.post(executeEndpoint, payload, { timeout: 120000 });
+        const resultData = res.data?.data;
+        lastResultData = resultData;
 
-      const created =
-        resultData?.created ??
-        resultData?.createdAttributes ??
-        resultData?.createdCount ??
-        selectedRows.length;
-      const updated =
-        resultData?.updated ??
-        resultData?.updatedAttributes ??
-        resultData?.updatedCount ??
-        0;
+        totalCreated +=
+          resultData?.created ??
+          resultData?.createdAttributes ??
+          resultData?.createdCount ??
+          batch.length;
+        totalUpdated +=
+          resultData?.updated ??
+          resultData?.updatedAttributes ??
+          resultData?.updatedCount ??
+          0;
 
-      setExecuteResult({ created, updated });
-      if (onSuccess) onSuccess(resultData);
+        setImportProgress({
+          current: Math.min((b + 1) * BATCH_SIZE, selectedRows.length),
+          total: selectedRows.length,
+          batch: b + 1,
+          totalBatches,
+        });
+      }
+
+      setExecuteResult({ created: totalCreated, updated: totalUpdated });
+      if (onSuccess) onSuccess(lastResultData);
     } catch (err) {
-      setExecuteError(getAdminErrorMessage(err, "Failed to execute import. Please try again."));
+      setExecuteError(
+        getAdminErrorMessage(
+          err,
+          totalCreated > 0 || totalUpdated > 0
+            ? `Import stopped after ${totalCreated} created, ${totalUpdated} updated. Please check error and retry remaining.`
+            : "Failed to execute import. Please try again."
+        )
+      );
     } finally {
       setExecuting(false);
     }
@@ -976,7 +1036,10 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
                       <input
                         type="text"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setCurrentPage(1);
+                        }}
                         placeholder="Search rows..."
                         className="w-full rounded-md border border-[#D1D5DB] pl-8 pr-3 py-1.5 text-[12px] text-[#1A1A1A] placeholder-[#9CA3AF] focus:border-[#1A1A1A] focus:outline-none"
                       />
@@ -987,7 +1050,10 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
                         <button
                           key={f}
                           type="button"
-                          onClick={() => setFilter(f)}
+                          onClick={() => {
+                            setFilter(f);
+                            setCurrentPage(1);
+                          }}
                           className={cn(
                             "px-3 py-1 text-[11.5px] font-semibold capitalize transition-colors",
                             filter === f ? "bg-[#1A1A1A] text-white" : "bg-white text-[#6B7280] hover:bg-[#F3F4F6]"
@@ -1076,7 +1142,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
                           </td>
                         </tr>
                       ) : (
-                        filteredRows.map((row) => {
+                        paginatedRows.map((row) => {
                           const isSelected = selectedRowNumbers.has(row.rowNumber);
                           return (
                             <tr
@@ -1317,6 +1383,59 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
                   </table>
                 </div>
 
+                {/* Pagination Toolbar */}
+                {filteredRows.length > 0 && (
+                  <div className="shrink-0 flex flex-wrap items-center justify-between border-t border-[#E5E7EB] bg-[#F9FAFB] px-6 py-2.5 text-[12px] text-[#6B7280]">
+                    <div className="flex items-center gap-3">
+                      <span>
+                        Showing <strong className="text-[#1A1A1A]">{startIndex + 1}</strong> to{" "}
+                        <strong className="text-[#1A1A1A]">{endIndex}</strong> of{" "}
+                        <strong className="text-[#1A1A1A]">{filteredRows.length.toLocaleString()}</strong> rows
+                      </span>
+                      <div className="flex items-center gap-1.5 pl-3 border-l border-[#E5E7EB]">
+                        <span className="text-[11px]">Rows per page:</span>
+                        <select
+                          value={pageSize}
+                          onChange={(e) => {
+                            setPageSize(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="rounded border border-[#D1D5DB] bg-white px-2 py-0.5 text-[11px] font-medium text-[#1A1A1A] outline-none cursor-pointer"
+                        >
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                          <option value={200}>200</option>
+                          <option value={500}>500</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={safeCurrentPage <= 1}
+                          className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-[11px] font-medium text-[#374151]">
+                          Page {safeCurrentPage} of {totalPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={safeCurrentPage >= totalPages}
+                          className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Footer actions */}
                 <div className="shrink-0 px-6 py-3.5 bg-white border-t border-[#E5E7EB] flex items-center justify-between">
                   <button
@@ -1363,15 +1482,44 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
             {step === 2 && (
               <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white">
                 {executing && (
-                  <div className="flex flex-col items-center gap-4">
+                  <div className="flex flex-col items-center gap-4 w-full max-w-md">
                     <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-[#E31E24] shadow-xs animate-pulse">
                       <Loader2 size={32} className="animate-spin" />
                     </div>
-                    <div className="text-center">
+                    <div className="text-center w-full">
                       <h3 className="text-[17px] font-bold text-[#1A1A1A]">Importing {entityName}...</h3>
-                      <p className="mt-1 text-[13px] text-[#6B7280]">
-                        Please wait while your records are processed and validated.
-                      </p>
+                      {importProgress ? (
+                        <div className="mt-4 w-full">
+                          <div className="flex items-center justify-between text-[12px] font-semibold text-[#4B5563] mb-1.5">
+                            <span>Batch {importProgress.batch} of {importProgress.totalBatches}</span>
+                            <span className="font-bold text-[#E31E24]">
+                              {importProgress.total > 0
+                                ? Math.round((importProgress.current / importProgress.total) * 100)
+                                : 0}
+                              %
+                            </span>
+                          </div>
+                          <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#E31E24] to-[#B5151B] transition-all duration-300 rounded-full"
+                              style={{
+                                width: `${
+                                  importProgress.total > 0
+                                    ? Math.min(100, Math.round((importProgress.current / importProgress.total) * 100))
+                                    : 5
+                                }%`,
+                              }}
+                            />
+                          </div>
+                          <p className="mt-2 text-[11.5px] text-[#6B7280]">
+                            {importProgress.current.toLocaleString()} of {importProgress.total.toLocaleString()} rows processed
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-[13px] text-[#6B7280]">
+                          Please wait while your records are processed and validated.
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
