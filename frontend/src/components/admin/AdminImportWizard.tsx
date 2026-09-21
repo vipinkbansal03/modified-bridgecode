@@ -20,9 +20,15 @@ import {
   Search,
   Pencil,
   ChevronDown,
+  Layers,
+  Package,
+  Tag,
+  Plus,
 } from "lucide-react";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
+import { AdminMultiSelect, AdminSelect, AdminInput } from "@/components/admin/AdminComponents";
+import { useAdminTiers, useAdminCountries } from "@/hooks/admin/useAdminHooks";
 
 /* ─────────────────── Types ─────────────────── */
 
@@ -413,6 +419,89 @@ function WizardCellMultiSelect({
   );
 }
 
+interface CountryDropdownProps {
+  value: string;
+  onChange: (val: string) => void;
+  countries: any[];
+  className?: string;
+}
+
+function CountryDropdown({ value, onChange, countries, className }: CountryDropdownProps) {
+  const options = useMemo(() => {
+    return (countries || []).map((c: any) => ({
+      value: String(c.code || c.id).toUpperCase(),
+      label: `${c.name} (${c.code || c.id})`,
+    }));
+  }, [countries]);
+
+  const allCodes = useMemo(() => options.map((o) => o.value), [options]);
+
+  const isAll = useMemo(() => {
+    if (!value) return true;
+    const trimmed = value.trim().toUpperCase();
+    return trimmed === "ALL" || trimmed === "*" || trimmed === "GLOBAL";
+  }, [value]);
+
+  const currentValues = useMemo(() => {
+    if (isAll) {
+      return allCodes;
+    }
+    const tokens = value.split(/[,;|]/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+    return allCodes.filter((code) => {
+      if (tokens.includes(code)) return true;
+      const countryObj = (countries || []).find(
+        (c: any) => String(c.code || c.id).toUpperCase() === code
+      );
+      if (countryObj?.name && tokens.includes(countryObj.name.toUpperCase())) return true;
+      return false;
+    });
+  }, [value, isAll, allCodes, countries]);
+
+  const displayLabel = useMemo(() => {
+    if (isAll || (allCodes.length > 0 && currentValues.length === allCodes.length)) {
+      return "ALL (Global)";
+    }
+    if (currentValues.length === 0) {
+      return "None";
+    }
+    if (currentValues.length <= 2) {
+      return currentValues.join(", ");
+    }
+    return `${currentValues[0]}, ${currentValues[1]} +${currentValues.length - 2}`;
+  }, [isAll, allCodes, currentValues]);
+
+  const handleChange = useCallback(
+    (nextValues: string[]) => {
+      if (nextValues.length === 0) {
+        onChange("");
+      } else if (allCodes.length > 0 && nextValues.length === allCodes.length) {
+        onChange("ALL");
+      } else {
+        onChange(nextValues.join(", "));
+      }
+    },
+    [allCodes, onChange]
+  );
+
+  return (
+    <div className="flex items-center justify-center">
+      <AdminMultiSelect
+        options={options}
+        value={currentValues}
+        onChange={handleChange}
+        displayValue={displayLabel}
+        placeholder="Select..."
+        selectAllLabel="Select All Countries"
+        containerClassName="w-full min-w-[120px] max-w-[165px] space-y-0"
+        className={cn(
+          "h-7 py-0 px-2 text-[11px] font-medium border-[#D1D5DB] rounded bg-white hover:border-[#E31E24] shadow-none gap-1",
+          className
+        )}
+      />
+    </div>
+  );
+}
+
 /* ─────────────────── Main AdminImportWizard Component ─────────────────── */
 
 export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
@@ -452,6 +541,32 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [editingCell, setEditingCell] = useState<{ rowNumber: number; field: string } | null>(null);
+  const [extraPricingData, setExtraPricingData] = useState<{ tierPricing?: any[]; moqPricing?: any[] }>({});
+  const [activeSheetTab, setActiveSheetTab] = useState<"products" | "tier" | "moq">("products");
+  const [tierSearch, setTierSearch] = useState("");
+  const [moqSearch, setMoqSearch] = useState("");
+
+  const { data: tiersData = [] } = useAdminTiers();
+  const { data: countriesData = [] } = useAdminCountries();
+
+  const [showAddTierForm, setShowAddTierForm] = useState(false);
+  const [tierFormError, setTierFormError] = useState("");
+  const [tierProductSkuDraft, setTierProductSkuDraft] = useState("");
+  const [tierVariantSkuDraft, setTierVariantSkuDraft] = useState("ALL");
+  const [tierIdDraft, setTierIdDraft] = useState("");
+  const [tierCountriesDraft, setTierCountriesDraft] = useState<string[]>(["ALL"]);
+  const [tierModeDraft, setTierModeDraft] = useState<"PERCENTAGE" | "FIXED_PRICE">("PERCENTAGE");
+  const [tierValueDraft, setTierValueDraft] = useState("");
+
+  const [showAddMoqForm, setShowAddMoqForm] = useState(false);
+  const [moqFormError, setMoqFormError] = useState("");
+  const [moqProductSkuDraft, setMoqProductSkuDraft] = useState("");
+  const [moqVariantSkuDraft, setMoqVariantSkuDraft] = useState("ALL");
+  const [moqCountriesDraft, setMoqCountriesDraft] = useState<string[]>(["ALL"]);
+  const [moqMinQtyDraft, setMoqMinQtyDraft] = useState("10");
+  const [moqMaxQtyDraft, setMoqMaxQtyDraft] = useState("");
+  const [moqModeDraft, setMoqModeDraft] = useState<"PERCENTAGE" | "FIXED_PRICE">("PERCENTAGE");
+  const [moqValueDraft, setMoqValueDraft] = useState("");
 
   // Step 3: Execute state
   const [executing, setExecuting] = useState(false);
@@ -486,6 +601,9 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
         setCurrentPage(1);
         setPageSize(100);
         setEditingCell(null);
+        setActiveSheetTab("products");
+        setTierSearch("");
+        setMoqSearch("");
         setExecuting(false);
         setImportProgress(null);
         setExecuteResult(null);
@@ -571,6 +689,15 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
           invalidRows: rawData?.invalidRows ?? normalizedRows.filter((r) => !r.isValid).length,
           rows: normalizedRows,
         };
+
+        if (rawData?.tierPricing || rawData?.moqPricing) {
+          setExtraPricingData({
+            tierPricing: Array.isArray(rawData.tierPricing) ? rawData.tierPricing : [],
+            moqPricing: Array.isArray(rawData.moqPricing) ? rawData.moqPricing : [],
+          });
+        } else {
+          setExtraPricingData({});
+        }
       }
 
       setTotalRowsCount(parsedResult.totalRows);
@@ -674,6 +801,182 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
     });
   }, [rows, filter, searchQuery]);
 
+  const filteredTierRows = useMemo(() => {
+    const list = extraPricingData.tierPricing || [];
+    if (!tierSearch.trim()) return list;
+    const q = tierSearch.toLowerCase().trim();
+    return list.filter((r) =>
+      String(r.productSku || "").toLowerCase().includes(q) ||
+      String(r.variantSku || "").toLowerCase().includes(q) ||
+      String(r.tierName || "").toLowerCase().includes(q) ||
+      String(r.country || "").toLowerCase().includes(q)
+    );
+  }, [extraPricingData.tierPricing, tierSearch]);
+
+  const filteredMoqRows = useMemo(() => {
+    const list = extraPricingData.moqPricing || [];
+    if (!moqSearch.trim()) return list;
+    const q = moqSearch.toLowerCase().trim();
+    return list.filter((r) =>
+      String(r.productSku || "").toLowerCase().includes(q) ||
+      String(r.variantSku || "").toLowerCase().includes(q) ||
+      String(r.country || "").toLowerCase().includes(q)
+    );
+  }, [extraPricingData.moqPricing, moqSearch]);
+
+  // Tier & MOQ Helpers for direct edit and add
+  const tierSelectOptions = useMemo(() => {
+    return (tiersData || []).map((t: any) => ({
+      value: t.name,
+      label: t.name,
+    }));
+  }, [tiersData]);
+
+  const countryMultiSelectOptions = useMemo(() => {
+    return (countriesData || []).map((c: any) => ({
+      value: String(c.code || c.id).toUpperCase(),
+      label: `${c.name} (${c.code || c.id})`,
+    }));
+  }, [countriesData]);
+
+  const uniqueProductSkus = useMemo(() => {
+    const list: Array<{ sku: string; title: string }> = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const sku = String((r as any).sku || (r as any).productSku || "").trim();
+      const title = String((r as any).title || (r as any).productTitle || (r as any).name || "").trim();
+      if (sku && !seen.has(sku)) {
+        seen.add(sku);
+        list.push({ sku, title: title || sku });
+      }
+    }
+    return list;
+  }, [rows]);
+
+  const handleSaveTierRule = useCallback(() => {
+    const pSku = tierProductSkuDraft.trim() || uniqueProductSkus[0]?.sku || "";
+    if (!pSku) {
+      setTierFormError("Please select or enter a Product SKU.");
+      return;
+    }
+    const matchedTier = (tiersData || []).find((t: any) => t.id === tierIdDraft || t.name === tierIdDraft);
+    const resolvedTierName = matchedTier?.name || tierIdDraft || tierSelectOptions[0]?.value || "";
+    if (!resolvedTierName) {
+      setTierFormError("Please select a customer tier.");
+      return;
+    }
+    const val = parseFloat(tierValueDraft);
+    if (isNaN(val) || val < 0) {
+      setTierFormError("Please enter a valid non-negative discount or fixed price.");
+      return;
+    }
+    const countryStr = tierCountriesDraft.length === 0 || tierCountriesDraft.includes("ALL")
+      ? "ALL"
+      : tierCountriesDraft.join(", ");
+
+    const newRule = {
+      productSku: pSku,
+      variantSku: tierVariantSkuDraft.trim() || "ALL",
+      tierName: resolvedTierName,
+      tierId: matchedTier?.id || "",
+      country: countryStr,
+      mode: tierModeDraft,
+      value: val,
+      isValid: true,
+      errors: [],
+    };
+
+    setExtraPricingData((prev) => ({
+      ...prev,
+      tierPricing: [...(prev.tierPricing || []), newRule],
+    }));
+
+    setShowAddTierForm(false);
+    setTierFormError("");
+    setTierValueDraft("");
+  }, [tierProductSkuDraft, uniqueProductSkus, tiersData, tierIdDraft, tierSelectOptions, tierValueDraft, tierCountriesDraft, tierVariantSkuDraft, tierModeDraft]);
+
+  const handleUpdateTierRule = useCallback((index: number, field: string, value: any) => {
+    setExtraPricingData((prev) => {
+      const list = [...(prev.tierPricing || [])];
+      if (!list[index]) return prev;
+      list[index] = { ...list[index], [field]: value };
+      return { ...prev, tierPricing: list };
+    });
+  }, []);
+
+  const handleDeleteTierRule = useCallback((index: number) => {
+    setExtraPricingData((prev) => {
+      const list = [...(prev.tierPricing || [])];
+      list.splice(index, 1);
+      return { ...prev, tierPricing: list };
+    });
+  }, []);
+
+  const handleSaveMoqRule = useCallback(() => {
+    const pSku = moqProductSkuDraft.trim() || uniqueProductSkus[0]?.sku || "";
+    if (!pSku) {
+      setMoqFormError("Please select or enter a Product SKU.");
+      return;
+    }
+    const minQ = parseInt(moqMinQtyDraft || "1", 10);
+    if (isNaN(minQ) || minQ < 1) {
+      setMoqFormError("Min Qty must be at least 1.");
+      return;
+    }
+    const maxQ = moqMaxQtyDraft ? parseInt(moqMaxQtyDraft, 10) : null;
+    if (maxQ !== null && (isNaN(maxQ) || maxQ < minQ)) {
+      setMoqFormError("Max Qty must be greater than or equal to Min Qty.");
+      return;
+    }
+    const val = parseFloat(moqValueDraft);
+    if (isNaN(val) || val < 0) {
+      setMoqFormError("Please enter a valid non-negative discount or fixed price.");
+      return;
+    }
+    const countryStr = moqCountriesDraft.length === 0 || moqCountriesDraft.includes("ALL")
+      ? "ALL"
+      : moqCountriesDraft.join(", ");
+
+    const newRule = {
+      productSku: pSku,
+      variantSku: moqVariantSkuDraft.trim() || "ALL",
+      country: countryStr,
+      minQuantity: minQ,
+      maxQuantity: maxQ,
+      mode: moqModeDraft,
+      value: val,
+      isValid: true,
+      errors: [],
+    };
+
+    setExtraPricingData((prev) => ({
+      ...prev,
+      moqPricing: [...(prev.moqPricing || []), newRule],
+    }));
+
+    setShowAddMoqForm(false);
+    setMoqFormError("");
+    setMoqValueDraft("");
+  }, [moqProductSkuDraft, uniqueProductSkus, moqMinQtyDraft, moqMaxQtyDraft, moqValueDraft, moqCountriesDraft, moqVariantSkuDraft, moqModeDraft]);
+
+  const handleUpdateMoqRule = useCallback((index: number, field: string, value: any) => {
+    setExtraPricingData((prev) => {
+      const list = [...(prev.moqPricing || [])];
+      if (!list[index]) return prev;
+      list[index] = { ...list[index], [field]: value };
+      return { ...prev, moqPricing: list };
+    });
+  }, []);
+
+  const handleDeleteMoqRule = useCallback((index: number) => {
+    setExtraPricingData((prev) => {
+      const list = [...(prev.moqPricing || [])];
+      list.splice(index, 1);
+      return { ...prev, moqPricing: list };
+    });
+  }, []);
+
   // Selection helpers
   const toggleRowSelect = useCallback((rowNumber: number) => {
     setSelectedRowNumbers((prev) => {
@@ -747,7 +1050,13 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
           totalBatches,
         });
 
-        const payload = transformExecutePayload ? transformExecutePayload(batch) : { rows: batch };
+        const payload = transformExecutePayload
+          ? transformExecutePayload(batch)
+          : {
+              rows: batch,
+              tierPricing: b === 0 && (extraPricingData.tierPricing?.length ?? 0) > 0 ? extraPricingData.tierPricing : undefined,
+              moqPricing: b === 0 && (extraPricingData.moqPricing?.length ?? 0) > 0 ? extraPricingData.moqPricing : undefined,
+            };
         const res = await adminApi.post(executeEndpoint, payload, { timeout: 120000 });
         const resultData = res.data?.data;
         lastResultData = resultData;
@@ -785,7 +1094,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
     } finally {
       setExecuting(false);
     }
-  }, [rows, selectedRowNumbers, transformExecutePayload, executeEndpoint, onSuccess]);
+  }, [rows, selectedRowNumbers, transformExecutePayload, executeEndpoint, onSuccess, extraPricingData]);
 
   if (!mounted || !open) return null;
 
@@ -1013,87 +1322,202 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
             {/* STEP 1: PREVIEW & DIRECT INLINE EDITING */}
             {step === 1 && (
               <div className="flex-1 overflow-hidden flex flex-col">
-                {/* Control bar */}
-                <div className="shrink-0 px-6 py-3 bg-white border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-3">
-                  {/* Stats pills */}
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[12px] font-semibold text-[#4B5563]">
-                      {totalRowsCount} Total
-                    </span>
-                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[12px] font-semibold text-emerald-700">
-                      {validCount} Valid
-                    </span>
-                    <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[12px] font-semibold text-red-600">
-                      {invalidCount} Invalid
-                    </span>
+                {/* ── Subheader Tabs Navigation ── */}
+                <div className="shrink-0 px-6 bg-white border-b border-[#E5E7EB] flex items-center justify-between">
+                  <div className="flex items-center gap-6">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSheetTab("products")}
+                      className={cn(
+                        "flex items-center gap-2 border-b-2 py-3 px-1 text-[13px] font-semibold transition-all cursor-pointer",
+                        activeSheetTab === "products"
+                          ? "border-[#E31E24] text-[#E31E24]"
+                          : "border-transparent text-[#6B7280] hover:text-[#1A1A1A] hover:border-gray-300"
+                      )}
+                    >
+                      <span>Products Matrix</span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                          activeSheetTab === "products"
+                            ? "bg-red-50 text-[#E31E24]"
+                            : "bg-[#E5E7EB] text-[#4B5563]"
+                        )}
+                      >
+                        {totalRowsCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveSheetTab("tier")}
+                      className={cn(
+                        "flex items-center gap-2 border-b-2 py-3 px-1 text-[13px] font-semibold transition-all cursor-pointer",
+                        activeSheetTab === "tier"
+                          ? "border-[#E31E24] text-[#E31E24]"
+                          : "border-transparent text-[#6B7280] hover:text-[#1A1A1A] hover:border-gray-300"
+                      )}
+                    >
+                      <span>Tier Overrides</span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                          (extraPricingData.tierPricing?.length ?? 0) > 0
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-[#E5E7EB] text-[#6B7280]"
+                        )}
+                      >
+                        {extraPricingData.tierPricing?.length ?? 0}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveSheetTab("moq")}
+                      className={cn(
+                        "flex items-center gap-2 border-b-2 py-3 px-1 text-[13px] font-semibold transition-all cursor-pointer",
+                        activeSheetTab === "moq"
+                          ? "border-[#E31E24] text-[#E31E24]"
+                          : "border-transparent text-[#6B7280] hover:text-[#1A1A1A] hover:border-gray-300"
+                      )}
+                    >
+                      <span>MOQ Overrides</span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                          (extraPricingData.moqPricing?.length ?? 0) > 0
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-[#E5E7EB] text-[#6B7280]"
+                        )}
+                      >
+                        {extraPricingData.moqPricing?.length ?? 0}
+                      </span>
+                    </button>
                   </div>
 
-                  {/* Filter tabs */}
-                  <div className="flex items-center gap-3">
-                    {/* Search */}
-                    <div className="relative w-48 sm:w-60">
-                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value);
-                          setCurrentPage(1);
-                        }}
-                        placeholder="Search rows..."
-                        className="w-full rounded-md border border-[#D1D5DB] pl-8 pr-3 py-1.5 text-[12px] text-[#1A1A1A] placeholder-[#9CA3AF] focus:border-[#1A1A1A] focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="flex rounded-lg border border-[#D1D5DB] overflow-hidden">
-                      {(["all", "valid", "invalid"] as const).map((f) => (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => {
-                            setFilter(f);
-                            setCurrentPage(1);
-                          }}
-                          className={cn(
-                            "px-3 py-1 text-[11.5px] font-semibold capitalize transition-colors",
-                            filter === f ? "bg-[#1A1A1A] text-white" : "bg-white text-[#6B7280] hover:bg-[#F3F4F6]"
-                          )}
-                        >
-                          {f}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Quick selection actions */}
-                    <div className="flex items-center gap-2 border-l border-[#E5E7EB] pl-3">
-                      <button
-                        type="button"
-                        onClick={selectAllValid}
-                        className="text-[11.5px] font-semibold text-[#E31E24] hover:underline"
-                      >
-                        Select All Valid
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedRowNumbers(new Set())}
-                        className="text-[11.5px] font-semibold text-[#6B7280] hover:underline"
-                      >
-                        Clear
-                      </button>
-                    </div>
+                  <div className="hidden sm:flex items-center gap-3 text-[12px] text-[#6B7280]">
+                    <span className="font-medium">
+                      Catalog: <strong className="text-[#1A1A1A]">{title}</strong>
+                    </span>
                   </div>
                 </div>
 
-                {/* Inline Editing Tip */}
-                <div className="px-6 py-1.5 bg-blue-50/60 border-b border-blue-100 flex items-center justify-between text-[11.5px] text-blue-800">
-                  <span className="flex items-center gap-1.5">
-                    <Pencil size={12} className="text-blue-600" />
-                    <strong>Interactive Editing:</strong> Click or edit any cell below to directly change values and fix errors before importing.
-                  </span>
-                  <span>
-                    Selected: <strong>{selectedRowNumbers.size}</strong> rows ({selectedValidCount} valid)
-                  </span>
-                </div>
+                {/* PRODUCTS TAB CONTENT */}
+                {activeSheetTab === "products" && (
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                    {/* Control bar */}
+                    <div className="shrink-0 px-6 py-3 bg-white border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-3">
+                      {/* Stats pills */}
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[12px] font-semibold text-[#4B5563]">
+                          {totalRowsCount} Total
+                        </span>
+                        <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[12px] font-semibold text-emerald-700">
+                          {validCount} Valid
+                        </span>
+                        <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[12px] font-semibold text-red-600">
+                          {invalidCount} Invalid
+                        </span>
+                      </div>
+
+                      {/* Filter tabs */}
+                      <div className="flex items-center gap-3">
+                        {/* Search */}
+                        <div className="relative w-48 sm:w-60">
+                          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => {
+                              setSearchQuery(e.target.value);
+                              setCurrentPage(1);
+                            }}
+                            placeholder="Search rows..."
+                            className="w-full rounded-md border border-[#D1D5DB] pl-8 pr-3 py-1.5 text-[12px] text-[#1A1A1A] placeholder-[#9CA3AF] focus:border-[#1A1A1A] focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="flex rounded-lg border border-[#D1D5DB] overflow-hidden">
+                          {(["all", "valid", "invalid"] as const).map((f) => (
+                            <button
+                              key={f}
+                              type="button"
+                              onClick={() => {
+                                setFilter(f);
+                                setCurrentPage(1);
+                              }}
+                              className={cn(
+                                "px-3 py-1 text-[11.5px] font-semibold capitalize transition-colors",
+                                filter === f ? "bg-[#1A1A1A] text-white" : "bg-white text-[#6B7280] hover:bg-[#F3F4F6]"
+                              )}
+                            >
+                              {f}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Quick selection actions */}
+                        <div className="flex items-center gap-2 border-l border-[#E5E7EB] pl-3">
+                          <button
+                            type="button"
+                            onClick={selectAllValid}
+                            className="text-[11.5px] font-semibold text-[#E31E24] hover:underline"
+                          >
+                            Select All Valid
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRowNumbers(new Set())}
+                            className="text-[11.5px] font-semibold text-[#6B7280] hover:underline"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Inline Editing Tip */}
+                    <div className="px-6 py-1.5 bg-blue-50/60 border-b border-blue-100 flex items-center justify-between text-[11.5px] text-blue-800">
+                      <span className="flex items-center gap-1.5">
+                        <Pencil size={12} className="text-blue-600" />
+                        <strong>Interactive Editing:</strong> Click or edit any cell below to directly change values and fix errors before importing.
+                      </span>
+                      <span>
+                        Selected: <strong>{selectedRowNumbers.size}</strong> rows ({selectedValidCount} valid)
+                      </span>
+                    </div>
+
+                    {/* Multi-Sheet Pricing Detected Banner */}
+                    {((extraPricingData.tierPricing?.length ?? 0) > 0 || (extraPricingData.moqPricing?.length ?? 0) > 0) && (
+                      <div className="px-6 py-2 bg-purple-50/75 border-b border-purple-100 flex items-center justify-between text-[11.5px] text-purple-900">
+                        <span className="flex items-center gap-2">
+                          <Layers size={13} className="text-purple-600 shrink-0" />
+                          <span>
+                            <strong>Multi-Sheet Pricing Rules Detected:</strong>{" "}
+                            {extraPricingData.tierPricing?.length ? (
+                              <button
+                                type="button"
+                                onClick={() => setActiveSheetTab("tier")}
+                                className="font-semibold text-purple-800 underline hover:text-purple-950 cursor-pointer"
+                              >
+                                {extraPricingData.tierPricing.length} Tier Pricing rule(s) (Sheet 2)
+                              </button>
+                            ) : null}
+                            {extraPricingData.tierPricing?.length && extraPricingData.moqPricing?.length ? " and " : ""}
+                            {extraPricingData.moqPricing?.length ? (
+                              <button
+                                type="button"
+                                onClick={() => setActiveSheetTab("moq")}
+                                className="font-semibold text-purple-800 underline hover:text-purple-950 cursor-pointer"
+                              >
+                                {extraPricingData.moqPricing.length} MOQ Pricing rule(s) (Sheet 3)
+                              </button>
+                            ) : null}{" "}
+                            will be automatically imported with these products. Click tabs above to preview them.
+                          </span>
+                        </span>
+                      </div>
+                    )}
 
                 {/* Spreadsheet Table */}
                 <div className="flex-1 overflow-auto bg-white">
@@ -1435,23 +1859,623 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
                     )}
                   </div>
                 )}
+                  </div>
+                )}
+
+                {/* ── Tab 2: Tier Overrides ── */}
+                {activeSheetTab === "tier" && (
+                  <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+                    {/* Header / Info bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+                      <div>
+                        <h4 className="text-[13.5px] font-bold text-[#1A1A1A]">
+                          Tier-Based Pricing Overrides (Sheet: Tier_Pricing)
+                        </h4>
+                        <p className="text-[12px] text-[#6B7280] mt-0.5">
+                          Optional: Set custom pricing or discount percentages for customer tiers (Gold, Silver, etc.) and countries.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddTierForm(!showAddTierForm);
+                          setTierFormError("");
+                        }}
+                        className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black transition-colors cursor-pointer"
+                      >
+                        <Plus size={14} />
+                        {showAddTierForm ? "Hide Form" : "Add Tier Rule Directly"}
+                      </button>
+                    </div>
+
+                    {/* Inline Direct Rule Form */}
+                    {showAddTierForm && (
+                      <div className="rounded-lg border-2 border-red-100 bg-white p-4 shadow-sm space-y-3">
+                        <div className="text-[13px] font-bold text-[#1A1A1A]">
+                          Add New Tier Override Rule
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">
+                              Product SKU <span className="text-red-500">*</span>
+                            </label>
+                            {uniqueProductSkus.length > 0 ? (
+                              <select
+                                value={tierProductSkuDraft}
+                                onChange={(e) => setTierProductSkuDraft(e.target.value)}
+                                className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                              >
+                                <option value="">Select Product SKU...</option>
+                                {uniqueProductSkus.map((u) => (
+                                  <option key={u.sku} value={u.sku}>
+                                    {u.sku} {u.title ? `(${u.title})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder="e.g. PRD-MB-001"
+                                value={tierProductSkuDraft}
+                                onChange={(e) => setTierProductSkuDraft(e.target.value)}
+                                className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                              />
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">
+                              Variant SKU
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="ALL or specific SKU(s)"
+                              value={tierVariantSkuDraft}
+                              onChange={(e) => setTierVariantSkuDraft(e.target.value)}
+                              className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <AdminSelect
+                              label="Customer Tier"
+                              value={tierIdDraft}
+                              onChange={(e) => setTierIdDraft(e.target.value)}
+                              options={tierSelectOptions}
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <AdminMultiSelect
+                              label="Country"
+                              options={countryMultiSelectOptions}
+                              value={tierCountriesDraft}
+                              onChange={setTierCountriesDraft}
+                              placeholder="Select countries (or ALL)..."
+                              selectAllLabel="Select All Countries"
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <AdminSelect
+                              label="Mode"
+                              value={tierModeDraft}
+                              onChange={(e) => setTierModeDraft(e.target.value as any)}
+                              options={[
+                                { value: "PERCENTAGE", label: "% Discount" },
+                                { value: "FIXED_PRICE", label: "Fixed Price" },
+                              ]}
+                            />
+                          </div>
+
+                          <div>
+                            <AdminInput
+                              label={tierModeDraft === "PERCENTAGE" ? "Discount %" : "Fixed Price ($)"}
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              placeholder="e.g. 15"
+                              value={tierValueDraft}
+                              onChange={(e) => setTierValueDraft(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        {tierFormError && (
+                          <p className="text-[11.5px] text-red-500 font-medium">
+                            ⚠️ {tierFormError}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddTierForm(false);
+                              setTierFormError("");
+                            }}
+                            className="rounded-md border border-[#E5E7EB] px-3 py-1.5 text-[12px] font-medium text-[#6B7280] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveTierRule}
+                            className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer"
+                          >
+                            Save Rule
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Table or Empty State */}
+                    {(extraPricingData.tierPricing?.length ?? 0) > 0 ? (
+                      <div className="rounded-lg border border-[#E5E7EB] overflow-hidden bg-white">
+                        <table className="w-full text-[12px]">
+                          <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                            <tr>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-12">#</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[140px]">Product SKU</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[140px]">Variant SKU</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[120px]">Tier</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[135px]">Country</th>
+                              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Mode</th>
+                              <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Discount / Price</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[150px]">Status</th>
+                              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-16">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#F3F4F6]">
+                            {(extraPricingData.tierPricing || []).map((rule: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-[#F9FAFB] transition-colors">
+                                <td className="px-3 py-2 text-[#9CA3AF] font-mono">{idx + 1}</td>
+                                <td className="px-3 py-2">
+                                  {uniqueProductSkus.length > 0 ? (
+                                    <select
+                                      value={rule.productSku || ""}
+                                      onChange={(e) => handleUpdateTierRule(idx, "productSku", e.target.value)}
+                                      className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24] cursor-pointer max-w-[160px]"
+                                    >
+                                      <option value="">Select Product...</option>
+                                      {uniqueProductSkus.map((u) => (
+                                        <option key={u.sku} value={u.sku}>
+                                          {u.sku}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={rule.productSku || ""}
+                                      onChange={(e) => handleUpdateTierRule(idx, "productSku", e.target.value)}
+                                      className="w-28 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                    />
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    value={rule.variantSku || "ALL"}
+                                    onChange={(e) => handleUpdateTierRule(idx, "variantSku", e.target.value)}
+                                    placeholder="ALL"
+                                    className="w-32 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-mono text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <select
+                                    value={rule.tierName}
+                                    onChange={(e) => handleUpdateTierRule(idx, "tierName", e.target.value)}
+                                    className="rounded border border-purple-200 bg-purple-50/50 px-2 py-1 text-[11.5px] font-medium text-purple-800 outline-none focus:border-[#E31E24] cursor-pointer"
+                                  >
+                                    {(tiersData || []).map((t: any) => (
+                                      <option key={t.id || t.name} value={t.name}>
+                                        {t.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <CountryDropdown
+                                    value={rule.country || "ALL"}
+                                    onChange={(next) => handleUpdateTierRule(idx, "country", next)}
+                                    countries={countriesData}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <select
+                                    value={rule.mode}
+                                    onChange={(e) => handleUpdateTierRule(idx, "mode", e.target.value as any)}
+                                    className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 outline-none focus:border-[#E31E24] cursor-pointer"
+                                  >
+                                    <option value="PERCENTAGE">% Discount</option>
+                                    <option value="FIXED_PRICE">Fixed Price</option>
+                                  </select>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min={0}
+                                    value={rule.value}
+                                    onChange={(e) => handleUpdateTierRule(idx, "value", parseFloat(e.target.value) || 0)}
+                                    className="w-24 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  {rule.errors && rule.errors.length > 0 ? (
+                                    <span className="text-[11px] text-red-500">• {rule.errors.join(", ")}</span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                                      <CheckCircle2 size={13} /> Ready to Apply
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteTierRule(idx)}
+                                    className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                                    title="Delete rule"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      !showAddTierForm && (
+                        <div className="rounded-xl border border-dashed border-[#D1D5DB] p-8 text-center bg-[#FAFAFA]">
+                          <FileSpreadsheet className="mx-auto h-10 w-10 text-gray-400 mb-2" />
+                          <h5 className="text-[14px] font-bold text-[#1A1A1A]">
+                            No Tier Override Rules Specified
+                          </h5>
+                          <p className="text-[12px] text-[#6B7280] max-w-md mx-auto mt-1">
+                            The <code>Tier_Pricing</code> sheet was left empty or not included in your upload. This is 100% optional. Standard product prices will apply. You can add override rules anytime using the button above.
+                          </p>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* ── Tab 3: MOQ Overrides ── */}
+                {activeSheetTab === "moq" && (
+                  <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+                    {/* Header / Info bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+                      <div>
+                        <h4 className="text-[13.5px] font-bold text-[#1A1A1A]">
+                          MOQ Volume Pricing Overrides (Sheet: MOQ_Pricing)
+                        </h4>
+                        <p className="text-[12px] text-[#6B7280] mt-0.5">
+                          Optional: Set volume-based tiered discounts (e.g. Min 50 qty → 10% off) for specific countries.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddMoqForm(!showAddMoqForm);
+                          setMoqFormError("");
+                        }}
+                        className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black transition-colors cursor-pointer"
+                      >
+                        <Plus size={14} />
+                        {showAddMoqForm ? "Hide Form" : "Add MOQ Rule Directly"}
+                      </button>
+                    </div>
+
+                    {/* Inline Direct Rule Form */}
+                    {showAddMoqForm && (
+                      <div className="rounded-lg border-2 border-red-100 bg-white p-4 shadow-sm space-y-3">
+                        <div className="text-[13px] font-bold text-[#1A1A1A]">
+                          Add New MOQ Volume Pricing Rule
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">
+                              Product SKU <span className="text-red-500">*</span>
+                            </label>
+                            {uniqueProductSkus.length > 0 ? (
+                              <select
+                                value={moqProductSkuDraft}
+                                onChange={(e) => setMoqProductSkuDraft(e.target.value)}
+                                className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                              >
+                                <option value="">Select Product SKU...</option>
+                                {uniqueProductSkus.map((u) => (
+                                  <option key={u.sku} value={u.sku}>
+                                    {u.sku} {u.title ? `(${u.title})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder="e.g. PRD-MB-001"
+                                value={moqProductSkuDraft}
+                                onChange={(e) => setMoqProductSkuDraft(e.target.value)}
+                                className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                              />
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">
+                              Variant SKU
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="ALL or specific SKU(s)"
+                              value={moqVariantSkuDraft}
+                              onChange={(e) => setMoqVariantSkuDraft(e.target.value)}
+                              className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <AdminMultiSelect
+                              label="Country"
+                              options={countryMultiSelectOptions}
+                              value={moqCountriesDraft}
+                              onChange={setMoqCountriesDraft}
+                              placeholder="Select countries (or ALL)..."
+                              selectAllLabel="Select All Countries"
+                            />
+                          </div>
+
+                          <div>
+                            <AdminInput
+                              label="Min Quantity"
+                              type="number"
+                              min={1}
+                              value={moqMinQtyDraft}
+                              onChange={(e) => setMoqMinQtyDraft(e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <AdminInput
+                              label="Max Quantity"
+                              type="number"
+                              min={1}
+                              placeholder="None"
+                              value={moqMaxQtyDraft}
+                              onChange={(e) => setMoqMaxQtyDraft(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <AdminSelect
+                              label="Mode"
+                              value={moqModeDraft}
+                              onChange={(e) => setMoqModeDraft(e.target.value as any)}
+                              options={[
+                                { value: "PERCENTAGE", label: "% Discount" },
+                                { value: "FIXED_PRICE", label: "Fixed Price" },
+                              ]}
+                            />
+                          </div>
+
+                          <div>
+                            <AdminInput
+                              label={moqModeDraft === "PERCENTAGE" ? "Discount %" : "Fixed Price ($)"}
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              placeholder="e.g. 10"
+                              value={moqValueDraft}
+                              onChange={(e) => setMoqValueDraft(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        {moqFormError && (
+                          <p className="text-[11.5px] text-red-500 font-medium">
+                            ⚠️ {moqFormError}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddMoqForm(false);
+                              setMoqFormError("");
+                            }}
+                            className="rounded-md border border-[#E5E7EB] px-3 py-1.5 text-[12px] font-medium text-[#6B7280] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveMoqRule}
+                            className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer"
+                          >
+                            Save Rule
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Table or Empty State */}
+                    {(extraPricingData.moqPricing?.length ?? 0) > 0 ? (
+                      <div className="rounded-lg border border-[#E5E7EB] overflow-hidden bg-white">
+                        <table className="w-full text-[12px]">
+                          <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                            <tr>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-12">#</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[140px]">Product SKU</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[140px]">Variant SKU</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[135px]">Country</th>
+                              <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-24">Min Qty</th>
+                              <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-24">Max Qty</th>
+                              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Mode</th>
+                              <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Discount / Price</th>
+                              <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[150px]">Status</th>
+                              <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-16">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#F3F4F6]">
+                            {(extraPricingData.moqPricing || []).map((rule: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-[#F9FAFB] transition-colors">
+                                <td className="px-3 py-2 text-[#9CA3AF] font-mono">{idx + 1}</td>
+                                <td className="px-3 py-2">
+                                  {uniqueProductSkus.length > 0 ? (
+                                    <select
+                                      value={rule.productSku || ""}
+                                      onChange={(e) => handleUpdateMoqRule(idx, "productSku", e.target.value)}
+                                      className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24] cursor-pointer max-w-[160px]"
+                                    >
+                                      <option value="">Select Product...</option>
+                                      {uniqueProductSkus.map((u) => (
+                                        <option key={u.sku} value={u.sku}>
+                                          {u.sku}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={rule.productSku || ""}
+                                      onChange={(e) => handleUpdateMoqRule(idx, "productSku", e.target.value)}
+                                      className="w-28 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                    />
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="text"
+                                    value={rule.variantSku || "ALL"}
+                                    onChange={(e) => handleUpdateMoqRule(idx, "variantSku", e.target.value)}
+                                    placeholder="ALL"
+                                    className="w-32 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-mono text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <CountryDropdown
+                                    value={rule.country || "ALL"}
+                                    onChange={(next) => handleUpdateMoqRule(idx, "country", next)}
+                                    countries={countriesData}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={rule.minQuantity}
+                                    onChange={(e) => handleUpdateMoqRule(idx, "minQuantity", parseInt(e.target.value) || 1)}
+                                    className="w-20 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    placeholder="None"
+                                    value={rule.maxQuantity ?? ""}
+                                    onChange={(e) => handleUpdateMoqRule(idx, "maxQuantity", e.target.value ? parseInt(e.target.value) : null)}
+                                    className="w-20 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                  />
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <select
+                                    value={rule.mode}
+                                    onChange={(e) => handleUpdateMoqRule(idx, "mode", e.target.value as any)}
+                                    className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 outline-none focus:border-[#E31E24] cursor-pointer"
+                                  >
+                                    <option value="PERCENTAGE">% Discount</option>
+                                    <option value="FIXED_PRICE">Fixed Price</option>
+                                  </select>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min={0}
+                                    value={rule.value}
+                                    onChange={(e) => handleUpdateMoqRule(idx, "value", parseFloat(e.target.value) || 0)}
+                                    className="w-24 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  {rule.errors && rule.errors.length > 0 ? (
+                                    <span className="text-[11px] text-red-500">• {rule.errors.join(", ")}</span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                                      <CheckCircle2 size={13} /> Ready to Apply
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMoqRule(idx)}
+                                    className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                                    title="Delete rule"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      !showAddMoqForm && (
+                        <div className="rounded-xl border border-dashed border-[#D1D5DB] p-8 text-center bg-[#FAFAFA]">
+                          <FileSpreadsheet className="mx-auto h-10 w-10 text-gray-400 mb-2" />
+                          <h5 className="text-[14px] font-bold text-[#1A1A1A]">
+                            No MOQ Override Rules Specified
+                          </h5>
+                          <p className="text-[12px] text-[#6B7280] max-w-md mx-auto mt-1">
+                            The <code>MOQ_Pricing</code> sheet was left empty or not included in your upload. This is 100% optional. Standard product prices and minimum order quantities will apply. You can add volume discount rules anytime using the button above.
+                          </p>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
 
                 {/* Footer actions */}
                 <div className="shrink-0 px-6 py-3.5 bg-white border-t border-[#E5E7EB] flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={() => setStep(0)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3.5 py-2 text-[12.5px] font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors"
+                    onClick={() => {
+                      setStep(0);
+                      setActiveSheetTab("products");
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3.5 py-2 text-[12.5px] font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
                   >
                     <ArrowLeft size={14} />
                     Back to Upload
                   </button>
 
+                  <div className="hidden sm:flex items-center gap-3 text-[12px] text-[#6B7280]">
+                    <span>
+                      <strong className="text-[#1A1A1A]">{selectedValidCount}</strong> valid {entityName || "products"} selected
+                    </span>
+                    {(extraPricingData.tierPricing?.length ?? 0) > 0 && (
+                      <span className="text-purple-700 font-medium bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
+                        +{extraPricingData.tierPricing?.length} tier rules
+                      </span>
+                    )}
+                    {(extraPricingData.moqPricing?.length ?? 0) > 0 && (
+                      <span className="text-blue-700 font-medium bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                        +{extraPricingData.moqPricing?.length} MOQ rules
+                      </span>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={onClose}
-                      className="rounded-md border border-[#D1D5DB] bg-white px-4 py-2 text-[12.5px] font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors"
+                      className="rounded-md border border-[#D1D5DB] bg-white px-4 py-2 text-[12.5px] font-medium text-[#374151] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
                     >
                       Cancel
                     </button>

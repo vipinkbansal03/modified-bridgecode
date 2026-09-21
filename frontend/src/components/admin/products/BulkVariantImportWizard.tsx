@@ -18,9 +18,13 @@ import {
   Check,
   XCircle,
   RefreshCw,
+  Plus,
+  Globe,
 } from "lucide-react";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
+import { useAdminTiers, useAdminCountries } from "@/hooks/admin/useAdminHooks";
+import { AdminMultiSelect, AdminSelect, AdminInput } from "@/components/admin/AdminComponents";
 
 /* ─────────────────── Types ─────────────────── */
 
@@ -39,10 +43,47 @@ interface PreviewRow {
   lowStockThreshold: number;
   price: number;
   mrp: number;
+  dealerPrice?: number | null;
+  doctorPrice?: number | null;
+  countryCodes?: string;
+  weight?: number | null;
+  length?: number | null;
+  width?: number | null;
+  height?: number | null;
+  fragile?: boolean;
+  hazardous?: boolean;
+  moq?: number;
+  shippingClass?: string | null;
   status: string;
   attributeValues: AttributeValue[];
   isValid: boolean;
   errors: string[];
+}
+
+export interface TierOverrideRow {
+  rowNumber?: number;
+  variantSku: string;
+  tierName: string;
+  tierId?: string;
+  country: string;
+  countryId?: string;
+  mode: "PERCENTAGE" | "FIXED_PRICE";
+  value: number;
+  isValid?: boolean;
+  errors?: string[];
+}
+
+export interface MoqOverrideRow {
+  rowNumber?: number;
+  variantSku: string;
+  country: string;
+  countryId?: string;
+  minQuantity: number;
+  maxQuantity?: number | null;
+  mode: "PERCENTAGE" | "FIXED_PRICE";
+  value: number;
+  isValid?: boolean;
+  errors?: string[];
 }
 
 interface PreviewResult {
@@ -50,6 +91,8 @@ interface PreviewResult {
   validRows: number;
   invalidRows: number;
   rows: PreviewRow[];
+  tierOverrides?: TierOverrideRow[];
+  moqOverrides?: MoqOverrideRow[];
 }
 
 interface ExecuteResult {
@@ -153,6 +196,11 @@ export function BulkVariantImportWizard({
   // Step 2: Preview
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [rows, setRows] = useState<PreviewRow[]>([]);
+  const [tierOverrides, setTierOverrides] = useState<TierOverrideRow[]>([]);
+  const [moqOverrides, setMoqOverrides] = useState<MoqOverrideRow[]>([]);
+  const [activePreviewTab, setActivePreviewTab] = useState<"variants" | "tierOverrides" | "moqOverrides">("variants");
+  const { data: tiersData = [] } = useAdminTiers();
+  const { data: countriesData = [] } = useAdminCountries();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<"all" | "valid" | "invalid">("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -189,6 +237,9 @@ export function BulkVariantImportWizard({
         setUploadError("");
         setPreview(null);
         setRows([]);
+        setTierOverrides([]);
+        setMoqOverrides([]);
+        setActivePreviewTab("variants");
         setSelectedIds(new Set());
         setFilter("all");
         setCurrentPage(1);
@@ -295,6 +346,28 @@ export function BulkVariantImportWizard({
     URL.revokeObjectURL(url);
   }, [attributeNames, attributeMappings, productName]);
 
+  const downloadMultiSheetTemplate = useCallback(async () => {
+    try {
+      const response = await adminApi.get(`/products/${productId}/variants/sample-template`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const sanitizedProdName = productName ? productName.replace(/[^a-zA-Z0-9]/g, "_") : "variants";
+      a.download = `variant_import_template_${sanitizedProdName}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      downloadTemplate();
+    }
+  }, [productId, productName, downloadTemplate]);
+
   /* ── Upload & Preview ── */
   const uploadAndPreview = useCallback(async () => {
     if (!file) return;
@@ -306,11 +379,14 @@ export function BulkVariantImportWizard({
       const res = await adminApi.post(
         `/products/${productId}/variants/import-preview`,
         formData,
-        {  timeout: 60000 }
+        { timeout: 60000 }
       );
       const data: PreviewResult = res.data.data;
       setPreview(data);
       setRows(data.rows);
+      setTierOverrides(data.tierOverrides || []);
+      setMoqOverrides(data.moqOverrides || []);
+      setActivePreviewTab("variants");
       // Auto-select all valid rows
       const validIds = new Set(data.rows.filter((r) => r.isValid).map((r) => r.rowNumber));
       setSelectedIds(validIds);
@@ -321,6 +397,55 @@ export function BulkVariantImportWizard({
       setUploading(false);
     }
   }, [file, productId]);
+
+  /* ── Override item helpers ── */
+  const handleAddTierOverride = useCallback((rule: TierOverrideRow) => {
+    setTierOverrides((prev) => [...prev, rule]);
+  }, []);
+
+  const handleUpdateTierOverride = useCallback(
+    (index: number, field: keyof TierOverrideRow, value: any) => {
+      setTierOverrides((prev) => {
+        const next = [...prev];
+        if (next[index]) {
+          next[index] = { ...next[index], [field]: value };
+          if (field === "tierName") {
+            const match = tiersData.find(
+              (t: any) => t.name.toLowerCase() === String(value).toLowerCase()
+            );
+            if (match) next[index].tierId = match.id;
+          }
+        }
+        return next;
+      });
+    },
+    [tiersData]
+  );
+
+  const handleDeleteTierOverride = useCallback((index: number) => {
+    setTierOverrides((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleAddMoqOverride = useCallback((rule: MoqOverrideRow) => {
+    setMoqOverrides((prev) => [...prev, rule]);
+  }, []);
+
+  const handleUpdateMoqOverride = useCallback(
+    (index: number, field: keyof MoqOverrideRow, value: any) => {
+      setMoqOverrides((prev) => {
+        const next = [...prev];
+        if (next[index]) {
+          next[index] = { ...next[index], [field]: value };
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleDeleteMoqOverride = useCallback((index: number) => {
+    setMoqOverrides((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   /* ── Inline edit handler ── */
   const updateRow = useCallback(
@@ -395,6 +520,15 @@ export function BulkVariantImportWizard({
               break;
             case "mrp":
               updated.mrp = parseFloat(value) || 0;
+              break;
+            case "dealerPrice":
+              updated.dealerPrice = value ? parseFloat(value) : null;
+              break;
+            case "doctorPrice":
+              updated.doctorPrice = value ? parseFloat(value) : null;
+              break;
+            case "countryCodes":
+              updated.countryCodes = value;
               break;
             case "status":
               updated.status = value;
@@ -512,7 +646,11 @@ export function BulkVariantImportWizard({
 
         const res = await adminApi.post(
           `/products/${productId}/variants/import-execute`,
-          { rows: batchRows },
+          {
+            rows: batchRows,
+            tierOverrides: b === 0 ? tierOverrides.filter((t) => t.isValid !== false) : [],
+            moqOverrides: b === 0 ? moqOverrides.filter((m) => m.isValid !== false) : [],
+          },
           { timeout: 120000 }
         );
 
@@ -634,6 +772,7 @@ export function BulkVariantImportWizard({
                       onFileInputChange={handleFileInputChange}
                       onRemoveFile={removeFile}
                       onDownloadTemplate={downloadTemplate}
+                      onDownloadMultiSheetTemplate={downloadMultiSheetTemplate}
                       onUpload={uploadAndPreview}
                       onCancel={onClose}
                     />
@@ -672,6 +811,18 @@ export function BulkVariantImportWizard({
                       onExecute={executeImport}
                       attributeNames={attributeNames}
                       attributeMappings={attributeMappings}
+                      tierOverrides={tierOverrides}
+                      onAddTierOverride={handleAddTierOverride}
+                      onUpdateTierOverride={handleUpdateTierOverride}
+                      onDeleteTierOverride={handleDeleteTierOverride}
+                      moqOverrides={moqOverrides}
+                      onAddMoqOverride={handleAddMoqOverride}
+                      onUpdateMoqOverride={handleUpdateMoqOverride}
+                      onDeleteMoqOverride={handleDeleteMoqOverride}
+                      tiers={tiersData}
+                      countries={countriesData}
+                      activeTab={activePreviewTab}
+                      onTabChange={setActivePreviewTab}
                     />
                   </motion.div>
                 )}
@@ -725,6 +876,7 @@ interface UploadStepProps {
   onFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: () => void;
   onDownloadTemplate: () => void;
+  onDownloadMultiSheetTemplate: () => void;
   onUpload: () => void;
   onCancel: () => void;
 }
@@ -745,6 +897,7 @@ function UploadStep({
   onFileInputChange,
   onRemoveFile,
   onDownloadTemplate,
+  onDownloadMultiSheetTemplate,
   onUpload,
   onCancel,
 }: UploadStepProps) {
@@ -837,39 +990,37 @@ function UploadStep({
         )}
 
         {/* Template download */}
-        <div className="mt-6 flex items-center justify-between rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] px-4 py-3.5">
+        <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-4">
           <div>
             <p className="text-[13px] font-semibold text-[#1A1A1A]">
               Need a template?
             </p>
-            <p className="text-[11px] text-[#6B6B6B] mt-0.5">
-              Download a sample CSV template for "{productName || 'this product'}" with the required columns
+            <p className="text-[12px] text-[#6B6B6B] mt-0.5">
+              Download a pre-formatted template with all mapped attributes and optional Tier &amp; MOQ sheets.
             </p>
           </div>
           <button
             type="button"
-            onClick={onDownloadTemplate}
-            className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-3.5 py-2 text-[12px] font-medium text-white hover:bg-[#333] transition-colors"
+            onClick={onDownloadMultiSheetTemplate}
+            className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3.5 py-2 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors shadow-sm cursor-pointer shrink-0"
             id="bulk-import-download-template"
           >
-            <Download size={13} />
-            Download Template
+            <Download size={14} />
+            <span>Download Template</span>
           </button>
         </div>
 
         {/* Column info */}
-        <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3">
-          <p className="text-[11px] font-semibold text-blue-700 mb-1.5">
-            Expected Columns
+        <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-[11px] text-blue-800 leading-relaxed">
+          <p className="font-semibold text-blue-900 mb-1">
+            Template Structure &amp; Supported Sheets
           </p>
-          <p className="text-[11px] text-blue-600 leading-relaxed">
-            <span className="font-semibold">Required:</span> SKU &nbsp;|&nbsp;{" "}
-            <span className="font-semibold">Optional:</span> Stock, Low Stock,
-            Price, MRP, Status
+          <p className="text-blue-700">
+            <strong className="text-blue-900">Sheet 1 (Variants):</strong> SKU (Required), Stock, Low Stock, Price, MRP, Dealer Price, Doctor Price, Country Codes, Weight, Dimensions, Fragile, Hazardous, MOQ, Status
             {attributeNames.length > 0 && (
               <>
                 {" "}&nbsp;|&nbsp;{" "}
-                <span className="font-semibold">Attributes:</span>{" "}
+                <strong className="text-blue-900">Mapped Attributes:</strong>{" "}
                 {attributeNames.map((name, i) => (
                   <span key={name}>
                     <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-800">{name}</span>
@@ -878,6 +1029,12 @@ function UploadStep({
                 ))}
               </>
             )}
+          </p>
+          <p className="mt-1 text-blue-600">
+            <strong className="text-blue-900">Sheet 2 (Tier_Overrides):</strong> Optional customer tier pricing rules (can be left blank).
+          </p>
+          <p className="mt-0.5 text-blue-600">
+            <strong className="text-blue-900">Sheet 3 (MOQ_Overrides):</strong> Optional volume discount rules (can be left blank).
           </p>
         </div>
       </div>
@@ -920,6 +1077,89 @@ function UploadStep({
    Step 2 — Preview & Edit Grid
    ═══════════════════════════════════════════════════════════ */
 
+interface CountryDropdownProps {
+  value: string;
+  onChange: (val: string) => void;
+  countries: any[];
+  className?: string;
+}
+
+function CountryDropdown({ value, onChange, countries, className }: CountryDropdownProps) {
+  const options = useMemo(() => {
+    return (countries || []).map((c: any) => ({
+      value: String(c.code || c.id).toUpperCase(),
+      label: `${c.name} (${c.code || c.id})`,
+    }));
+  }, [countries]);
+
+  const allCodes = useMemo(() => options.map((o) => o.value), [options]);
+
+  const isAll = useMemo(() => {
+    if (!value) return true;
+    const trimmed = value.trim().toUpperCase();
+    return trimmed === "ALL" || trimmed === "*" || trimmed === "GLOBAL";
+  }, [value]);
+
+  const currentValues = useMemo(() => {
+    if (isAll) {
+      return allCodes;
+    }
+    const tokens = value.split(/[,;|]/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+    return allCodes.filter((code) => {
+      if (tokens.includes(code)) return true;
+      const countryObj = (countries || []).find(
+        (c: any) => String(c.code || c.id).toUpperCase() === code
+      );
+      if (countryObj?.name && tokens.includes(countryObj.name.toUpperCase())) return true;
+      return false;
+    });
+  }, [value, isAll, allCodes, countries]);
+
+  const displayLabel = useMemo(() => {
+    if (isAll || (allCodes.length > 0 && currentValues.length === allCodes.length)) {
+      return "ALL (Global)";
+    }
+    if (currentValues.length === 0) {
+      return "None";
+    }
+    if (currentValues.length <= 2) {
+      return currentValues.join(", ");
+    }
+    return `${currentValues[0]}, ${currentValues[1]} +${currentValues.length - 2}`;
+  }, [isAll, allCodes, currentValues]);
+
+  const handleChange = useCallback(
+    (nextValues: string[]) => {
+      if (nextValues.length === 0) {
+        onChange("");
+      } else if (allCodes.length > 0 && nextValues.length === allCodes.length) {
+        onChange("ALL");
+      } else {
+        onChange(nextValues.join(", "));
+      }
+    },
+    [allCodes, onChange]
+  );
+
+  return (
+    <div className="flex items-center justify-center">
+      <AdminMultiSelect
+        options={options}
+        value={currentValues}
+        onChange={handleChange}
+        displayValue={displayLabel}
+        placeholder="Select..."
+        selectAllLabel="Select All Countries"
+        containerClassName="w-full min-w-[120px] max-w-[165px] space-y-0"
+        className={cn(
+          "h-7 py-0 px-2 text-[11px] font-medium border-[#D1D5DB] rounded bg-white hover:border-[#E31E24] shadow-none gap-1",
+          className
+        )}
+      />
+    </div>
+  );
+}
+
 interface PreviewStepProps {
   preview: PreviewResult | null;
   rows: PreviewRow[];
@@ -943,6 +1183,18 @@ interface PreviewStepProps {
   onExecute: () => void;
   attributeNames?: string[];
   attributeMappings?: any[];
+  tierOverrides: TierOverrideRow[];
+  onAddTierOverride: (rule: TierOverrideRow) => void;
+  onUpdateTierOverride: (index: number, field: keyof TierOverrideRow, value: any) => void;
+  onDeleteTierOverride: (index: number) => void;
+  moqOverrides: MoqOverrideRow[];
+  onAddMoqOverride: (rule: MoqOverrideRow) => void;
+  onUpdateMoqOverride: (index: number, field: keyof MoqOverrideRow, value: any) => void;
+  onDeleteMoqOverride: (index: number) => void;
+  tiers: any[];
+  countries: any[];
+  activeTab: "variants" | "tierOverrides" | "moqOverrides";
+  onTabChange: (tab: "variants" | "tierOverrides" | "moqOverrides") => void;
 }
 
 function PreviewStep({
@@ -968,6 +1220,18 @@ function PreviewStep({
   onExecute,
   attributeNames,
   attributeMappings,
+  tierOverrides,
+  onAddTierOverride,
+  onUpdateTierOverride,
+  onDeleteTierOverride,
+  moqOverrides,
+  onAddMoqOverride,
+  onUpdateMoqOverride,
+  onDeleteMoqOverride,
+  tiers,
+  countries,
+  activeTab,
+  onTabChange,
 }: PreviewStepProps) {
   const validCount = rows.filter((r) => r.isValid).length;
   const invalidCount = rows.filter((r) => !r.isValid).length;
@@ -981,347 +1245,1124 @@ function PreviewStep({
     [filteredRows, startIndex, endIndex]
   );
 
+  // Unique SKUs from imported rows for rule assignment dropdown
+  const uniqueSkus = useMemo(() => {
+    const list: { sku: string; title: string }[] = [{ sku: "ALL", title: "All Variants (Product Default)" }];
+    const map = new Map<string, string>();
+    rows.forEach((r) => {
+      const s = r.sku?.trim();
+      if (s && !map.has(s) && s.toUpperCase() !== "ALL") {
+        map.set(s, r.variantTitle || s);
+      }
+    });
+    list.push(...Array.from(map.entries()).map(([sku, title]) => ({ sku, title })));
+    return list;
+  }, [rows]);
+
+  const countryMultiSelectOptions = useMemo(() => {
+    return (countries || []).map((c: any) => ({
+      value: c.code || c.id,
+      label: `${c.name} (${c.code || c.id})`,
+    }));
+  }, [countries]);
+
+  const tierSelectOptions = useMemo(() => {
+    return [
+      { value: "", label: "Select tier..." },
+      ...(tiers || []).map((t: any) => ({
+        value: t.id,
+        label: t.name,
+      })),
+    ];
+  }, [tiers]);
+
+  // Direct Tier rule form state
+  const [showAddTierForm, setShowAddTierForm] = useState(false);
+  const [tierSkuDraft, setTierSkuDraft] = useState("");
+  const [tierIdDraft, setTierIdDraft] = useState("");
+  const [tierCountriesDraft, setTierCountriesDraft] = useState<string[]>([]);
+  const [tierModeDraft, setTierModeDraft] = useState<"PERCENTAGE" | "FIXED_PRICE">("PERCENTAGE");
+  const [tierValueDraft, setTierValueDraft] = useState("");
+  const [tierFormError, setTierFormError] = useState("");
+
+  // Direct MOQ rule form state
+  const [showAddMoqForm, setShowAddMoqForm] = useState(false);
+  const [moqSkuDraft, setMoqSkuDraft] = useState("");
+  const [moqCountriesDraft, setMoqCountriesDraft] = useState<string[]>([]);
+  const [moqMinQtyDraft, setMoqMinQtyDraft] = useState("10");
+  const [moqMaxQtyDraft, setMoqMaxQtyDraft] = useState("");
+  const [moqModeDraft, setMoqModeDraft] = useState<"PERCENTAGE" | "FIXED_PRICE">("PERCENTAGE");
+  const [moqValueDraft, setMoqValueDraft] = useState("");
+  const [moqFormError, setMoqFormError] = useState("");
+
+  const handleSaveTierRule = useCallback(() => {
+    if (!tierSkuDraft) {
+      setTierFormError("Please select a variant SKU (or 'All Variants').");
+      return;
+    }
+    if (!tierIdDraft) {
+      setTierFormError("Please select a customer tier.");
+      return;
+    }
+    const numVal = parseFloat(tierValueDraft);
+    if (isNaN(numVal) || numVal < 0) {
+      setTierFormError("Please enter a valid non-negative number.");
+      return;
+    }
+    if (tierModeDraft === "PERCENTAGE" && numVal > 100) {
+      setTierFormError("Discount percentage cannot exceed 100%.");
+      return;
+    }
+
+    const selectedTier = (tiers || []).find((t: any) => t.id === tierIdDraft);
+    const tierName = selectedTier?.name || "Tier";
+
+    const skusToApply = [tierSkuDraft];
+    const countriesToApply = tierCountriesDraft.length === 0 ? ["ALL"] : tierCountriesDraft;
+
+    for (const sku of skusToApply) {
+      for (const country of countriesToApply) {
+        onAddTierOverride({
+          variantSku: sku,
+          tierId: tierIdDraft,
+          tierName,
+          country,
+          mode: tierModeDraft,
+          value: numVal,
+          isValid: true,
+          errors: [],
+        });
+      }
+    }
+
+    setTierSkuDraft("");
+    setTierIdDraft("");
+    setTierCountriesDraft([]);
+    setTierValueDraft("");
+    setTierFormError("");
+    setShowAddTierForm(false);
+  }, [tierSkuDraft, tierIdDraft, tierValueDraft, tierModeDraft, tierCountriesDraft, tiers, onAddTierOverride]);
+
+  const handleSaveMoqRule = useCallback(() => {
+    if (!moqSkuDraft) {
+      setMoqFormError("Please select a variant SKU (or 'All Variants').");
+      return;
+    }
+    const minQ = parseInt(moqMinQtyDraft);
+    if (isNaN(minQ) || minQ < 1) {
+      setMoqFormError("Min Quantity must be at least 1.");
+      return;
+    }
+    const maxQ = moqMaxQtyDraft ? parseInt(moqMaxQtyDraft) : null;
+    if (maxQ !== null && (isNaN(maxQ) || maxQ < minQ)) {
+      setMoqFormError("Max Quantity must be greater than or equal to Min Quantity.");
+      return;
+    }
+    const numVal = parseFloat(moqValueDraft);
+    if (isNaN(numVal) || numVal < 0) {
+      setMoqFormError("Please enter a valid non-negative number.");
+      return;
+    }
+    if (moqModeDraft === "PERCENTAGE" && numVal > 100) {
+      setMoqFormError("Discount percentage cannot exceed 100%.");
+      return;
+    }
+
+    const skusToApply = [moqSkuDraft];
+    const countriesToApply = moqCountriesDraft.length === 0 ? ["ALL"] : moqCountriesDraft;
+
+    for (const sku of skusToApply) {
+      for (const country of countriesToApply) {
+        onAddMoqOverride({
+          variantSku: sku,
+          country,
+          minQuantity: minQ,
+          maxQuantity: maxQ,
+          mode: moqModeDraft,
+          value: numVal,
+          isValid: true,
+          errors: [],
+        });
+      }
+    }
+
+    setMoqSkuDraft("");
+    setMoqCountriesDraft([]);
+    setMoqMinQtyDraft("10");
+    setMoqMaxQtyDraft("");
+    setMoqValueDraft("");
+    setMoqFormError("");
+    setShowAddMoqForm(false);
+  }, [moqSkuDraft, moqMinQtyDraft, moqMaxQtyDraft, moqValueDraft, moqModeDraft, moqCountriesDraft, uniqueSkus, onAddMoqOverride]);
+
   return (
     <>
       <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Summary bar */}
-        <div className="shrink-0 px-6 py-4 flex flex-wrap items-center justify-between border-b border-[#F3F4F6]">
-          <div className="flex items-center gap-4">
-            {productName && (
-              <span className="text-[13px] font-semibold text-[#1A1A1A]">
-                Product: <span className="font-bold text-[#E31E24]">{productName}</span>
-              </span>
-            )}
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[12px] font-semibold text-[#4B5563]">
-                {preview?.totalRows ?? 0} Total
-              </span>
-              <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[12px] font-semibold text-emerald-700">
-                {validCount} Valid
-              </span>
-              <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[12px] font-semibold text-red-600">
-                {invalidCount} Invalid
-              </span>
-            </div>
-          </div>
-
-          <div className="flex-1" />
-
-          {/* Filter tabs */}
-          <div className="flex rounded-lg border border-[#E6E6E6] overflow-hidden">
-            {(["all", "valid", "invalid"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => onFilterChange(f)}
-                className={cn(
-                  "px-3 py-1.5 text-[11px] font-semibold transition-colors capitalize",
-                  filter === f
-                    ? "bg-[#1A1A1A] text-white"
-                    : "bg-white text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                )}
-                id={`bulk-import-filter-${f}`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-
-          {/* Selection actions */}
-          <div className="flex items-center gap-2">
+        {/* Navigation Sub-Tabs */}
+        <div className="shrink-0 flex items-center justify-between border-b border-[#E5E7EB] bg-[#F9FAFB] px-6">
+          <div className="flex gap-1">
             <button
               type="button"
-              onClick={onSelectAllValid}
-              className="text-[11px] font-semibold text-[#E31E24] hover:text-[#B5151B] underline underline-offset-2 transition-colors"
-              id="bulk-import-select-valid"
+              onClick={() => onTabChange("variants")}
+              className={cn(
+                "flex items-center gap-2 border-b-2 py-3 px-3 text-[13px] font-semibold transition-all cursor-pointer",
+                activeTab === "variants"
+                  ? "border-[#E31E24] text-[#E31E24]"
+                  : "border-transparent text-[#6B7280] hover:text-[#1A1A1A] hover:border-gray-300"
+              )}
             >
-              Select all valid
-            </button>
-            {selectedIds.size > 0 && (
-              <button
-                type="button"
-                onClick={onClearSelection}
-                className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] underline underline-offset-2 transition-colors"
-                id="bulk-import-clear-selection"
+              <span>Variants Matrix</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                  activeTab === "variants"
+                    ? "bg-red-50 text-[#E31E24] border border-red-200"
+                    : "bg-[#E5E7EB] text-[#4B5563]"
+                )}
               >
-                Clear
-              </button>
+                {rows.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onTabChange("tierOverrides")}
+              className={cn(
+                "flex items-center gap-2 border-b-2 py-3 px-3 text-[13px] font-semibold transition-all cursor-pointer",
+                activeTab === "tierOverrides"
+                  ? "border-[#E31E24] text-[#E31E24]"
+                  : "border-transparent text-[#6B7280] hover:text-[#1A1A1A] hover:border-gray-300"
+              )}
+            >
+              <span>Tier Overrides</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                  tierOverrides.length > 0
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-[#E5E7EB] text-[#6B7280]"
+                )}
+              >
+                {tierOverrides.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onTabChange("moqOverrides")}
+              className={cn(
+                "flex items-center gap-2 border-b-2 py-3 px-3 text-[13px] font-semibold transition-all cursor-pointer",
+                activeTab === "moqOverrides"
+                  ? "border-[#E31E24] text-[#E31E24]"
+                  : "border-transparent text-[#6B7280] hover:text-[#1A1A1A] hover:border-gray-300"
+              )}
+            >
+              <span>MOQ Overrides</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                  moqOverrides.length > 0
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-[#E5E7EB] text-[#6B7280]"
+                )}
+              >
+                {moqOverrides.length}
+              </span>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-3 text-[12px] text-[#6B7280]">
+            {productName && (
+              <span className="font-medium">
+                Product: <strong className="text-[#1A1A1A]">{productName}</strong>
+              </span>
             )}
           </div>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-[12px]">
-            <thead className="sticky top-0 z-10 bg-[#F9FAFB] border-b border-[#E5E7EB]">
-              <tr>
-                <th className="px-3 py-2.5 text-left w-10">
-                  <span className="sr-only">Select</span>
-                </th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-12">
-                  Row
-                </th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[140px]">
-                  SKU
-                </th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[160px]">
-                  Variant Title
-                </th>
-                {attributeNames?.map((name) => (
-                  <th
-                    key={name}
-                    className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[100px]"
-                  >
-                    {name}
-                  </th>
-                ))}
-                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
-                  Stock
-                </th>
-                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-24">
-                  Low Stock
-                </th>
-                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
-                  Price
-                </th>
-                <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
-                  MRP
-                </th>
-                <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
-                  Status
-                </th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[200px]">
-                  Errors
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F3F4F6]">
-              {paginatedRows.map((row) => (
-                <tr
-                  key={row.rowNumber}
-                  className={cn(
-                    "group transition-colors",
-                    !row.isValid
-                      ? "bg-red-50/60 hover:bg-red-50"
-                      : selectedIds.has(row.rowNumber)
-                        ? "bg-emerald-50/40 hover:bg-emerald-50/60"
-                        : "hover:bg-[#F9FAFB]"
-                  )}
-                >
-                  {/* Checkbox */}
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(row.rowNumber)}
-                      onChange={() => onToggleRow(row.rowNumber)}
-                      className="h-3.5 w-3.5 rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
-                      id={`bulk-import-row-check-${row.rowNumber}`}
-                    />
-                  </td>
-                  {/* Row number */}
-                  <td className="px-3 py-2 text-[#9CA3AF] font-mono">
-                    {row.rowNumber}
-                  </td>
-                  {/* Editable cells */}
-                  <EditableCell
-                    value={row.sku}
-                    rowNumber={row.rowNumber}
-                    field="sku"
-                    editing={editingCell}
-                    onEdit={onEditCell}
-                    onUpdate={onUpdateRow}
-                  />
-                  {/* Variant title (read only) */}
-                  <td className="px-3 py-2 text-[#374151] font-medium">
-                    {row.variantTitle}
-                  </td>
-                  {/* Dynamic parsed attributes (read only for reference/mismatch correction) */}
-                  {attributeNames?.map((name) => {
-                    const attrVal = row.attributeValues?.find(
-                      (v) => v.attributeName.toLowerCase() === name.toLowerCase()
-                    );
-                    const isEditing = editingCell?.row === row.rowNumber && editingCell?.field === `attr:${name}`;
-                    const mapping = attributeMappings?.find(
-                      (m: any) => m.attribute?.name.toLowerCase() === name.toLowerCase()
-                    );
+        {/* ── Tab 1: Variants Matrix ── */}
+        {activeTab === "variants" && (
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {/* Summary bar */}
+            <div className="shrink-0 px-6 py-3.5 flex flex-wrap items-center justify-between border-b border-[#F3F4F6] bg-white gap-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-[12px] font-semibold text-[#4B5563]">
+                  {preview?.totalRows ?? 0} Total
+                </span>
+                <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[12px] font-semibold text-emerald-700">
+                  {validCount} Valid
+                </span>
+                <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[12px] font-semibold text-red-600">
+                  {invalidCount} Invalid
+                </span>
+              </div>
 
-                    if (isEditing && mapping) {
-                      return (
-                        <td key={name} className="px-1 py-1">
-                          <select
-                            autoFocus
-                            value={attrVal?.attributeValueId ?? ""}
-                            onChange={(e) => {
-                              onUpdateRow(row.rowNumber, `attr:${name}`, e.target.value);
-                              onEditCell(null);
-                            }}
-                            onBlur={() => onEditCell(null)}
-                            className="w-full rounded border border-[#E31E24] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none ring-2 ring-red-100"
+              <div className="flex-1" />
+
+              {/* Filter tabs */}
+              <div className="flex rounded-lg border border-[#E6E6E6] overflow-hidden">
+                {(["all", "valid", "invalid"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => onFilterChange(f)}
+                    className={cn(
+                      "px-3 py-1 text-[11px] font-semibold transition-colors capitalize cursor-pointer",
+                      filter === f
+                        ? "bg-[#1A1A1A] text-white"
+                        : "bg-white text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                    )}
+                    id={`bulk-import-filter-${f}`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+
+              {/* Selection actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onSelectAllValid}
+                  className="text-[11px] font-semibold text-[#E31E24] hover:text-[#B5151B] underline underline-offset-2 transition-colors cursor-pointer"
+                  id="bulk-import-select-valid"
+                >
+                  Select all valid
+                </button>
+                {selectedIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={onClearSelection}
+                    className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] underline underline-offset-2 transition-colors cursor-pointer"
+                    id="bulk-import-clear-selection"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-[12px]">
+                <thead className="sticky top-0 z-10 bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                  <tr>
+                    <th className="px-3 py-2.5 text-left w-10">
+                      <span className="sr-only">Select</span>
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-12">
+                      Row
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[130px]">
+                      SKU
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[150px]">
+                      Variant Title
+                    </th>
+                    {attributeNames?.map((name) => (
+                      <th
+                        key={name}
+                        className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[95px]"
+                      >
+                        {name}
+                      </th>
+                    ))}
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
+                      Stock
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
+                      Low Stk
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
+                      Price
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
+                      MRP
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-24">
+                      Dealer Price
+                    </th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-24">
+                      Doctor Price
+                    </th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[135px]">
+                      Countries
+                    </th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[95px]">
+                      Shipping
+                    </th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-20">
+                      Status
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[180px]">
+                      Errors
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F3F4F6]">
+                  {paginatedRows.map((row) => (
+                    <tr
+                      key={row.rowNumber}
+                      className={cn(
+                        "group transition-colors",
+                        !row.isValid
+                          ? "bg-red-50/60 hover:bg-red-50"
+                          : selectedIds.has(row.rowNumber)
+                            ? "bg-emerald-50/40 hover:bg-emerald-50/60"
+                            : "hover:bg-[#F9FAFB]"
+                      )}
+                    >
+                      {/* Checkbox */}
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(row.rowNumber)}
+                          onChange={() => onToggleRow(row.rowNumber)}
+                          className="h-3.5 w-3.5 rounded border-gray-300 text-[#E31E24] focus:ring-[#E31E24] cursor-pointer"
+                          id={`bulk-import-row-check-${row.rowNumber}`}
+                        />
+                      </td>
+                      {/* Row number */}
+                      <td className="px-3 py-2 text-[#9CA3AF] font-mono">
+                        {row.rowNumber}
+                      </td>
+                      {/* SKU */}
+                      <EditableCell
+                        value={row.sku}
+                        rowNumber={row.rowNumber}
+                        field="sku"
+                        editing={editingCell}
+                        onEdit={onEditCell}
+                        onUpdate={onUpdateRow}
+                      />
+                      {/* Variant title */}
+                      <td className="px-3 py-2 text-[#374151] font-medium">
+                        {row.variantTitle}
+                      </td>
+                      {/* Dynamic attributes */}
+                      {attributeNames?.map((name) => {
+                        const attrVal = row.attributeValues?.find(
+                          (v) => v.attributeName.toLowerCase() === name.toLowerCase()
+                        );
+                        const isEditing = editingCell?.row === row.rowNumber && editingCell?.field === `attr:${name}`;
+                        const mapping = attributeMappings?.find(
+                          (m: any) => m.attribute?.name.toLowerCase() === name.toLowerCase()
+                        );
+
+                        if (isEditing && mapping) {
+                          return (
+                            <td key={name} className="px-1 py-1">
+                              <select
+                                autoFocus
+                                value={attrVal?.attributeValueId ?? ""}
+                                onChange={(e) => {
+                                  onUpdateRow(row.rowNumber, `attr:${name}`, e.target.value);
+                                  onEditCell(null);
+                                }}
+                                onBlur={() => onEditCell(null)}
+                                className="w-full rounded border border-[#E31E24] bg-white px-2 py-1 text-[12px] text-[#1A1A1A] outline-none ring-2 ring-red-100"
+                              >
+                                <option value="">Select value...</option>
+                                {mapping.allowedValues?.map((av: any) => (
+                                  <option key={av.attributeValueId} value={av.attributeValueId}>
+                                    {av.attributeValue.value}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          );
+                        }
+
+                        return (
+                          <td
+                            key={name}
+                            className="px-3 py-2 cursor-pointer transition-colors hover:bg-yellow-50/50"
+                            onClick={() => onEditCell({ row: row.rowNumber, field: `attr:${name}` })}
+                            title="Click to edit attribute"
                           >
-                            <option value="">Select value...</option>
-                            {mapping.allowedValues?.map((av: any) => (
-                              <option key={av.attributeValueId} value={av.attributeValueId}>
-                                {av.attributeValue.value}
+                            <span className={cn(
+                              "inline-block rounded px-1.5 py-0.5 text-[11px] font-mono transition-colors group-hover:bg-yellow-50 group-hover:ring-1 group-hover:ring-yellow-200",
+                              attrVal ? "bg-gray-100 text-gray-800" : "bg-red-50 text-red-700 border border-red-200"
+                            )}>
+                              {attrVal ? attrVal.value : "Missing / Bad"}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <EditableCell
+                        value={String(row.stock)}
+                        rowNumber={row.rowNumber}
+                        field="stock"
+                        editing={editingCell}
+                        onEdit={onEditCell}
+                        onUpdate={onUpdateRow}
+                        align="right"
+                        type="number"
+                      />
+                      <EditableCell
+                        value={String(row.lowStockThreshold)}
+                        rowNumber={row.rowNumber}
+                        field="lowStockThreshold"
+                        editing={editingCell}
+                        onEdit={onEditCell}
+                        onUpdate={onUpdateRow}
+                        align="right"
+                        type="number"
+                      />
+                      <EditableCell
+                        value={String(row.price)}
+                        rowNumber={row.rowNumber}
+                        field="price"
+                        editing={editingCell}
+                        onEdit={onEditCell}
+                        onUpdate={onUpdateRow}
+                        align="right"
+                        type="number"
+                      />
+                      <EditableCell
+                        value={String(row.mrp)}
+                        rowNumber={row.rowNumber}
+                        field="mrp"
+                        editing={editingCell}
+                        onEdit={onEditCell}
+                        onUpdate={onUpdateRow}
+                        align="right"
+                        type="number"
+                      />
+                      <EditableCell
+                        value={row.dealerPrice !== null && row.dealerPrice !== undefined ? String(row.dealerPrice) : ""}
+                        rowNumber={row.rowNumber}
+                        field="dealerPrice"
+                        editing={editingCell}
+                        onEdit={onEditCell}
+                        onUpdate={onUpdateRow}
+                        align="right"
+                        type="number"
+                      />
+                      <EditableCell
+                        value={row.doctorPrice !== null && row.doctorPrice !== undefined ? String(row.doctorPrice) : ""}
+                        rowNumber={row.rowNumber}
+                        field="doctorPrice"
+                        editing={editingCell}
+                        onEdit={onEditCell}
+                        onUpdate={onUpdateRow}
+                        align="right"
+                        type="number"
+                      />
+                      {/* Country dropdown */}
+                      <td className="px-2 py-1 text-center">
+                        <CountryDropdown
+                          value={row.countryCodes || "ALL"}
+                          onChange={(next) => onUpdateRow(row.rowNumber, "countryCodes", next)}
+                          countries={countries}
+                        />
+                      </td>
+                      {/* Shipping summary */}
+                      <td className="px-3 py-2 text-center text-[11px] text-[#4B5563]">
+                        {row.weight ? `${row.weight}kg` : "—"}
+                        {row.fragile && <span className="ml-1 text-amber-600 font-semibold" title="Fragile">⚠️F</span>}
+                        {row.hazardous && <span className="ml-1 text-red-600 font-semibold" title="Hazardous">☢️H</span>}
+                      </td>
+                      {/* Status */}
+                      <td className="px-2 py-1 text-center">
+                        <select
+                          value={row.status}
+                          onChange={(e) => onUpdateRow(row.rowNumber, "status", e.target.value)}
+                          className={cn(
+                            "rounded border px-2 py-1 text-[10.5px] font-semibold outline-none cursor-pointer",
+                            row.status === "ACTIVE"
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-700 focus:border-emerald-500"
+                              : "border-gray-300 bg-gray-50 text-gray-600 focus:border-gray-500"
+                          )}
+                        >
+                          <option value="ACTIVE">ACTIVE</option>
+                          <option value="INACTIVE">INACTIVE</option>
+                        </select>
+                      </td>
+                      {/* Errors */}
+                      <td className="px-3 py-2">
+                        {row.errors.length > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            {row.errors.map((err, i) => (
+                              <span
+                                key={i}
+                                className="text-[11px] text-red-500 leading-snug"
+                              >
+                                • {err}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-emerald-500">
+                            <CheckCircle2 size={14} />
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredRows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={14 + (attributeNames?.length || 0)}
+                        className="px-6 py-12 text-center text-[13px] text-[#9CA3AF]"
+                      >
+                        No rows to display
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Toolbar */}
+            {filteredRows.length > 0 && (
+              <div className="shrink-0 flex flex-wrap items-center justify-between border-t border-[#E5E7EB] bg-[#F9FAFB] px-6 py-2.5 text-[12px] text-[#6B7280]">
+                <div className="flex items-center gap-3">
+                  <span>
+                    Showing <strong className="text-[#1A1A1A]">{startIndex + 1}</strong> to{" "}
+                    <strong className="text-[#1A1A1A]">{endIndex}</strong> of{" "}
+                    <strong className="text-[#1A1A1A]">{filteredRows.length.toLocaleString()}</strong> rows
+                  </span>
+                  <div className="flex items-center gap-1.5 pl-3 border-l border-[#E5E7EB]">
+                    <span className="text-[11px]">Rows per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        onPageSizeChange(Number(e.target.value));
+                        onPageChange(1);
+                      }}
+                      className="rounded border border-[#D1D5DB] bg-white px-2 py-0.5 text-[11px] font-medium text-[#1A1A1A] outline-none cursor-pointer"
+                    >
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={200}>200</option>
+                      <option value={500}>500</option>
+                    </select>
+                  </div>
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onPageChange(safeCurrentPage - 1)}
+                      disabled={safeCurrentPage <= 1}
+                      className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-[11px] font-medium text-[#374151]">
+                      Page {safeCurrentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onPageChange(safeCurrentPage + 1)}
+                      disabled={safeCurrentPage >= totalPages}
+                      className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab 2: Tier Overrides ── */}
+        {activeTab === "tierOverrides" && (
+          <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+            {/* Header / Info bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+              <div>
+                <h4 className="text-[13.5px] font-bold text-[#1A1A1A]">
+                  Tier-Based Pricing Overrides (Sheet: Tier_Overrides)
+                </h4>
+                <p className="text-[12px] text-[#6B7280] mt-0.5">
+                  Optional: Set custom pricing or discount percentages for customer tiers (Gold, Silver, etc.) and countries.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddTierForm(!showAddTierForm);
+                  setTierFormError("");
+                }}
+                className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                {showAddTierForm ? "Hide Form" : "Add Tier Rule Directly"}
+              </button>
+            </div>
+
+            {/* Inline Direct Rule Form */}
+            {showAddTierForm && (
+              <div className="rounded-lg border-2 border-red-100 bg-white p-4 shadow-sm space-y-3">
+                <div className="text-[13px] font-bold text-[#1A1A1A]">
+                  Add New Tier Override Rule
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">
+                      Variant SKU
+                    </label>
+                    <select
+                      value={tierSkuDraft}
+                      onChange={(e) => setTierSkuDraft(e.target.value)}
+                      className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                    >
+                      <option value="">Select Variant...</option>
+                      <option value="ALL">Apply to All Variants</option>
+                      {uniqueSkus.filter((u) => u.sku !== "ALL").map((u) => (
+                        <option key={u.sku} value={u.sku}>
+                          {u.sku} ({u.title})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="min-w-0">
+                    <AdminSelect
+                      label="Customer Tier"
+                      value={tierIdDraft}
+                      onChange={(e) => setTierIdDraft(e.target.value)}
+                      options={tierSelectOptions}
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <AdminMultiSelect
+                      label="Country"
+                      options={countryMultiSelectOptions}
+                      value={tierCountriesDraft}
+                      onChange={setTierCountriesDraft}
+                      placeholder="Select countries (or ALL)..."
+                      selectAllLabel="Select All Countries"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <AdminSelect
+                      label="Mode"
+                      value={tierModeDraft}
+                      onChange={(e) => setTierModeDraft(e.target.value as any)}
+                      options={[
+                        { value: "PERCENTAGE", label: "% Discount" },
+                        { value: "FIXED_PRICE", label: "Fixed Price" },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <AdminInput
+                      label={tierModeDraft === "PERCENTAGE" ? "Discount %" : "Fixed Price ($)"}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="e.g. 15"
+                      value={tierValueDraft}
+                      onChange={(e) => setTierValueDraft(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {tierFormError && (
+                  <p className="text-[11.5px] text-red-500 font-medium">
+                    ⚠️ {tierFormError}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddTierForm(false);
+                      setTierFormError("");
+                    }}
+                    className="rounded-md border border-[#E5E7EB] px-3 py-1.5 text-[12px] font-medium text-[#6B7280] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTierRule}
+                    className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer"
+                  >
+                    Save Rule
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Table or Empty State */}
+            {tierOverrides.length > 0 ? (
+              <div className="rounded-lg border border-[#E5E7EB] overflow-hidden bg-white">
+                <table className="w-full text-[12px]">
+                  <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-12">#</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[140px]">Variant SKU</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[120px]">Tier</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[135px]">Country</th>
+                      <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Mode</th>
+                      <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Discount / Price</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[150px]">Status</th>
+                      <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-16">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F3F4F6]">
+                    {tierOverrides.map((rule, idx) => (
+                      <tr key={idx} className="hover:bg-[#F9FAFB] transition-colors">
+                        <td className="px-3 py-2 text-[#9CA3AF] font-mono">{idx + 1}</td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={rule.variantSku || "ALL"}
+                            onChange={(e) => onUpdateTierOverride(idx, "variantSku", e.target.value)}
+                            className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-mono text-[#1A1A1A] outline-none focus:border-[#E31E24] cursor-pointer max-w-[170px]"
+                          >
+                            {uniqueSkus.map((u) => (
+                              <option key={u.sku} value={u.sku}>
+                                {u.sku === "ALL" ? "All Variants (Product Default)" : `${u.sku} (${u.title})`}
                               </option>
                             ))}
                           </select>
                         </td>
-                      );
-                    }
-
-                    return (
-                      <td
-                        key={name}
-                        className="px-3 py-2 cursor-pointer transition-colors hover:bg-yellow-50/50"
-                        onClick={() => onEditCell({ row: row.rowNumber, field: `attr:${name}` })}
-                        title="Click to edit attribute"
-                      >
-                        <span className={cn(
-                          "inline-block rounded px-1.5 py-0.5 text-[11px] font-mono transition-colors group-hover:bg-yellow-50 group-hover:ring-1 group-hover:ring-yellow-200",
-                          attrVal ? "bg-gray-100 text-gray-800" : "bg-red-50 text-red-700 border border-red-200"
-                        )}>
-                          {attrVal ? attrVal.value : "Missing / Bad Value"}
-                        </span>
-                      </td>
-                    );
-                  })}
-                  <EditableCell
-                    value={String(row.stock)}
-                    rowNumber={row.rowNumber}
-                    field="stock"
-                    editing={editingCell}
-                    onEdit={onEditCell}
-                    onUpdate={onUpdateRow}
-                    align="right"
-                    type="number"
-                  />
-                  <EditableCell
-                    value={String(row.lowStockThreshold)}
-                    rowNumber={row.rowNumber}
-                    field="lowStockThreshold"
-                    editing={editingCell}
-                    onEdit={onEditCell}
-                    onUpdate={onUpdateRow}
-                    align="right"
-                    type="number"
-                  />
-                  <EditableCell
-                    value={String(row.price)}
-                    rowNumber={row.rowNumber}
-                    field="price"
-                    editing={editingCell}
-                    onEdit={onEditCell}
-                    onUpdate={onUpdateRow}
-                    align="right"
-                    type="number"
-                  />
-                  <EditableCell
-                    value={String(row.mrp)}
-                    rowNumber={row.rowNumber}
-                    field="mrp"
-                    editing={editingCell}
-                    onEdit={onEditCell}
-                    onUpdate={onUpdateRow}
-                    align="right"
-                    type="number"
-                  />
-                  {/* Status */}
-                  <td className="px-3 py-2 text-center">
-                    <span
-                      className={cn(
-                        "inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        row.status === "ACTIVE"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-gray-100 text-gray-600"
-                      )}
-                    >
-                      {row.status}
-                    </span>
-                  </td>
-                  {/* Errors */}
-                  <td className="px-3 py-2">
-                    {row.errors.length > 0 ? (
-                      <div className="flex flex-col gap-0.5">
-                        {row.errors.map((err, i) => (
-                          <span
-                            key={i}
-                            className="text-[11px] text-red-500 leading-snug"
+                        <td className="px-3 py-2">
+                          <select
+                            value={rule.tierName}
+                            onChange={(e) => {
+                              const selectedName = e.target.value;
+                              onUpdateTierOverride(idx, "tierName", selectedName);
+                            }}
+                            className="rounded border border-purple-200 bg-purple-50/50 px-2 py-1 text-[11.5px] font-medium text-purple-800 outline-none focus:border-[#E31E24] cursor-pointer"
                           >
-                            • {err}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-emerald-500">
-                        <CheckCircle2 size={14} />
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {filteredRows.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={10}
-                    className="px-6 py-12 text-center text-[13px] text-[#9CA3AF]"
-                  >
-                    No rows to display
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Toolbar */}
-        {filteredRows.length > 0 && (
-          <div className="shrink-0 flex flex-wrap items-center justify-between border-t border-[#E5E7EB] bg-[#F9FAFB] px-6 py-2.5 text-[12px] text-[#6B7280]">
-            <div className="flex items-center gap-3">
-              <span>
-                Showing <strong className="text-[#1A1A1A]">{startIndex + 1}</strong> to{" "}
-                <strong className="text-[#1A1A1A]">{endIndex}</strong> of{" "}
-                <strong className="text-[#1A1A1A]">{filteredRows.length.toLocaleString()}</strong> rows
-              </span>
-              <div className="flex items-center gap-1.5 pl-3 border-l border-[#E5E7EB]">
-                <span className="text-[11px]">Rows per page:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    onPageSizeChange(Number(e.target.value));
-                    onPageChange(1);
-                  }}
-                  className="rounded border border-[#D1D5DB] bg-white px-2 py-0.5 text-[11px] font-medium text-[#1A1A1A] outline-none cursor-pointer"
-                >
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={200}>200</option>
-                  <option value={500}>500</option>
-                </select>
+                            {(tiers || []).map((t: any) => (
+                              <option key={t.id} value={t.name}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <CountryDropdown
+                            value={rule.country || "ALL"}
+                            onChange={(next) => onUpdateTierOverride(idx, "country", next)}
+                            countries={countries}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <select
+                            value={rule.mode}
+                            onChange={(e) => onUpdateTierOverride(idx, "mode", e.target.value as any)}
+                            className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 outline-none focus:border-[#E31E24] cursor-pointer"
+                          >
+                            <option value="PERCENTAGE">% Discount</option>
+                            <option value="FIXED_PRICE">Fixed Price</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={rule.value}
+                            onChange={(e) => onUpdateTierOverride(idx, "value", parseFloat(e.target.value) || 0)}
+                            className="w-24 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          {rule.errors && rule.errors.length > 0 ? (
+                            <span className="text-[11px] text-red-500">• {rule.errors.join(", ")}</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                              <CheckCircle2 size={13} /> Ready to Apply
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => onDeleteTierOverride(idx)}
+                            className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Delete rule"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            ) : (
+              !showAddTierForm && (
+                <div className="rounded-xl border border-dashed border-[#D1D5DB] p-8 text-center bg-[#FAFAFA]">
+                  <FileSpreadsheet className="mx-auto h-10 w-10 text-gray-400 mb-2" />
+                  <h5 className="text-[14px] font-bold text-[#1A1A1A]">
+                    No Tier Override Rules Specified
+                  </h5>
+                  <p className="text-[12px] text-[#6B7280] max-w-md mx-auto mt-1">
+                    The <code>Tier_Overrides</code> sheet was left empty or not included in your upload. This is 100% optional. Standard variant prices will apply. You can add override rules anytime using the button above.
+                  </p>
+                </div>
+              )
+            )}
+          </div>
+        )}
+
+        {/* ── Tab 3: MOQ Overrides ── */}
+        {activeTab === "moqOverrides" && (
+          <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+            {/* Header / Info bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
+              <div>
+                <h4 className="text-[13.5px] font-bold text-[#1A1A1A]">
+                  MOQ Volume Pricing Overrides (Sheet: MOQ_Overrides)
+                </h4>
+                <p className="text-[12px] text-[#6B7280] mt-0.5">
+                  Optional: Set volume-based tiered discounts (e.g. Min 50 qty → 10% off) for specific countries.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddMoqForm(!showAddMoqForm);
+                  setMoqFormError("");
+                }}
+                className="flex items-center gap-1.5 rounded-md bg-[#1A1A1A] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                {showAddMoqForm ? "Hide Form" : "Add MOQ Rule Directly"}
+              </button>
             </div>
 
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onPageChange(safeCurrentPage - 1)}
-                  disabled={safeCurrentPage <= 1}
-                  className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                >
-                  Previous
-                </button>
-                <span className="text-[11px] font-medium text-[#374151]">
-                  Page {safeCurrentPage} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onPageChange(safeCurrentPage + 1)}
-                  disabled={safeCurrentPage >= totalPages}
-                  className="rounded border border-[#D1D5DB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                >
-                  Next
-                </button>
+            {/* Inline Direct Rule Form */}
+            {showAddMoqForm && (
+              <div className="rounded-lg border-2 border-red-100 bg-white p-4 shadow-sm space-y-3">
+                <div className="text-[13px] font-bold text-[#1A1A1A]">
+                  Add New MOQ Volume Pricing Rule
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">
+                      Variant SKU
+                    </label>
+                    <select
+                      value={moqSkuDraft}
+                      onChange={(e) => setMoqSkuDraft(e.target.value)}
+                      className="w-full rounded-md border border-[#D1D5DB] bg-white px-3 py-2 text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                    >
+                      <option value="">Select Variant...</option>
+                      <option value="ALL">Apply to All Variants</option>
+                      {uniqueSkus.filter((u) => u.sku !== "ALL").map((u) => (
+                        <option key={u.sku} value={u.sku}>
+                          {u.sku} ({u.title})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="min-w-0">
+                    <AdminMultiSelect
+                      label="Country"
+                      options={countryMultiSelectOptions}
+                      value={moqCountriesDraft}
+                      onChange={setMoqCountriesDraft}
+                      placeholder="Select countries (or ALL)..."
+                      selectAllLabel="Select All Countries"
+                    />
+                  </div>
+
+                  <div>
+                    <AdminInput
+                      label="Min Quantity"
+                      type="number"
+                      min={1}
+                      value={moqMinQtyDraft}
+                      onChange={(e) => setMoqMinQtyDraft(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <AdminInput
+                      label="Max Quantity"
+                      type="number"
+                      min={1}
+                      placeholder="None"
+                      value={moqMaxQtyDraft}
+                      onChange={(e) => setMoqMaxQtyDraft(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <AdminSelect
+                      label="Mode"
+                      value={moqModeDraft}
+                      onChange={(e) => setMoqModeDraft(e.target.value as any)}
+                      options={[
+                        { value: "PERCENTAGE", label: "% Discount" },
+                        { value: "FIXED_PRICE", label: "Fixed Price" },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <AdminInput
+                      label={moqModeDraft === "PERCENTAGE" ? "Discount %" : "Fixed Price ($)"}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="e.g. 10"
+                      value={moqValueDraft}
+                      onChange={(e) => setMoqValueDraft(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {moqFormError && (
+                  <p className="text-[11.5px] text-red-500 font-medium">
+                    ⚠️ {moqFormError}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddMoqForm(false);
+                      setMoqFormError("");
+                    }}
+                    className="rounded-md border border-[#E5E7EB] px-3 py-1.5 text-[12px] font-medium text-[#6B7280] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveMoqRule}
+                    className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer"
+                  >
+                    Save Rule
+                  </button>
+                </div>
               </div>
+            )}
+
+            {/* Table or Empty State */}
+            {moqOverrides.length > 0 ? (
+              <div className="rounded-lg border border-[#E5E7EB] overflow-hidden bg-white">
+                <table className="w-full text-[12px]">
+                  <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-12">#</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[140px]">Variant SKU</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[135px]">Country</th>
+                      <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-24">Min Qty</th>
+                      <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-24">Max Qty</th>
+                      <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Mode</th>
+                      <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-28">Discount / Price</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider min-w-[150px]">Status</th>
+                      <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider w-16">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F3F4F6]">
+                    {moqOverrides.map((rule, idx) => (
+                      <tr key={idx} className="hover:bg-[#F9FAFB] transition-colors">
+                        <td className="px-3 py-2 text-[#9CA3AF] font-mono">{idx + 1}</td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={rule.variantSku || "ALL"}
+                            onChange={(e) => onUpdateMoqOverride(idx, "variantSku", e.target.value)}
+                            className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11.5px] font-mono text-[#1A1A1A] outline-none focus:border-[#E31E24] cursor-pointer max-w-[170px]"
+                          >
+                            {uniqueSkus.map((u) => (
+                              <option key={u.sku} value={u.sku}>
+                                {u.sku === "ALL" ? "All Variants (Product Default)" : `${u.sku} (${u.title})`}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <CountryDropdown
+                            value={rule.country || "ALL"}
+                            onChange={(next) => onUpdateMoqOverride(idx, "country", next)}
+                            countries={countries}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            min={1}
+                            value={rule.minQuantity}
+                            onChange={(e) => onUpdateMoqOverride(idx, "minQuantity", parseInt(e.target.value) || 1)}
+                            className="w-20 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            min={1}
+                            placeholder="None"
+                            value={rule.maxQuantity ?? ""}
+                            onChange={(e) => onUpdateMoqOverride(idx, "maxQuantity", e.target.value ? parseInt(e.target.value) : null)}
+                            className="w-20 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <select
+                            value={rule.mode}
+                            onChange={(e) => onUpdateMoqOverride(idx, "mode", e.target.value as any)}
+                            className="rounded border border-[#D1D5DB] bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 outline-none focus:border-[#E31E24] cursor-pointer"
+                          >
+                            <option value="PERCENTAGE">% Discount</option>
+                            <option value="FIXED_PRICE">Fixed Price</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={rule.value}
+                            onChange={(e) => onUpdateMoqOverride(idx, "value", parseFloat(e.target.value) || 0)}
+                            className="w-24 rounded border border-[#D1D5DB] bg-white px-2 py-1 text-right text-[11.5px] font-semibold text-[#1A1A1A] outline-none focus:border-[#E31E24]"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          {rule.errors && rule.errors.length > 0 ? (
+                            <span className="text-[11px] text-red-500">• {rule.errors.join(", ")}</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                              <CheckCircle2 size={13} /> Ready to Apply
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => onDeleteMoqOverride(idx)}
+                            className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Delete rule"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              !showAddMoqForm && (
+                <div className="rounded-xl border border-dashed border-[#D1D5DB] p-8 text-center bg-[#FAFAFA]">
+                  <FileSpreadsheet className="mx-auto h-10 w-10 text-gray-400 mb-2" />
+                  <h5 className="text-[14px] font-bold text-[#1A1A1A]">
+                    No MOQ Override Rules Specified
+                  </h5>
+                  <p className="text-[12px] text-[#6B7280] max-w-md mx-auto mt-1">
+                    The <code>MOQ_Overrides</code> sheet was left empty or not included in your upload. This is 100% optional. Standard variant prices and minimum order quantities will apply. You can add volume discount rules anytime using the button above.
+                  </p>
+                </div>
+              )
             )}
           </div>
         )}
@@ -1332,17 +2373,34 @@ function PreviewStep({
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] transition-colors"
+          className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] transition-colors cursor-pointer"
           id="bulk-import-back"
         >
           <ArrowLeft size={14} />
           Back
         </button>
+
+        <div className="hidden sm:flex items-center gap-3 text-[12px] text-[#6B7280]">
+          <span>
+            <strong className="text-[#1A1A1A]">{selectedValidCount}</strong> valid variants selected
+          </span>
+          {tierOverrides.length > 0 && (
+            <span className="text-purple-700 font-medium bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
+              +{tierOverrides.length} tier rules
+            </span>
+          )}
+          {moqOverrides.length > 0 && (
+            <span className="text-blue-700 font-medium bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+              +{moqOverrides.length} MOQ rules
+            </span>
+          )}
+        </div>
+
         <button
           type="button"
           onClick={onExecute}
           disabled={selectedValidCount === 0}
-          className="flex items-center gap-2 rounded-md bg-[#E31E24] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 rounded-md bg-[#E31E24] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           id="bulk-import-execute-btn"
         >
           Import {selectedValidCount} Variant{selectedValidCount !== 1 ? "s" : ""}

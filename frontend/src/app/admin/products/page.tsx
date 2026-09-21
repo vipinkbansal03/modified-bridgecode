@@ -121,6 +121,17 @@ const productExpectedColumns = [
   { name: "imageUrl", hint: "Direct image URL or comma-separated image URLs" },
   { name: "brand", hint: "Brand name, defaults to Modern Orthodontics" },
   { name: "status", hint: "ACTIVE, INACTIVE, DRAFT, ARCHIVED" },
+  { name: "stock", hint: "Product base inventory quantity" },
+  { name: "lowStock", hint: "Low stock alert threshold (default: 10)" },
+  { name: "price", hint: "Base selling price ($)" },
+  { name: "mrp", hint: "Maximum retail price ($)" },
+  { name: "dealerPrice", hint: "Base price for Dealer role ($)" },
+  { name: "doctorPrice", hint: "Base price for Doctor / Retailer role ($)" },
+  { name: "weight", hint: "Package weight in kg (e.g. 0.5)" },
+  { name: "dimensions", hint: "Package dimensions L x W x H in cm (e.g. 30 x 20 x 10)" },
+  { name: "fragile", hint: "TRUE or FALSE" },
+  { name: "hazardous", hint: "TRUE or FALSE" },
+  { name: "shippingClass", hint: "Shipping class (e.g. Standard)" },
   { name: "countryCodes", hint: "All countries (ALL) or comma-separated country codes, e.g. IN, US, GB" },
 ];
 
@@ -264,19 +275,47 @@ export default function AdminProductsPage() {
   }, [categories]);
 
   const productWizardColumns: WizardColumnDef[] = useMemo(() => [
-    { key: "title", header: "Title", required: true, minWidth: "200px" },
-    { key: "sku", header: "SKU", minWidth: "140px" },
-    { key: "productCode", header: "Product Code", minWidth: "140px" },
+    { key: "title", header: "Title", required: true, minWidth: "190px" },
+    { key: "sku", header: "SKU", minWidth: "130px" },
+    { key: "productCode", header: "Product Code", minWidth: "130px" },
     {
       key: "categoryName",
       header: "Category",
       required: true,
       type: "select",
       options: categoryOptions,
-      minWidth: "160px",
+      minWidth: "150px",
     },
-    { key: "imageUrl", header: "Image URL", minWidth: "180px", placeholder: "https://..." },
-    { key: "brand", header: "Brand", minWidth: "130px" },
+    { key: "stock", header: "Stock", type: "number", minWidth: "90px", placeholder: "0" },
+    { key: "lowStock", header: "Low Stock", type: "number", minWidth: "95px", placeholder: "10" },
+    { key: "price", header: "Price ($)", type: "number", minWidth: "100px", placeholder: "0.00" },
+    { key: "mrp", header: "MRP ($)", type: "number", minWidth: "100px", placeholder: "0.00" },
+    { key: "dealerPrice", header: "Dealer ($)", type: "number", minWidth: "100px", placeholder: "—" },
+    { key: "doctorPrice", header: "Doctor ($)", type: "number", minWidth: "100px", placeholder: "—" },
+    { key: "weight", header: "Weight (kg)", type: "number", minWidth: "100px", placeholder: "0.0" },
+    { key: "dimensions", header: "Dimensions", minWidth: "120px", placeholder: "L x W x H" },
+    {
+      key: "fragile",
+      header: "Fragile",
+      type: "select",
+      options: [
+        { label: "No", value: "false" },
+        { label: "Yes", value: "true" },
+      ],
+      minWidth: "90px",
+    },
+    {
+      key: "hazardous",
+      header: "Hazardous",
+      type: "select",
+      options: [
+        { label: "No", value: "false" },
+        { label: "Yes", value: "true" },
+      ],
+      minWidth: "100px",
+    },
+    { key: "imageUrl", header: "Image URL", minWidth: "160px", placeholder: "https://..." },
+    { key: "brand", header: "Brand", minWidth: "120px" },
     {
       key: "status",
       header: "Status",
@@ -287,17 +326,18 @@ export default function AdminProductsPage() {
         { label: "Draft", value: "DRAFT" },
         { label: "Archived", value: "ARCHIVED" },
       ],
-      minWidth: "120px",
+      minWidth: "110px",
     },
     {
       key: "countryCodes",
       header: "Countries",
       type: "multiselect",
       options: wizardCountryOptions,
-      minWidth: "160px",
+      minWidth: "150px",
       placeholder: "All countries or IN, US...",
     },
   ], [categoryOptions, wizardCountryOptions]);
+
   const { data: warehouses = [] } = useAdminWarehouses({ limit: 30 });
   const { data: collectionsData } = useAdminCollections({ limit: 200 });
   const deleteMutation = useDeleteProduct();
@@ -1033,7 +1073,7 @@ export default function AdminProductsPage() {
         open={importOpen}
         onClose={() => setImportOpen(false)}
         title="Import Products Excel"
-        subtitle="Upload an .xlsx or .csv file to bulk create or update catalog products with live preview & direct inline editing."
+        subtitle="Upload an .xlsx or .csv file to bulk create or update catalog products. Supports Multi-Sheet template (Sheet 1: Products, Sheet 2: Tier_Pricing, Sheet 3: MOQ_Pricing)."
         entityName="products"
         columns={productWizardColumns}
         expectedColumns={productExpectedColumns}
@@ -1042,8 +1082,10 @@ export default function AdminProductsPage() {
         previewEndpoint="/products/import/preview"
         executeEndpoint="/products/import"
         onSuccess={(result) => {
+          const tierText = result?.tierRulesApplied ? `, ${result.tierRulesApplied} tier rules` : "";
+          const moqText = result?.moqRulesApplied ? `, ${result.moqRulesApplied} MOQ rules` : "";
           showToast(
-            `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated.`,
+            `Import complete: ${result?.created ?? 0} created, ${result?.updated ?? 0} updated${tierText}${moqText}.`,
             "success"
           );
           refetch();

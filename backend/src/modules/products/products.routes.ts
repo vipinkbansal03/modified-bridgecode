@@ -16,6 +16,9 @@ router.get("/sample-template", requirePermission("products.view", "products.crea
 router.post("/import/preview", requirePermission("products.create"), upload.single("file"), C.previewImport);
 router.get("/variants", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariants);
 router.post("/variants/bulk/permanent", requirePermission("products.delete", "products.manage"), C.bulkPermanentDeleteVariants);
+router.get("/attribute-mappings/sample-template", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.downloadCatalogAttributeMappingsSampleTemplate);
+router.post("/attribute-mappings/preview", requirePermission("products.update", "products.create"), upload.single("file"), C.previewCatalogAttributeMappingsImport);
+router.post("/attribute-mappings/import", requirePermission("products.update", "products.create"), upload.single("file"), C.importCatalogAttributeMappingsSpreadsheet);
 router.get("/:id/countries", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listCountries);
 router.put("/:id/countries", requirePermission("products.update"), C.updateCountries);
 router.get("/:id/tier-pricing", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listTierPricing);
@@ -55,6 +58,7 @@ router.put("/:id/variants/bulk", requirePermission("products.update"), C.bulkUpd
 router.get("/:id/variants/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportProductVariants);
 router.get("/:id/variants/prices/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportVariantCountryPrices);
 router.post("/:id/variants/prices/import", requirePermission("products.update"), upload.single("file"), C.importVariantCountryPrices);
+router.get("/:id/variants/sample-template", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.downloadProductVariantsSampleTemplate);
 router.post("/:id/variants/import-preview", requirePermission("products.update"), upload.single("file"), C.previewVariantsImport);
 router.post("/:id/variants/import-execute", requirePermission("products.update"), C.executeVariantsImport);
 router.post("/:id/variants", requirePermission("products.update"), C.createVariant);

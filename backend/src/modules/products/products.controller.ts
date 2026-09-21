@@ -244,6 +244,58 @@ export const importProductAttributesSpreadsheet = asyncHandler(async (req: AuthR
   }
 });
 
+export const downloadCatalogAttributeMappingsSampleTemplate = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const buffer = ProductService.generateSampleCatalogAttributeMappingsTemplate();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="catalog-attribute-mappings-template.xlsx"');
+  return res.status(200).send(buffer);
+});
+
+export const previewCatalogAttributeMappingsImport = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    return ApiResponse.success(res, "No file uploaded.", {
+      totalRows: 0,
+      validRows: 0,
+      invalidRows: 0,
+      issues: ["No spreadsheet file provided."],
+      duplicateWarnings: [],
+      sampleRows: [],
+    });
+  }
+
+  try {
+    const report = await ProductService.previewCatalogAttributeMappingsImport(file.path);
+    return ApiResponse.success(res, "Catalog attribute mappings import preview generated.", report);
+  } finally {
+    removeTempFile(file.path);
+  }
+});
+
+export const importCatalogAttributeMappingsSpreadsheet = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const rows = req.body?.rows;
+  if (Array.isArray(rows) && rows.length > 0) {
+    const result = await ProductService.importCatalogAttributeMappingsSpreadsheet(rows);
+    return ApiResponse.success(res, "Catalog attribute mappings imported successfully.", result);
+  }
+
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    return ApiResponse.success(res, "No file uploaded.", {
+      created: 0,
+      updated: 0,
+      totalProcessed: 0,
+    });
+  }
+
+  try {
+    const result = await ProductService.importCatalogAttributeMappingsSpreadsheet(file.path);
+    return ApiResponse.success(res, "Catalog attribute mappings imported successfully.", result);
+  } finally {
+    removeTempFile(file.path);
+  }
+});
+
 export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
   const variants = await ProductService.generateVariants(req.params.id as string, req.body);
   const { newCount, restoredCount, totalCount } = variants as any;
@@ -450,8 +502,15 @@ export const previewVariantsImport = asyncHandler(async (req: AuthRequest, res: 
 });
 
 export const executeVariantsImport = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const result = await ProductService.executeVariantsImport(req.params.id as string, req.body.rows);
+  const result = await ProductService.executeVariantsImport(req.params.id as string, req.body);
   return ApiResponse.success(res, "Variants imported successfully.", result);
+});
+
+export const downloadProductVariantsSampleTemplate = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const buffer = await ProductService.generateProductVariantsMultiSheetTemplate(req.params.id as string);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="product-variants-template.xlsx"');
+  return res.status(200).send(buffer);
 });
 
 export const exportProductVariants = asyncHandler(async (req: AuthRequest, res: Response) => {

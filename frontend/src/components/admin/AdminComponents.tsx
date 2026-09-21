@@ -1695,6 +1695,8 @@ interface AdminMultiSelectProps {
   placeholder?: string;
   selectAllLabel?: string;
   className?: string;
+  containerClassName?: string;
+  displayValue?: string;
   required?: boolean;
   id?: string;
   onBlur?: () => void;
@@ -1709,6 +1711,8 @@ export function AdminMultiSelect({
   onChange,
   placeholder = "Select options...",
   className,
+  containerClassName,
+  displayValue,
   selectAllLabel = "Select All",
   required,
   id,
@@ -1742,8 +1746,16 @@ export function AdminMultiSelect({
       160,
       Math.min(320, openUp ? spaceAbove : spaceBelow),
     );
-    const width = rect.width;
-    const left = rect.left;
+    const longestLabel = options.reduce(
+      (max, option) => Math.max(max, (option.label || "").length),
+      0,
+    );
+    const contentMinWidth = Math.min(320, Math.max(200, longestLabel * 8 + 48));
+    const width = Math.max(rect.width, contentMinWidth);
+    const left = Math.max(
+      edge,
+      Math.min(rect.left, viewportWidth - width - edge),
+    );
 
     if (openUp) {
       const bottom = viewportHeight - rect.top + gap;
@@ -1752,7 +1764,7 @@ export function AdminMultiSelect({
       const top = rect.bottom + gap;
       setMenuStyle({ top, left, width, maxHeight });
     }
-  }, []);
+  }, [options]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -1818,7 +1830,9 @@ export function AdminMultiSelect({
   };
 
   const displayedText =
-    currentValues.length > 0
+    displayValue !== undefined
+      ? displayValue
+      : currentValues.length > 0
       ? options
           .filter((o) => currentValues.includes(o.value))
           .map((o) => o.label)
@@ -1828,7 +1842,14 @@ export function AdminMultiSelect({
   const allSelected = options.every((o) => currentValues.includes(o.value));
 
   return (
-    <div ref={rootRef} className="relative w-full min-w-[10rem] space-y-1.5">
+    <div
+      ref={rootRef}
+      className={cn(
+        "relative w-full min-w-[10rem]",
+        label ? "space-y-1.5" : "",
+        containerClassName
+      )}
+    >
       {label && (
         <label className="block text-[13px] font-medium text-[#1A1A1A]">
           {label}
@@ -1850,7 +1871,7 @@ export function AdminMultiSelect({
         <span
           className={cn(
             "truncate",
-            currentValues.length === 0 && "text-[#9A9A9A]",
+            currentValues.length === 0 && !displayValue && "text-[#9A9A9A]",
           )}
         >
           {displayedText}

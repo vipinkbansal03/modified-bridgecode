@@ -976,12 +976,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [modalTierRuleDraft, setModalTierRuleDraft] = useState({
     tierId: "",
     countryId: "",
+    countryIds: [] as string[],
     mode: "discount" as "discount" | "fixed",
     discountPercent: "",
     fixedPrice: "",
   });
   const [modalMoqRuleDraft, setModalMoqRuleDraft] = useState({
     countryId: "",
+    countryIds: [] as string[],
     minQuantity: "",
     maxQuantity: "",
     mode: "discount" as "discount" | "fixed",
@@ -2793,6 +2795,24 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const countryRows = useMemo(() => countries as { id: string; name: string; code: string }[], [countries]);
   const tierPricingRows = useMemo(() => tierPricingRules as PricingRuleRow[], [tierPricingRules]);
   const moqPricingRows = useMemo(() => moqPricingRules as PricingRuleRow[], [moqPricingRules]);
+  const variantModalCountryOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; code: string }>();
+    (variantCountries as CountryAvailability[]).forEach((c) => {
+      if (c.enabled) map.set(c.id, { id: c.id, name: c.name, code: c.code });
+    });
+    (productCountries as CountryAvailability[]).forEach((c) => {
+      if (c.enabled) map.set(c.id, { id: c.id, name: c.name, code: c.code });
+    });
+    if (map.size === 0) {
+      (countries as CountryAvailability[]).filter((c) => c.status === "ACTIVE").forEach((c) => {
+        map.set(c.id, { id: c.id, name: c.name, code: c.code });
+      });
+    }
+    return Array.from(map.values()).map((c) => ({
+      value: c.id,
+      label: `${c.name} (${c.code})`,
+    }));
+  }, [variantCountries, productCountries, countries]);
 
   const resetTierRuleDraft = () => {
     setTierRuleDraft({
@@ -4647,6 +4667,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       Object.fromEntries((variant.attributeValues ?? []).map((value) => [value.attributeId, value.attributeValueId]))
     );
     setEditVariantSubTab("general");
+    setModalTierRuleDraft({ tierId: "", countryId: "", countryIds: [], mode: "discount", discountPercent: "", fixedPrice: "" });
+    setModalMoqRuleDraft({ countryId: "", countryIds: [], minQuantity: "", maxQuantity: "", mode: "discount", discountPercent: "", fixedPrice: "" });
     const pricesMap: Record<string, any> = {};
     (variant.prices ?? []).forEach((price: any) => {
       const inv = (variant.inventories ?? []).find((i: any) => i.countryId === price.countryId);
@@ -9967,7 +9989,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
                 {(() => {
                   const countries = (variantCountries as CountryAvailability[]).filter(
-                    (c) => c.enabled && (productCountries as CountryAvailability[]).find((pc) => pc.id === c.id)?.enabled
+                    (c) => c.enabled || (productCountries as CountryAvailability[]).find((pc) => pc.id === c.id)?.enabled
                   );
                   if (countries.length === 0) {
                     return <p className="text-[13px] text-[#9A9A9A] py-4 text-center">No countries enabled for this product/variant. Enable them in Country Availability first.</p>;
@@ -10065,12 +10087,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       onChange={(e) => setModalTierRuleDraft((d) => ({ ...d, tierId: e.target.value }))}
                       options={[{ value: "", label: "Select tier" }, ...tierRows.map((t) => ({ value: t.id, label: t.name }))]}
                     />
-                    <AdminSelect
-                      label="Country"
-                      value={modalTierRuleDraft.countryId}
-                      onChange={(e) => setModalTierRuleDraft((d) => ({ ...d, countryId: e.target.value }))}
-                      options={[{ value: "", label: "Select country" }, ...(productCountries as CountryAvailability[]).filter((c) => c.enabled).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))]}
-                    />
+                    <div className="min-w-0">
+                      <AdminMultiSelect
+                        label="Country"
+                        options={variantModalCountryOptions}
+                        value={modalTierRuleDraft.countryIds}
+                        onChange={(next) => setModalTierRuleDraft((d) => ({ ...d, countryIds: next }))}
+                        placeholder="Select countries..."
+                        selectAllLabel="Select All"
+                      />
+                    </div>
                     <AdminSelect
                       label="Mode"
                       value={modalTierRuleDraft.mode}
@@ -10089,22 +10115,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <button
                         type="button"
                         onClick={async () => {
-                          if (!modalTierRuleDraft.tierId || !modalTierRuleDraft.countryId) {
-                            showToast("Select Tier and Country.", "error");
+                          const targetCountryIds = modalTierRuleDraft.countryIds.length > 0
+                            ? modalTierRuleDraft.countryIds
+                            : modalTierRuleDraft.countryId ? [modalTierRuleDraft.countryId] : [];
+                          if (!modalTierRuleDraft.tierId || targetCountryIds.length === 0) {
+                            showToast("Select Tier and at least one Country.", "error");
                             return;
                           }
                           try {
-                            const payload = {
-                              productId,
-                              variantId: editingVariant.id,
-                              tierId: modalTierRuleDraft.tierId,
-                              countryId: modalTierRuleDraft.countryId,
-                              discountPercent: modalTierRuleDraft.mode === "discount" ? Number(modalTierRuleDraft.discountPercent) || 0 : null,
-                              fixedPrice: modalTierRuleDraft.mode === "fixed" ? Number(modalTierRuleDraft.fixedPrice) || 0 : null,
-                            };
-                            await createTierPricing.mutateAsync(payload);
-                            showToast("Tier pricing rule added.");
-                            setModalTierRuleDraft({ tierId: "", countryId: "", mode: "discount", discountPercent: "", fixedPrice: "" });
+                            await Promise.all(
+                              targetCountryIds.map((cId) =>
+                                createTierPricing.mutateAsync({
+                                  productId,
+                                  variantId: editingVariant.id,
+                                  tierId: modalTierRuleDraft.tierId,
+                                  countryId: cId,
+                                  discountPercent: modalTierRuleDraft.mode === "discount" ? Number(modalTierRuleDraft.discountPercent) || 0 : null,
+                                  fixedPrice: modalTierRuleDraft.mode === "fixed" ? Number(modalTierRuleDraft.fixedPrice) || 0 : null,
+                                })
+                              )
+                            );
+                            showToast(`Tier pricing rule added for ${targetCountryIds.length} country(s).`);
+                            setModalTierRuleDraft({ tierId: "", countryId: "", countryIds: [], mode: "discount", discountPercent: "", fixedPrice: "" });
                           } catch {
                             showToast("Failed to add rule.", "error");
                           }
@@ -10155,13 +10187,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <div className="space-y-4">
                 <div className="rounded-lg border border-[#E6E6E6] bg-white p-4">
                   <div className="mb-3 text-[13.5px] font-semibold text-[#1A1A1A]">Add MOQ Override Rule</div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <AdminSelect
-                      label="Country"
-                      value={modalMoqRuleDraft.countryId}
-                      onChange={(e) => setModalMoqRuleDraft((d) => ({ ...d, countryId: e.target.value }))}
-                      options={[{ value: "", label: "Select country" }, ...(productCountries as CountryAvailability[]).filter((c) => c.enabled).map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))]}
-                    />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+                    <div className="min-w-0">
+                      <AdminMultiSelect
+                        label="Country"
+                        options={variantModalCountryOptions}
+                        value={modalMoqRuleDraft.countryIds}
+                        onChange={(next) => setModalMoqRuleDraft((d) => ({ ...d, countryIds: next }))}
+                        placeholder="Select countries..."
+                        selectAllLabel="Select All"
+                      />
+                    </div>
                     <AdminInput
                       label="Min Qty"
                       type="number"
@@ -10195,23 +10231,29 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <button
                         type="button"
                         onClick={async () => {
-                          if (!modalMoqRuleDraft.countryId || !modalMoqRuleDraft.minQuantity) {
-                            showToast("Select Country and Min Qty.", "error");
+                          const targetCountryIds = modalMoqRuleDraft.countryIds.length > 0
+                            ? modalMoqRuleDraft.countryIds
+                            : modalMoqRuleDraft.countryId ? [modalMoqRuleDraft.countryId] : [];
+                          if (targetCountryIds.length === 0 || !modalMoqRuleDraft.minQuantity) {
+                            showToast("Select at least one Country and Min Qty.", "error");
                             return;
                           }
                           try {
-                            const payload = {
-                              productId,
-                              variantId: editingVariant.id,
-                              countryId: modalMoqRuleDraft.countryId,
-                              minQuantity: Number(modalMoqRuleDraft.minQuantity) || 1,
-                              maxQuantity: modalMoqRuleDraft.maxQuantity ? Number(modalMoqRuleDraft.maxQuantity) : null,
-                              discountPercent: modalMoqRuleDraft.mode === "discount" ? Number(modalMoqRuleDraft.discountPercent) || 0 : null,
-                              fixedPrice: modalMoqRuleDraft.mode === "fixed" ? Number(modalMoqRuleDraft.fixedPrice) || 0 : null,
-                            };
-                            await createMoqPricing.mutateAsync(payload);
-                            showToast("MOQ pricing rule added.");
-                            setModalMoqRuleDraft({ countryId: "", minQuantity: "", maxQuantity: "", mode: "discount", discountPercent: "", fixedPrice: "" });
+                            await Promise.all(
+                              targetCountryIds.map((cId) =>
+                                createMoqPricing.mutateAsync({
+                                  productId,
+                                  variantId: editingVariant.id,
+                                  countryId: cId,
+                                  minQuantity: Number(modalMoqRuleDraft.minQuantity) || 1,
+                                  maxQuantity: modalMoqRuleDraft.maxQuantity ? Number(modalMoqRuleDraft.maxQuantity) : null,
+                                  discountPercent: modalMoqRuleDraft.mode === "discount" ? Number(modalMoqRuleDraft.discountPercent) || 0 : null,
+                                  fixedPrice: modalMoqRuleDraft.mode === "fixed" ? Number(modalMoqRuleDraft.fixedPrice) || 0 : null,
+                                })
+                              )
+                            );
+                            showToast(`MOQ pricing rule added for ${targetCountryIds.length} country(s).`);
+                            setModalMoqRuleDraft({ countryId: "", countryIds: [], minQuantity: "", maxQuantity: "", mode: "discount", discountPercent: "", fixedPrice: "" });
                           } catch {
                             showToast("Failed to add rule.", "error");
                           }
