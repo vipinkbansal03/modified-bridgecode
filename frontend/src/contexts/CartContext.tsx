@@ -21,6 +21,7 @@ export interface CartItem {
   productSlug: string;
   productTitle: string;
   variantTitle: string;
+  image?: string | null;
   sku: string | null;
   quantity: number;
   unitPrice: number;
@@ -384,34 +385,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const updateQuantity = (variantId: string, quantity: number) => {
+    if (quantity < 1) return;
     setItems((current) =>
-      quantity <= 0
-        ? current.filter((item) => item.variantId !== variantId)
-        : current.map((item) => {
-            if (item.variantId !== variantId) return item;
+      current.map((item) => {
+        if (item.variantId !== variantId) return item;
 
-            const available = item.availableStock;
-            const isOutOfStock =
-              Boolean(item.isOutOfStock) || (available !== undefined && available <= 0);
-            const isInsufficientStock =
-              available !== undefined && quantity > available;
+        const available = item.availableStock;
+        const isOutOfStock =
+          Boolean(item.isOutOfStock) || (available !== undefined && available <= 0);
+        const isInsufficientStock =
+          available !== undefined && quantity > available;
 
-            let stockErrorMessage: string | undefined = undefined;
-            if (isOutOfStock) {
-              const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
-              stockErrorMessage = `"${displayName}" is currently out of stock.`;
-            } else if (isInsufficientStock) {
-              const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
-              stockErrorMessage = `Only ${available} unit${available === 1 ? "" : "s"} available for "${displayName}".`;
-            }
+        let stockErrorMessage: string | undefined = undefined;
+        if (isOutOfStock) {
+          const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
+          stockErrorMessage = `"${displayName}" is currently out of stock.`;
+        } else if (isInsufficientStock) {
+          const displayName = `${item.productTitle}${item.variantTitle ? ` - ${item.variantTitle}` : ""}`;
+          stockErrorMessage = `Only ${available} unit${available === 1 ? "" : "s"} available for "${displayName}".`;
+        }
 
-            return {
-              ...item,
-              quantity,
-              isInsufficientStock,
-              stockErrorMessage,
-            };
-          }),
+        return {
+          ...item,
+          quantity,
+          isInsufficientStock,
+          stockErrorMessage,
+        };
+      }),
     );
   };
 

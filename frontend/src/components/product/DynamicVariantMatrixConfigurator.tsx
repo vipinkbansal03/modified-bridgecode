@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Layers3,
   ShoppingBag,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -21,6 +22,7 @@ import { useProductWarehouses } from "@/hooks/api/useProducts";
 import { WarehouseSelectorModal } from "./WarehouseSelectorModal";
 import { QuantityInput } from "./QuantityInput";
 import { StockBadge } from "./StockBadge";
+import { WishlistButton } from "./WishlistButton";
 import type {
   ApiAttribute,
   ApiAttributeValue,
@@ -677,7 +679,7 @@ export function DynamicVariantMatrixConfigurator({
     setFeedback(null);
   };
 
-  const handleAddSelectedToCart = (isBuyNow = false) => {
+  const handleAddSelectedToCart = () => {
     let items = buildCartItems(
       apiProduct,
       normalizedVariants,
@@ -717,17 +719,54 @@ export function DynamicVariantMatrixConfigurator({
     }
 
     addCartItems(items.map((item) => item.cart));
-    
-    if (isBuyNow) {
-      router.push("/checkout");
-    } else {
-      openCart();
-      setQuantityMap({});
-      setFeedback({
-        kind: "success",
-        message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to cart.`,
-      });
+    openCart();
+    setQuantityMap({});
+    setFeedback({
+      kind: "success",
+      message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to cart.`,
+    });
+  };
+
+  const handleContinueShopping = () => {
+    let items = buildCartItems(
+      apiProduct,
+      normalizedVariants,
+      quantityMap,
+      variantPriceMap,
+      warehouses || [],
+      previewPriceMap,
+      selectedWarehouse?.id,
+      selectedWarehouse?.name,
+      selectedWarehouse?.estimatedDeliveryDays,
+      selectedWarehouse?.isLocal,
+    );
+
+    if (!items.length && singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock) {
+      items = buildCartItems(
+        apiProduct,
+        normalizedVariants,
+        { [singleResolvedVariant.id]: dropdownQuantity },
+        variantPriceMap,
+        warehouses || [],
+        previewPriceMap,
+        selectedWarehouse?.id,
+        selectedWarehouse?.name,
+        selectedWarehouse?.estimatedDeliveryDays,
+        selectedWarehouse?.isLocal,
+      );
     }
+
+    if (items.length) {
+      addCartItems(items.map((item) => item.cart));
+      showToast({
+        title: "Added to Cart",
+        message: `${items.length} variant line${items.length === 1 ? "" : "s"} added to cart.`,
+        type: "success",
+      });
+      setQuantityMap({});
+    }
+
+    router.push("/products");
   };
 
   const handleAddSelectedToQuote = () => {
@@ -848,24 +887,30 @@ export function DynamicVariantMatrixConfigurator({
   if (!matrixEnabled) return null;
 
   return (
-    <section className="pt-16">
-      <div className="rounded-lg border border-line bg-white p-6 sm:p-7">
-        <div className="mb-6 flex flex-col gap-2 border-b border-line pb-5">
-          <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal leading-tight tracking-tight text-ink">
-            Order Multiple Variants In One Step
-          </h2>
-          <p className="max-w-[760px] text-[14.5px] leading-relaxed text-steel">
-            Use the matrix below to enter quantities across multiple variant
-            combinations, then add every selected line to cart or quote in one
-            action.
-          </p>
+    <section className="pt-8 sm:pt-8.5">
+      <div className="mb-8 rounded-2xl border-2 border-[#E31E24] bg-white p-4 sm:p-6 lg:p-8 shadow-sm transition-all duration-300">
+        <div className="mb-5 flex flex-col gap-4 border-b border-[#E5E7EB] pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-[720px]">
+            <span className="mb-2 inline-flex items-center gap-2 rounded-pill border border-red-200 bg-red-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E31E24]">
+              <Sparkles size={13} className="text-[#E31E24]" />
+              Matrix Product Configurator
+            </span>
+            <h2 className="text-[clamp(24px,2.6vw,30px)] font-bold leading-tight tracking-tight text-ink">
+              Order Multiple Variants In One Step
+            </h2>
+            <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-steel">
+              Use the matrix below to enter quantities across multiple variant
+              combinations, then add every selected line to cart or quote in one
+              action.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-6">
           <div className="min-w-0 space-y-5">
             {packageOptions.length > 1 && (
-              <div className="rounded-lg border border-line bg-offwhite p-2">
-                <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+              <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 shadow-2xs">
+                <p className="px-2 pb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">
                   Package
                 </p>
                 <div
@@ -880,7 +925,7 @@ export function DynamicVariantMatrixConfigurator({
                       role="tab"
                       aria-selected={selectedPackageId === pkg.id}
                       onClick={() => setSelectedPackageId(pkg.id)}
-                      className={`rounded-md px-5 py-2.5 text-[13px] font-semibold transition ${selectedPackageId === pkg.id ? "bg-brand text-white shadow-sm" : "border border-line bg-white text-ink hover:border-brand/40 hover:text-brand"}`}
+                      className={`rounded-lg px-5 py-2.5 text-[14px] font-bold transition cursor-pointer ${selectedPackageId === pkg.id ? "bg-brand text-white shadow-xs" : "border border-[#D1D5DB] bg-white text-[#111827] hover:border-brand hover:text-brand"}`}
                     >
                       {pkg.title}
                     </button>
@@ -903,13 +948,13 @@ export function DynamicVariantMatrixConfigurator({
                   return (
                     <label
                       key={attribute.id}
-                      className="block rounded-lg border border-line bg-offwhite p-4"
+                      className="block rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4 shadow-2xs transition-all hover:border-[#D1D5DB]"
                     >
                       <div className="mb-2 flex items-center justify-between">
-                        <span className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                        <span className="block text-[12px] font-bold uppercase tracking-[0.12em] text-[#4B5563]">
                           {attribute.name}
                         </span>
-                        <span className="rounded-pill border border-line bg-white px-2 py-0.5 text-[10px] font-semibold text-steel">
+                        <span className="rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#4B5563]">
                           {availableValues.length}{" "}
                           {availableValues.length === 1 ? "opt" : "opts"}
                         </span>
@@ -919,11 +964,11 @@ export function DynamicVariantMatrixConfigurator({
                         onChange={(event) =>
                           handleDropdownChange(attribute.id, event.target.value)
                         }
-                        className="w-full cursor-pointer rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-ink outline-none transition focus:border-brand"
+                        className="w-full cursor-pointer rounded-lg border border-[#D1D5DB] bg-white px-4 py-3 text-[14.5px] font-bold text-[#111827] shadow-2xs outline-none transition focus:border-brand focus:ring-1 focus:ring-brand"
                       >
-                        <option value="">Select {attribute.name}</option>
+                        <option value="" className="text-gray-500 font-normal">Select {attribute.name}</option>
                         {availableValues.map((value) => (
-                          <option key={value.id} value={value.id}>
+                          <option key={value.id} value={value.id} className="text-[#111827] font-semibold">
                             {value.value}
                           </option>
                         ))}
@@ -935,17 +980,17 @@ export function DynamicVariantMatrixConfigurator({
             )}
 
             {!allDropdownsSelected && dropdownAttributes.length > 0 && (
-              <div className="rounded-lg border border-dashed border-line bg-offwhite p-6 text-center text-[13.5px] text-steel">
+              <div className="rounded-xl border border-dashed border-[#D1D5DB] bg-[#F9FAFB] p-6 text-center text-[14px] font-medium text-[#6B7280]">
                 Please select an option in each dropdown above to view available variants and pricing.
               </div>
             )}
 
             {singleResolvedVariant && (
-              <div className="rounded-lg border border-brand/25 bg-[#FFFBFB] p-5 shadow-2xs">
+              <div className="rounded-xl border border-red-200 bg-[#FFFBFB] p-5 shadow-2xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-pill bg-brand px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                      <span className="rounded-full bg-brand px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white shadow-2xs">
                         Selected Variant
                       </span>
                       <StockBadge
@@ -953,17 +998,17 @@ export function DynamicVariantMatrixConfigurator({
                         available={singleResolvedAvailableStock}
                       />
                     </div>
-                    <h3 className="mt-1.5 text-[16px] font-bold text-ink">
+                    <h3 className="mt-1.5 text-[17px] font-bold text-[#111827]">
                       {singleResolvedVariant.title}
                     </h3>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {singleResolvedVariant.sku && (
-                        <span className="text-[12px] text-steel">
+                        <span className="text-[12.5px] font-medium text-[#6B7280]">
                           SKU: {singleResolvedVariant.sku}
                         </span>
                       )}
                       {selectedWarehouse && (
-                        <span className="rounded-pill border border-line bg-white px-2 py-0.5 text-[11px] text-steel">
+                        <span className="rounded-full border border-[#D1D5DB] bg-white px-2.5 py-0.5 text-[11.5px] font-semibold text-[#4B5563]">
                           Ships from: {selectedWarehouse.name}
                         </span>
                       )}
@@ -972,10 +1017,10 @@ export function DynamicVariantMatrixConfigurator({
 
                   <div className="flex flex-col sm:items-end gap-2">
                     <div className="sm:text-right">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-steel-2">
+                      <span className="text-[11.5px] font-bold uppercase tracking-wider text-[#6B7280]">
                         Unit Price
                       </span>
-                      <p className="text-[20px] font-bold text-ink">
+                      <p className="text-[22px] font-bold text-[#111827]">
                         {singleResolvedPrice && singleResolvedUnitPrice > 0
                           ? formatMoney(singleResolvedPrice.currencySymbol, singleResolvedUnitPrice)
                           : "Price Upon Request"}
@@ -983,7 +1028,7 @@ export function DynamicVariantMatrixConfigurator({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-semibold text-steel">Qty:</span>
+                      <span className="text-[13px] font-bold text-[#4B5563]">Qty:</span>
                       <QuantityInput
                         size="sm"
                         value={dropdownQuantity}
@@ -1000,25 +1045,25 @@ export function DynamicVariantMatrixConfigurator({
 
             {activeRowCombinations.length > 0 && activeColumnCombinations.length > 0 && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[13.5px] sm:text-[14px] font-bold uppercase tracking-[0.1em] text-[#111827]">
                     Matrix Grid (Size Combinations)
                   </span>
-                  <span className="text-[11.5px] text-steel">
+                  <span className="text-[12px] font-medium text-[#4B5563]">
                     Enter quantities directly in cells to order multiple sizes at once
                   </span>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-line bg-white shadow-xs">
+                <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-xs">
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left">
                       <thead>
-                        <tr className="border-b border-line bg-[#F8F9FA]">
-                          <th className="sticky left-0 z-20 border-r border-line bg-[#F1F3F5] px-2.5 py-2 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-ink">
+                        <tr className="border-b border-[#E5E7EB] bg-[#F8F9FA]">
+                          <th className="sticky left-0 z-20 border-r border-[#E5E7EB] bg-[#F1F3F5] px-3 py-2.5 text-left text-[12px] font-bold uppercase tracking-[0.06em] text-[#111827]">
                             <span className="text-brand">
                               {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
                             </span>
-                            <span className="mx-1 text-steel-2">/</span>
-                            <span className="text-steel">
+                            <span className="mx-1 text-[#9CA3AF]">/</span>
+                            <span className="text-[#4B5563]">
                               {xAxisAttributes.map((a) => a.name).join(" + ")}
                             </span>
                           </th>
@@ -1029,10 +1074,10 @@ export function DynamicVariantMatrixConfigurator({
                             return (
                               <th
                                 key={columnCombination.key}
-                                className="min-w-[80px] border-r border-line bg-[#F8F9FA] px-2 py-2 text-center text-[11px] font-bold text-ink last:border-r-0"
+                                className="min-w-[88px] border-r border-[#E5E7EB] bg-[#F8F9FA] px-2 py-2.5 text-center text-[12.5px] font-bold text-[#111827] last:border-r-0"
                               >
                                 <div className="inline-flex flex-col items-center">
-                                  <span className="rounded-md bg-red-50 px-2 py-1 text-[11px] font-bold text-brand border border-red-100/60 leading-tight">
+                                  <span className="rounded-md bg-red-50 px-2.5 py-1 text-[12px] font-bold text-brand border border-red-200/80 leading-tight">
                                     {headerText}
                                   </span>
                                 </div>
@@ -1045,9 +1090,9 @@ export function DynamicVariantMatrixConfigurator({
                         {activeRowCombinations.map((rowCombination) => (
                           <tr
                             key={rowCombination.key}
-                            className="border-b border-line hover:bg-slate-50/50 transition-colors last:border-b-0"
+                            className="border-b border-[#E5E7EB] hover:bg-slate-50/60 transition-colors last:border-b-0"
                           >
-                            <th className="sticky left-0 z-10 border-r border-line bg-[#F8F9FA] px-2.5 py-2 text-left font-bold text-ink text-[12px] whitespace-nowrap shadow-xs">
+                            <th className="sticky left-0 z-10 border-r border-[#E5E7EB] bg-[#F8F9FA] px-3.5 py-2.5 text-left font-bold text-[#111827] text-[13.5px] whitespace-nowrap shadow-xs">
                               {rowCombination.labels.map((l) => l.value.value).join(" • ") || "All"}
                             </th>
                             {activeColumnCombinations.map((columnCombination) => {
@@ -1082,13 +1127,13 @@ export function DynamicVariantMatrixConfigurator({
                               return (
                                 <td
                                   key={columnCombination.key}
-                                  className="align-middle border-r border-line px-1.5 py-1.5 text-center last:border-r-0"
+                                  className="align-middle border-r border-[#E5E7EB] px-2 py-2 text-center last:border-r-0"
                                 >
                                   {variant ? (
                                     <div
-                                      className={`mx-auto flex flex-col items-center justify-center rounded-md p-1 transition-all ${
+                                      className={`mx-auto flex flex-col items-center justify-center rounded-lg p-1.5 transition-all ${
                                         quantity > 0
-                                          ? "bg-red-50/70 ring-1 ring-brand/30"
+                                          ? "bg-red-50/90 ring-1.5 ring-brand/40 shadow-xs"
                                           : "bg-white"
                                       } ${outOfStock || isPor ? "opacity-60" : ""}`}
                                     >
@@ -1107,9 +1152,9 @@ export function DynamicVariantMatrixConfigurator({
                                         disabled={!variant}
                                       />
                                       <div className="mt-1.5 text-center">
-                                        <p className="text-[12px] font-bold text-ink">
+                                        <p className="text-[13px] font-bold text-[#111827]">
                                           {isPor ? (
-                                            <span className="text-[11.5px] font-semibold text-brand">
+                                            <span className="text-[12px] font-bold text-brand">
                                               Price Upon Request
                                             </span>
                                           ) : price && displayUnitPrice != null ? (
@@ -1122,7 +1167,7 @@ export function DynamicVariantMatrixConfigurator({
                                           )}
                                         </p>
                                         {outOfStock ? (
-                                          <span className="text-[11px] font-semibold text-red-500">
+                                          <span className="text-[11px] font-bold text-red-600">
                                             Out of stock
                                           </span>
                                         ) : null}
@@ -1163,16 +1208,16 @@ export function DynamicVariantMatrixConfigurator({
 
             return (
               <div className="grid gap-6 md:grid-cols-2 items-start">
-                <div className="rounded-lg border border-line bg-offwhite p-5">
+                <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-5 shadow-2xs">
                   <div className="mb-4 flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-white text-brand">
-                      <Layers3 size={18} />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white text-brand shadow-2xs">
+                      <Layers3 size={19} />
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                      <p className="text-[11.5px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">
                         Selected Variants
                       </p>
-                      <p className="text-[14px] text-steel">
+                      <p className="text-[14.5px] font-bold text-[#111827]">
                         {selectedEntries.length
                           ? `${selectedEntries.length} line${selectedEntries.length === 1 ? "" : "s"} ready`
                           : singleResolvedVariant && dropdownQuantity > 0
@@ -1187,19 +1232,21 @@ export function DynamicVariantMatrixConfigurator({
                       {selectedEntries.map((entry) => (
                         <div
                           key={entry.variant.id}
-                          className="rounded-lg border border-line bg-white p-4"
+                          className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-2xs"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <p className="text-[13.5px] font-semibold text-ink">
+                              <p className="text-[14px] font-bold text-[#111827]">
                                 {entry.variant.title}
                               </p>
-                              <p className="mt-1 text-[12px] text-steel">
+                              <p className="mt-1 text-[12.5px] font-semibold text-[#4B5563]">
                                 {entry.quantity} x{" "}
-                                {formatMoney(
-                                  entry.price.currencySymbol,
-                                  entry.resolvedUnitPrice,
-                                )}
+                                <span className="text-[#111827]">
+                                  {formatMoney(
+                                    entry.price.currencySymbol,
+                                    entry.resolvedUnitPrice,
+                                  )}
+                                </span>
                               </p>
                             </div>
                             <button
@@ -1209,7 +1256,7 @@ export function DynamicVariantMatrixConfigurator({
                               }
                               aria-label={`Remove ${entry.variant.title}`}
                               title="Remove variant"
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-red-100 text-brand transition hover:border-red-200 hover:bg-red-50"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-100 text-brand transition hover:border-red-200 hover:bg-red-50 cursor-pointer"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -1218,18 +1265,20 @@ export function DynamicVariantMatrixConfigurator({
                       ))}
                     </div>
                   ) : singleResolvedVariant && dropdownQuantity > 0 ? (
-                    <div className="rounded-lg border border-line bg-white p-4">
+                    <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-2xs">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-[13.5px] font-semibold text-ink">
+                          <p className="text-[14px] font-bold text-[#111827]">
                             {singleResolvedVariant.title}
                           </p>
-                          <p className="mt-1 text-[12px] text-steel">
+                          <p className="mt-1 text-[12.5px] font-semibold text-[#4B5563]">
                             {dropdownQuantity} x{" "}
-                            {formatMoney(
-                              totals.currencySymbol,
-                              singleResolvedUnitPrice,
-                            )}
+                            <span className="text-[#111827]">
+                              {formatMoney(
+                                totals.currencySymbol,
+                                singleResolvedUnitPrice,
+                              )}
+                            </span>
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -1245,20 +1294,20 @@ export function DynamicVariantMatrixConfigurator({
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-dashed border-line bg-white px-4 py-6 text-[13px] leading-relaxed text-steel">
+                    <div className="rounded-xl border border-dashed border-[#D1D5DB] bg-white px-4 py-6 text-[13.5px] leading-relaxed text-[#6B7280]">
                       Select options in the dropdowns or enter quantities in the matrix to stage variants.
                     </div>
                   )}
                 </div>
 
-                <div className="rounded-lg border border-line bg-white p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-2xs">
+                  <p className="text-[11.5px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">
                     Order Summary
                   </p>
-                  <div className="mt-4 space-y-2 text-[14px] text-steel">
+                  <div className="mt-4 space-y-2 text-[14px] text-[#4B5563]">
                     <div className="flex items-center justify-between">
-                      <span>Variant lines</span>
-                      <span className="font-semibold text-ink">
+                      <span className="font-medium">Variant lines</span>
+                      <span className="font-bold text-[#111827]">
                         {selectedEntries.length > 0
                           ? selectedEntries.length
                           : singleResolvedVariant && dropdownQuantity > 0
@@ -1267,47 +1316,61 @@ export function DynamicVariantMatrixConfigurator({
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Total units</span>
-                      <span className="font-semibold text-ink">
+                      <span className="font-medium">Total units</span>
+                      <span className="font-bold text-[#111827]">
                         {totals.totalUnits}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between border-t border-line pt-3 text-[16px]">
-                      <span className="font-semibold text-ink">Subtotal</span>
-                      <span className="font-semibold text-ink">
+                    <div className="flex items-center justify-between border-t border-[#E5E7EB] pt-3 text-[16px]">
+                      <span className="font-bold text-[#111827]">Subtotal</span>
+                      <span className="font-bold text-[#E31E24] text-[18px]">
                         {formatMoney(totals.currencySymbol, totals.subtotal)}
                       </span>
                     </div>
                   </div>
 
                   <div className="mt-5 space-y-3">
-                    <div className="flex gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <button
                         type="button"
-                        onClick={() => handleAddSelectedToCart(false)}
+                        onClick={handleAddSelectedToCart}
                         disabled={!hasOrderableItems}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                        className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill bg-brand px-4 py-3 text-[14px] font-bold text-white shadow-xs transition hover:bg-brand/90 cursor-pointer ${
+                          !hasOrderableItems ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
                       >
-                        <ShoppingBag size={15} />
+                        <ShoppingBag size={17} />
                         {!hasOrderableItems ? "Select Options" : "Add To Cart"}
                       </button>
+
                       <button
                         type="button"
-                        onClick={() => handleAddSelectedToCart(true)}
+                        onClick={handleAddSelectedToQuote}
                         disabled={!hasOrderableItems}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-brand px-4 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
+                        className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill border-2 border-brand bg-white px-4 py-3 text-[14px] font-bold text-brand shadow-xs transition hover:bg-brand hover:text-white cursor-pointer ${
+                          !hasOrderableItems ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
                       >
-                        Buy Now
+                        {!hasOrderableItems ? "Select Options" : "Add To Quote"}
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddSelectedToQuote}
-                      disabled={!hasOrderableItems}
-                      className="inline-flex w-full items-center justify-center rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-steel-2 hover:bg-white hover:text-brand disabled:cursor-not-allowed disabled:border-line disabled:bg-[#F0F0F0] disabled:text-[#9A9A9A]"
-                    >
-                      {!hasOrderableItems ? "Select Options" : "Add Selected To Quote"}
-                    </button>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleContinueShopping}
+                        className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill border-2 border-line-deep bg-slate-50 px-4 py-3 text-[14px] font-bold text-ink shadow-xs transition hover:border-ink hover:bg-white cursor-pointer"
+                      >
+                        Continue Shopping
+                      </button>
+
+                      <WishlistButton
+                        productId={apiProduct.id}
+                        showText={true}
+                        className="h-11 px-4 border-2 border-line-deep bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] font-bold cursor-pointer w-full justify-center whitespace-nowrap"
+                        iconSize={18}
+                      />
+                    </div>
                   </div>
 
                   {feedback && (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Container } from "@/components/ui/Container";
-import { Eye, Bell, Trash2 } from "lucide-react";
+import { Eye, Bell, Trash2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useRouter } from "next/navigation";
@@ -68,36 +68,47 @@ export default function CustomerNotificationsPage() {
   };
 
   return (
-    <div className="bg-[#fcfcfc] min-h-screen">
-      <Container className="py-8">
-        <div className="flex items-center gap-x-2 text-sm text-steel mb-8">
-          <Link href="/" className="hover:text-ink transition-colors flex items-center gap-x-1">
-            Home
-          </Link>
-          <span className="text-steel">/</span>
-          <Link href="/account" className="hover:text-ink transition-colors">
-            My Account
-          </Link>
-          <span className="text-steel">/</span>
-          <span className="text-ink">Notifications</span>
+    <div className="bg-[#F8F9FA] min-h-screen py-8 sm:py-12">
+      <Container className="space-y-6">
+        <div className="space-y-2">
+          <div>
+            <Link
+              href="/account"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+            >
+              <ArrowLeft size={14} className="text-[#E31E24]" />
+              <span>Back to Account</span>
+            </Link>
+          </div>
+          <nav className="text-[13px] text-steel-2">
+            <Link href="/" className="hover:text-brand">Home</Link> /{" "}
+            <Link href="/account" className="hover:text-brand">Your Account</Link> /{" "}
+            <span className="font-semibold text-[#111827]">Notifications & Alerts</span>
+          </nav>
         </div>
 
-        <div className="flex-1 bg-white border border-line rounded-xl p-8">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-bold text-ink flex items-center gap-2">
-              <Bell className="w-5 h-5 text-[#e31e24]" />
-              Notifications
-            </h2>
-            {selectedIds.length > 0 && (
-              <button
-                onClick={handleDeleteSelected}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#e31e24] hover:bg-[#b5151b] text-white text-[12px] font-bold uppercase tracking-wider rounded-lg transition-colors shadow-sm"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete Selected ({selectedIds.length})
-              </button>
-            )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-[#E5E7EB] pb-5">
+          <div>
+            <h1 className="text-[28px] font-bold tracking-tight text-[#111827] flex items-center gap-2">
+              <Bell className="w-6 h-6 text-[#E31E24]" />
+              Notifications & Alerts
+            </h1>
+            <p className="mt-1 text-[14px] text-[#6B7280]">
+              Stay informed about order progress, shipment updates, quote status, and account activity.
+            </p>
           </div>
+          {selectedIds.length > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#E31E24] hover:bg-[#B5151B] text-white text-[12.5px] font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Selected ({selectedIds.length})
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 bg-white border border-[#E5E7EB] rounded-xl p-6 shadow-2xs">
 
             <div className="border border-[#E6E6E6] bg-white rounded overflow-hidden">
               <div className="overflow-x-auto">

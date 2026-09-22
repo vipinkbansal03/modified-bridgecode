@@ -111,7 +111,12 @@ export interface CustomerOrderLineItem {
   quantity: number;
   unitPrice: string | number;
   total: string | number;
-  product?: { id: string; title: string; slug: string } | null;
+  product?: {
+    id: string;
+    title: string;
+    slug: string;
+    media?: Array<{ id?: string; url: string; altText?: string | null; type?: string }>;
+  } | null;
   variant?: { id: string; title: string; sku: string | null } | null;
 }
 

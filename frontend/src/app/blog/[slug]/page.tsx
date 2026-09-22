@@ -144,13 +144,22 @@ export default function BlogDetailPage() {
       <section className="border-b border-line bg-white">
         <Container className="py-6 lg:py-[34px]">
           <div className="max-w-[760px]">
-            <Link
-              href="/blog"
-              className="mb-6 inline-flex items-center gap-2 text-[13px] font-medium text-steel hover:text-brand"
-            >
-              <ArrowLeft size={14} />
-              Back to blog
-            </Link>
+            <div className="mb-4 space-y-2">
+              <div>
+                <Link
+                  href="/blog"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+                >
+                  <ArrowLeft size={14} className="text-[#E31E24]" />
+                  <span>Back to Blog</span>
+                </Link>
+              </div>
+              <nav className="text-[13px] text-steel-2">
+                <Link href="/" className="hover:text-brand">Home</Link> /{" "}
+                <Link href="/blog" className="hover:text-brand">Blog</Link> /{" "}
+                <span className="font-semibold text-[#111827]">{blog.title}</span>
+              </nav>
+            </div>
             <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
               {(
                 blog.category?.name ||

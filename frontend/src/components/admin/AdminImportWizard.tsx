@@ -1120,7 +1120,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 15 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="relative flex flex-col w-full max-w-[96vw] xl:max-w-6xl h-[90vh] max-h-[860px] rounded-xl bg-white shadow-2xl overflow-hidden z-10"
+          className="relative flex flex-col w-full max-w-[96vw] xl:max-w-6xl h-[90vh] max-h-[860px] min-h-0 rounded-xl bg-white shadow-2xl overflow-hidden z-10"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[#E5E7EB] px-6 py-4 bg-[#FAFAFA]">
@@ -1143,10 +1143,10 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
           <StepIndicator current={step} />
 
           {/* Step Body */}
-          <div className="flex-1 overflow-hidden flex flex-col bg-[#F9FAFB]">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col bg-[#F9FAFB]">
             {/* STEP 0: UPLOAD */}
             {step === 0 && (
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col">
+              <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col">
                 <div
                   className={cn(
                     "relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-14 px-6 transition-all duration-200 cursor-pointer",
@@ -1321,7 +1321,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
 
             {/* STEP 1: PREVIEW & DIRECT INLINE EDITING */}
             {step === 1 && (
-              <div className="flex-1 overflow-hidden flex flex-col">
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 {/* ── Subheader Tabs Navigation ── */}
                 <div className="shrink-0 px-6 bg-white border-b border-[#E5E7EB] flex items-center justify-between">
                   <div className="flex items-center gap-6">
@@ -1404,7 +1404,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
 
                 {/* PRODUCTS TAB CONTENT */}
                 {activeSheetTab === "products" && (
-                  <div className="flex-1 overflow-hidden flex flex-col">
+                  <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                     {/* Control bar */}
                     <div className="shrink-0 px-6 py-3 bg-white border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-3">
                       {/* Stats pills */}
@@ -1520,7 +1520,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
                     )}
 
                 {/* Spreadsheet Table */}
-                <div className="flex-1 overflow-auto bg-white">
+                <div className="flex-1 min-h-0 overflow-auto bg-white">
                   <table className="w-full border-collapse text-[12px]">
                     <thead className="sticky top-0 z-20 bg-[#F9FAFB] border-b border-[#E5E7EB]">
                       <tr>
@@ -1864,7 +1864,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
 
                 {/* ── Tab 2: Tier Overrides ── */}
                 {activeSheetTab === "tier" && (
-                  <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+                  <div className="flex-1 min-h-0 overflow-auto flex flex-col p-6 space-y-4">
                     {/* Header / Info bar */}
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
                       <div>
@@ -2144,7 +2144,7 @@ export function AdminImportWizard<T extends WizardRowData = WizardRowData>({
 
                 {/* ── Tab 3: MOQ Overrides ── */}
                 {activeSheetTab === "moq" && (
-                  <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+                  <div className="flex-1 min-h-0 overflow-auto flex flex-col p-6 space-y-4">
                     {/* Header / Info bar */}
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
                       <div>

@@ -45,7 +45,7 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
     <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }} className="group">
       <div className="relative h-full">
         <Link href={`/products/${slug}`} className="block h-full">
-          <Card className="h-full">
+          <Card className="h-full flex flex-col">
             <div className="relative h-[190px] w-full overflow-hidden bg-offwhite sm:h-[230px]">
               {imageSrc ? (
                 imageSrc.startsWith("data:") ? (
@@ -75,20 +75,27 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
                 </span>
               )}
             </div>
-            <div className="p-4 sm:p-5">
-              {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
-              <h5 className="mt-1.5 text-[15px] font-medium text-ink transition-colors duration-300 group-hover:text-brand">{title}</h5>
-              {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
-              {price ? (
-                <div className="mt-2">
-                  <p className="text-sm font-semibold text-ink">{price}</p>
-                  <p className="mt-0.5 text-[11px] font-normal text-steel">{taxLabel}</p>
-                </div>
-              ) : (
-                <span className="mt-2 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-semibold text-[#E31E24]">
-                  Price Upon Request
+            <div className="p-4 sm:p-5 flex flex-col justify-between flex-1">
+              <div>
+                {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
+                <h5 className="mt-1.5 text-[15px] font-medium text-ink transition-colors duration-300 group-hover:text-brand">{title}</h5>
+                {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
+                {price ? (
+                  <div className="mt-2">
+                    <p className="text-sm font-semibold text-ink">{price}</p>
+                    <p className="mt-0.5 text-[11px] font-normal text-steel">{taxLabel}</p>
+                  </div>
+                ) : (
+                  <span className="mt-2 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-semibold text-[#E31E24]">
+                    Price Upon Request
+                  </span>
+                )}
+              </div>
+              <div className="mt-4 pt-3 border-t border-line/60">
+                <span className="inline-flex w-full items-center justify-center rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors duration-200 group-hover:bg-[#C2181C]">
+                  {ctaLabel || "Buy Now"}
                 </span>
-              )}
+              </div>
             </div>
           </Card>
         </Link>

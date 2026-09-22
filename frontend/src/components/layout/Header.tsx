@@ -25,7 +25,9 @@ import { HAS_LIVE_API } from "@/lib/apiClient";
 
 const nav = navigation as NavigationData;
 const navLabelKeys: Record<string, StaticMessageKey> = {
+  Home: "ui.nav.home",
   Products: "ui.nav.products",
+  "All Products": "ui.nav.products",
   "Quality Certifications": "ui.nav.qualityCertifications",
   "Contact Us": "ui.nav.contactUs",
   "Design & Engineering": "ui.nav.designEngineering",
@@ -78,11 +80,11 @@ export function Header() {
     return categories
       .map((cat) => {
         const catProducts = products
-          .filter((p) => p.category?.slug === cat.slug)
+          .filter((p) => p.category?.slug === cat.slug || p.category?.name === cat.name)
           .slice()
           .sort((a, b) => a.title.localeCompare(b.title));
         return {
-          label: cat.title,
+          label: cat.name || "Category",
           href: `/products?category=${cat.slug}`,
           children: catProducts.map((p) => ({
             label: p.title,
@@ -97,27 +99,11 @@ export function Header() {
   const capabilitiesLinks = cmsMenuToLinks(cmsCapabilitiesMenu);
   const productMegaGroups = cmsMenuToMegaGroups(cmsProductsMegaMenu);
   const storefrontProductsMegaMenu = useMemo(() => {
-    const baseGroups =
-      productMegaGroups.length > 0 ? productMegaGroups : nav.productMegaMenu;
-    if (!baseGroups.length) return dynamicMegaMenu;
-    if (!products.length) return baseGroups;
-
-    const liveProductSlugs = new Set(products.map((p) => p.slug));
-
-    return baseGroups
-      .map((group) => {
-        const activeChildren = group.children.filter((child) => {
-          if (!child.href.startsWith("/products/")) return true;
-          const slug = child.href.replace(/^\/products\//, "").split("?")[0];
-          return liveProductSlugs.has(slug);
-        });
-        return {
-          ...group,
-          children: activeChildren.length > 0 ? activeChildren : group.children,
-        };
-      })
-      .filter((group) => group.children.length > 0);
-  }, [productMegaGroups, dynamicMegaMenu, products]);
+    if (!cmsProductsMegaMenu || cmsProductsMegaMenu.status === "INACTIVE" || !cmsProductsMegaMenu.items || cmsProductsMegaMenu.items.length === 0) {
+      return [];
+    }
+    return productMegaGroups;
+  }, [cmsProductsMegaMenu, productMegaGroups]);
   const ctaLink = cmsMenuToLinks(cmsCtaMenu)[0];
   const hasCmsPrimary = primaryLinks.length > 0;
   const hasCmsCapabilities = capabilitiesLinks.length > 0;
@@ -125,14 +111,11 @@ export function Header() {
   const capabilitiesNav = hasCmsCapabilities
     ? capabilitiesLinks
     : nav.capabilitiesMenu;
-  const productsMegaNav = storefrontProductsMegaMenu.length > 0
-    ? storefrontProductsMegaMenu
-    : productMegaGroups.length > 0
-    ? productMegaGroups
-    : nav.productMegaMenu;
+  const productsMegaNav = storefrontProductsMegaMenu;
   const ctaLabel = ctaLink?.label || label(nav.ctaLabel);
   const ctaHref = ctaLink?.href || nav.ctaHref;
   const mobileLinks = [
+    { label: t("ui.nav.home"), href: "/" },
     { label: t("ui.nav.products"), href: "/products" },
     ...capabilitiesNav,
     ...primaryNav,
@@ -319,19 +302,31 @@ export function Header() {
           {/* Bottom Header */}
           <div className="hidden xl:flex items-center justify-center border-t border-line">
             <ul className="hidden shrink-0 items-center gap-5 text-[15px] font-medium text-ink xl:flex 2xl:gap-7">
+              <li className="shrink-0">
+                <Link
+                  href="/"
+                  className="block whitespace-nowrap py-4 text-ink hover:text-[#E31E24] transition-colors"
+                >
+                  {t("ui.nav.home")}
+                </Link>
+              </li>
               <li
                 className="relative shrink-0"
-                onMouseEnter={() => setMegaOpen(true)}
+                onMouseEnter={() => {
+                  if (productsMegaNav.length > 0) setMegaOpen(true);
+                }}
                 onMouseLeave={() => setMegaOpen(false)}
               >
                 <Link
                   href="/products"
-                  className="flex items-center gap-1.5 whitespace-nowrap py-4"
+                  className="flex items-center gap-1.5 whitespace-nowrap py-4 text-ink hover:text-[#E31E24] transition-colors"
                 >
                   {t("ui.nav.products")}
                   {productsMegaNav.length > 0 && <ChevronDown size={11} className="opacity-60" />}
                 </Link>
-                <MegaMenu open={megaOpen} groups={productsMegaNav} />
+                {productsMegaNav.length > 0 && (
+                  <MegaMenu open={megaOpen} groups={productsMegaNav} />
+                )}
               </li>
               {capabilitiesNav.length > 0 && (
                 <li

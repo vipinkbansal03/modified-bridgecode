@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   Building2,
   CheckCircle2,
   HelpCircle,
@@ -699,7 +700,12 @@ export default function CheckoutPage() {
     () => ({
       items: items.map((item) => ({
         productId: item.productId,
-        variantId: item.variantId === item.productId ? undefined : item.variantId,
+        variantId:
+          !item.variantId ||
+          item.variantId === item.productId ||
+          String(item.variantId).startsWith("base-")
+            ? undefined
+            : item.variantId,
         quantity: item.quantity,
         warehouseId: item.warehouseId,
       })),
@@ -1233,6 +1239,34 @@ export default function CheckoutPage() {
   return (
     <Container>
       <section className="py-6 lg:py-[34px]">
+        {/* Top Bar: Back Navigation and Breadcrumbs */}
+        <div className="mb-6 space-y-2">
+          <div>
+            <Link
+              href="/cart"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+            >
+              <ArrowLeft size={14} className="text-[#E31E24]" />
+              <span>Back to Cart</span>
+            </Link>
+          </div>
+
+          <nav className="text-[13px] text-steel-2">
+            <Link href="/" className="hover:text-brand transition-colors">
+              Home
+            </Link>{" "}
+            /{" "}
+            <Link href="/products" className="hover:text-brand transition-colors">
+              Products
+            </Link>{" "}
+            /{" "}
+            <Link href="/cart" className="hover:text-brand transition-colors">
+              Shopping Cart
+            </Link>{" "}
+            / <span className="text-ink font-semibold">Checkout</span>
+          </nav>
+        </div>
+
         <div className="mb-8 flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 inline-flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wide text-steel-2">
@@ -1243,12 +1277,6 @@ export default function CheckoutPage() {
               Checkout
             </h1>
           </div>
-          <Link
-            href="/products"
-            className="text-[14px] font-medium text-ink hover:text-brand"
-          >
-            Continue shopping
-          </Link>
         </div>
 
         {items.length ? (

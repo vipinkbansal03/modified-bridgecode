@@ -139,10 +139,10 @@ export default function OrderPayPage() {
         <div className="mb-6 flex items-center gap-2">
           <Link
             href="/account"
-            className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-steel hover:text-ink transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
           >
-            <ArrowLeft size={16} />
-            Back to Account
+            <ArrowLeft size={14} className="text-[#E31E24]" />
+            <span>Back to Account</span>
           </Link>
         </div>
 

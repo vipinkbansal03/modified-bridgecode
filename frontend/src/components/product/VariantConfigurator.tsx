@@ -732,6 +732,11 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
       productTitle: apiProduct.title,
       variantId: currentVariant.id,
       variantTitle: currentVariant.title,
+      image:
+        apiProduct.thumbnail?.trim() ||
+        (typeof apiProduct.images?.[0] === "string"
+          ? apiProduct.images[0]
+          : (apiProduct.images?.[0] as any)?.url ?? null),
       sku: currentVariant.sku,
       quantity,
       unitPrice: currentResolvedUnitPrice,
@@ -833,18 +838,18 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
   if (!variants.length) return null;
 
   return (
-    <section className="pt-8 sm:pt-8.5 ">
-      <div className="mb-8 rounded-lg border border-line bg-white p-3 sm:p-5 lg:p-7">
+    <section className="pt-8 sm:pt-8.5">
+      <div className="mb-8 rounded-2xl border-2 border-[#E31E24] bg-white p-4 sm:p-6 lg:p-8 shadow-sm transition-all duration-300">
         <div className="mb-5 flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-[720px]">
-            <span className="mb-2 inline-flex items-center gap-2 rounded-pill border border-line bg-offwhite px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand">
-              <Sparkles size={12} />
-              Premium Configurator
+            <span className="mb-2 inline-flex items-center gap-2 rounded-pill border border-red-200 bg-red-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E31E24]">
+              <Sparkles size={13} className="text-[#E31E24]" />
+              Product Configurator
             </span>
-            <h2 className="text-[clamp(24px,2.8vw,32px)] font-normal leading-tight tracking-tight text-ink">
+            <h2 className="text-[clamp(24px,2.6vw,30px)] font-bold leading-tight tracking-tight text-ink">
               Build a quote-ready configuration without leaving the PDP
             </h2>
-            <p className="mt-2 max-w-[620px] text-[14.5px] leading-relaxed text-steel">
+            <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-steel">
               Select the exact variant, stage multiple configurations, review
               the consolidated quote summary, and push everything into the quote
               cart in one step.
@@ -867,17 +872,17 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <div
                     key={attribute.id}
                     className={[
-                      "rounded-lg border border-line bg-white p-3 shadow-xs transition-colors hover:border-steel-2/60",
+                      "rounded-xl border border-line-deep bg-white p-3.5 shadow-2xs transition-colors hover:border-steel",
                       isBinaryPill && availableValues.length > 2
                         ? "sm:col-span-2"
                         : "",
                     ].join(" ")}
                   >
-                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <label className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink/80">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <label className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink">
                         {attribute.name}
                       </label>
-                      <span className="rounded-pill border border-line bg-offwhite px-2 py-0.5 text-[10px] font-semibold text-steel">
+                      <span className="rounded-pill border border-line bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-steel">
                         {availableValues.length} {availableValues.length === 1 ? "opt" : "opts"}
                       </span>
                     </div>
@@ -894,10 +899,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                                 handleOptionSelect(attribute.name, value.value)
                               }
                               className={[
-                                "flex-1 min-w-[60px] rounded-md border py-1.5 px-2 text-center text-[12px] font-semibold transition-all",
+                                "flex-1 min-w-[60px] rounded-lg border py-2 px-3 text-center text-[13px] font-bold transition-all",
                                 active
                                   ? "border-brand bg-brand text-white shadow-2xs"
-                                  : "border-line bg-white text-ink hover:border-brand/40 hover:text-brand",
+                                  : "border-line bg-white text-ink hover:border-brand hover:text-brand",
                               ].join(" ")}
                             >
                               {value.value}
@@ -912,15 +917,16 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           onChange={(e) =>
                             handleOptionSelect(attribute.name, e.target.value)
                           }
-                          className="w-full cursor-pointer rounded-md border border-line bg-white py-2 pl-3 pr-8 text-[12.5px] font-medium text-ink outline-none transition hover:border-steel-2 focus:border-brand focus:ring-1 focus:ring-brand"
+                          className="w-full cursor-pointer rounded-lg border border-line-deep bg-white py-2.5 pl-3 pr-8 text-[13.5px] font-bold text-ink outline-none transition hover:border-steel focus:border-brand focus:ring-1 focus:ring-brand shadow-2xs"
                         >
-                          <option value="">
+                          <option value="" className="font-semibold text-steel">
                             Select {attribute.name}
                           </option>
                           {availableValues.map((value) => (
                             <option
                               key={value.id}
                               value={value.value}
+                              className="font-semibold text-ink"
                             >
                               {value.value}
                             </option>
@@ -933,13 +939,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               })}
             </div>
 
-            <div className="rounded-lg border border-line bg-white p-3 md:col-span-2 sm:p-5">
+            <div className="rounded-xl border border-line-deep bg-white p-4 sm:p-5 md:col-span-2 shadow-2xs">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-steel">
                     Quantity
                   </p>
-                  <p className="mt-1 text-[13px] text-steel">
+                  <p className="mt-0.5 text-[13.5px] font-medium text-steel">
                     Set the unit count for this configuration before you add it
                     to the list.
                   </p>
@@ -987,12 +993,12 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 rounded-lg border border-line bg-offwhite p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 rounded-xl border border-line-deep bg-slate-50/80 p-4 sm:flex-row sm:items-center sm:justify-between shadow-2xs">
                 <div>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-steel-2">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-steel">
                     Current Variant
                   </p>
-                  <p className="mt-1 text-[16px] font-semibold leading-snug text-ink sm:text-[18px]">
+                  <p className="mt-1 text-[17px] sm:text-[18px] font-bold leading-snug text-ink">
                     {currentVariant?.title ?? (allAttributesSelected ? "No valid combination selected" : "Please select all options above")}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -1004,19 +1010,19 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                         ).map(([key, value]) => (
                           <span
                             key={key}
-                            className="rounded-pill border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-steel"
+                            className="rounded-pill border border-line-deep bg-white px-3 py-1 text-[12px] font-bold text-ink shadow-2xs"
                           >
-                            {key}: {value}
+                            <span className="text-steel font-medium">{key}:</span> {value}
                           </span>
                         ))}
                         {getVariantPackageLabel(currentVariant) && (
-                          <span className="rounded-pill border border-line bg-white px-2.5 py-1 text-[11px] font-medium text-steel">
-                            Package: {getVariantPackageLabel(currentVariant)}
+                          <span className="rounded-pill border border-line-deep bg-white px-3 py-1 text-[12px] font-bold text-ink shadow-2xs">
+                            <span className="text-steel font-medium">Package:</span> {getVariantPackageLabel(currentVariant)}
                           </span>
                         )}
                       </>
                     ) : (
-                      <span className="text-[12px] text-steel-2">
+                      <span className="text-[13px] font-medium text-steel">
                         {allAttributesSelected
                           ? "Choose a supported combination to continue."
                           : "Choose an option for each attribute above to continue."}
@@ -1026,23 +1032,23 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 </div>
 
                 <div className="sm:text-right">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-steel-2">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-steel">
                     Estimated Unit Price
                   </p>
                   {currentPrice ? (
-                    <p className="mt-1 text-[24px] font-semibold text-ink">
+                    <p className="mt-1 text-[26px] font-extrabold text-ink tracking-tight">
                       {formatMoney(currencySymbol, currentResolvedUnitPrice)}
                     </p>
                   ) : currentVariant ? (
-                    <span className="mt-1 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-3 py-1 text-sm font-semibold text-[#E31E24]">
+                    <span className="mt-1 inline-block rounded-pill border border-red-200 bg-red-50 px-3 py-1 text-[13.5px] font-bold text-[#E31E24]">
                       Price Upon Request
                     </span>
                   ) : (
-                    <span className="mt-1 inline-block text-[13px] font-medium text-steel">
+                    <span className="mt-1 inline-block text-[14px] font-bold text-steel">
                       Select options above
                     </span>
                   )}
-                  <p className="mt-1 text-[12px] text-steel">
+                  <p className="mt-1 text-[12.5px] font-semibold text-steel">
                     {currentVariant?.sku
                       ? `SKU ${currentVariant.sku}`
                       : "SKU assigned after configuration"}
@@ -1057,7 +1063,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               )}
 
               {currentVariant && (currentVariant.inventory?.status === "OUT_OF_STOCK" || (currentVariant.inventory?.available ?? 0) <= 0) && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] font-medium text-red-700">
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] font-bold text-red-700">
                   This item is currently out of stock and cannot be added to your cart.
                 </div>
               )}
@@ -1065,15 +1071,15 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               {currentVariant && (
                 <div className="mt-4 flex items-center justify-between rounded-lg border border-[#E0E0E0] bg-[#F9F9F9] p-3">
                   <div className="flex flex-col gap-1">
-                    <span className="text-[12px] text-steel">Sold by / Ships from</span>
-                    <span className="text-[13px] font-semibold text-ink">{selectedWarehouse ? selectedWarehouse.name : "Default Seller"}</span>
-                    <span className="text-[12px] text-emerald-600 font-medium">Estimated Delivery: {selectedWarehouse ? selectedWarehouse.estimatedDeliveryDays : "3-5"} days</span>
+                    <span className="text-[12px] font-medium text-steel">Sold by / Ships from</span>
+                    <span className="text-[13.5px] font-bold text-ink">{selectedWarehouse ? selectedWarehouse.name : "Default Seller"}</span>
+                    <span className="text-[12px] text-emerald-600 font-bold">Estimated Delivery: {selectedWarehouse ? selectedWarehouse.estimatedDeliveryDays : "3-5"} days</span>
                   </div>
                   {warehouses && warehouses.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setIsWarehouseModalOpen(true)}
-                      className="text-[13px] font-medium text-brand hover:underline"
+                      className="text-[13px] font-bold text-brand hover:underline"
                     >
                       Change Seller
                     </button>
@@ -1104,105 +1110,60 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     currentVariant &&
                     totalAvailableStock > 0
                   );
-
-                  const isWarehouseUnavailable = false; // Disabled because Smart Cart Splitting handles cross-warehouse fulfillment
                   
                   const isSelectedOutOfStock = currentVariant ? !isGloballyInStock : false;
                   const isReady = Boolean(currentVariant);
 
                   const getButtonLabel = (defaultLabel: string) => {
-                    if (!isReady) return "Select Options";
+                    if (!isReady) return "Select Options Above";
                     if (!isGloballyInStock) return "Out of Stock";
                     return defaultLabel;
                   };
 
-                  if (currentPrice) {
-                    return (
-                      <>
-                        <button
-                          type="button"
-                          disabled={!isReady || isSelectedOutOfStock}
-                          onClick={handleAddConfiguration}
-                          className={`inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 cursor-pointer ${
-                            !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
-                          }`}
-                        >
-                          Add Configuration
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!isReady || isSelectedOutOfStock}
-                          onClick={() => handleAddToCart(false)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-offwhite px-5 py-3 text-[13px] font-semibold text-ink transition hover:border-brand hover:bg-transparent hover:text-brand cursor-pointer ${
-                            !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
-                          }`}
-                        >
-                          <ShoppingBag size={15} />
-                          {getButtonLabel("Add to Cart")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!isReady || isSelectedOutOfStock}
-                          onClick={() => handleAddToCart(true)}
-                          className={`inline-flex items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-[#333] cursor-pointer ${
-                            !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
-                          }`}
-                        >
-                          Buy Now
-                        </button>
-                        <WishlistButton
-                          productId={apiProduct.id}
-                          showText={true}
-                          className="h-11 px-4 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13px] cursor-pointer"
-                          iconSize={17}
-                        />
-                      </>
-                    );
-                  }
-
                   return (
-                    <div className="flex flex-wrap items-center gap-3">
+                    <>
+                      {/* Add Configuration CTA */}
                       <button
                         type="button"
                         disabled={!isReady || isSelectedOutOfStock}
-                        onClick={() => {
-                          if (!currentVariant || isSelectedOutOfStock) return;
-                          const resolvedWh = resolveWarehouseForCart(currentVariant, quantity);
-                          addItems([
-                            {
-                              productId: apiProduct.id,
-                              productSlug: apiProduct.slug,
-                              productTitle: apiProduct.title,
-                              variantId: currentVariant.id,
-                              variantTitle: currentVariant.title,
-                              sku: currentVariant.sku,
-                              quantity,
-                              unitPrice: 0,
-                              currencyCode: selectedCurrency,
-                              currencySymbol: "$",
-                              selectedAttributes: selectedOptions,
-                              priceUnavailable: true,
-                              warehouseId: resolvedWh.finalWarehouseId,
-                              warehouseName: resolvedWh.finalWarehouseName,
-                              estimatedDeliveryDays: selectedWarehouse?.estimatedDeliveryDays,
-                              isLocalWarehouse: resolvedWh.finalIsLocal,
-                            },
-                          ]);
-                          openCart();
-                        }}
-                        className={`inline-flex items-center justify-center gap-2 rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90 cursor-pointer ${
-                          !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+                        onClick={handleAddConfiguration}
+                        className={`inline-flex items-center justify-center rounded-pill bg-brand px-5 py-3 text-[14px] font-bold text-white transition hover:bg-brand/90 cursor-pointer shadow-xs ${
+                          !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed" : ""
                         }`}
                       >
-                        {getButtonLabel("Request Quote (RFQ)")}
+                        Add Configuration
                       </button>
+
+                      {/* Highlighted Add to Cart CTA */}
+                      <button
+                        type="button"
+                        disabled={!isReady || isSelectedOutOfStock}
+                        onClick={() => handleAddToCart(false)}
+                        className={`inline-flex items-center justify-center gap-2 rounded-pill border-2 border-brand bg-white px-5 py-3 text-[14px] font-bold text-brand transition hover:bg-brand hover:text-white cursor-pointer shadow-xs ${
+                          !isReady || isSelectedOutOfStock ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        <ShoppingBag size={17} />
+                        {getButtonLabel("Add to Cart")}
+                      </button>
+
+                      {/* Highlighted Continue Shopping CTA */}
+                      <button
+                        type="button"
+                        onClick={() => router.push("/products")}
+                        className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill border-2 border-line-deep bg-slate-50 px-5 py-3 text-[14px] font-bold text-ink transition hover:border-ink hover:bg-white cursor-pointer shadow-xs"
+                      >
+                        Continue Shopping
+                      </button>
+
+                      {/* Wishlist Button */}
                       <WishlistButton
                         productId={apiProduct.id}
                         showText={true}
-                        className="h-11 px-4 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13px] cursor-pointer"
-                        iconSize={17}
+                        className="h-11 px-4 border-2 border-line-deep bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] font-bold cursor-pointer whitespace-nowrap"
+                        iconSize={18}
                       />
-                    </div>
+                    </>
                   );
                 })()}
               </div>
@@ -1210,14 +1171,14 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               {error && (
                 <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#E7C9B5] bg-[#FBF2EB] px-4 py-3 text-brand">
                   <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <p className="text-[13px]">{error}</p>
+                  <p className="text-[13px] font-semibold">{error}</p>
                 </div>
               )}
 
               {added && (
                 <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#D7E4D9] bg-[#F5F8F4] px-4 py-3 text-[#355246]">
                   <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
-                  <p className="text-[13px]">
+                  <p className="text-[13px] font-semibold">
                     Configurations moved to the quote cart. You can review or
                     submit them from the sticky cart.
                   </p>
@@ -1231,21 +1192,21 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               ref={selectedConfigurationsRef}
               tabIndex={-1}
               className={[
-                "rounded-lg border bg-offwhite p-4 outline-none transition-all duration-300 sm:p-5",
+                "rounded-xl border bg-slate-50/70 p-4 outline-none transition-all duration-300 sm:p-5 shadow-2xs",
                 summaryHighlighted
                   ? "border-brand shadow-[0_0_0_4px_rgba(227,30,36,0.10)]"
-                  : "border-line",
+                  : "border-line-deep",
               ].join(" ")}
             >
               <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-white text-brand">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-line-deep bg-white text-brand shadow-2xs">
                   <Layers3 size={18} />
                 </div>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-steel">
                     Selected Configurations
                   </p>
-                  <p className="text-[14px] text-steel">
+                  <p className="text-[14px] font-semibold text-ink">
                     {drafts.length
                       ? `${drafts.length} saved for this product`
                       : "Nothing staged yet"}
@@ -1276,7 +1237,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                           onClick={() =>
                             updateDraftQuantity(draft.variantId, 0)
                           }
-                          className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand"
+                          className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand hover:underline"
                         >
                           Remove
                         </button>
@@ -1347,7 +1308,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed border-line bg-white p-4 text-[13px] leading-relaxed text-steel-2">
+                <div className="rounded-xl border border-dashed border-line-deep bg-white p-4 text-[13.5px] font-medium leading-relaxed text-steel">
                   Add your first variant configuration to build a quote summary
                   here. This list is product-specific and can stage multiple
                   setups before you commit them to the quote cart.
@@ -1359,27 +1320,27 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               ref={quoteSummaryRef}
               tabIndex={-1}
               className={[
-                "rounded-lg border bg-white p-4 outline-none transition-all duration-300 sm:p-5",
+                "rounded-xl border bg-white p-4 outline-none transition-all duration-300 sm:p-5 shadow-2xs",
                 quoteSummaryHighlighted
                   ? "border-brand shadow-[0_0_0_4px_rgba(227,30,36,0.10)]"
-                  : "border-line",
+                  : "border-line-deep",
               ].join(" ")}
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-steel-2">
+              <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-steel">
                 Quote Summary
               </p>
               <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between text-[13.5px] text-steel">
+                <div className="flex items-center justify-between text-[14px] font-medium text-steel">
                   <span>Configurations</span>
-                  <strong className="text-ink">{drafts.length}</strong>
+                  <strong className="text-ink font-bold">{drafts.length}</strong>
                 </div>
-                <div className="flex items-center justify-between text-[13.5px] text-steel">
+                <div className="flex items-center justify-between text-[14px] font-medium text-steel">
                   <span>Total Units</span>
-                  <strong className="text-ink">{totalUnits}</strong>
+                  <strong className="text-ink font-bold">{totalUnits}</strong>
                 </div>
-                <div className="flex items-center justify-between text-[13.5px] text-steel">
+                <div className="flex items-center justify-between text-[14px] font-medium text-steel">
                   <span>Subtotal</span>
-                  <strong className="text-ink">
+                  <strong className="text-ink font-bold">
                     {subtotal > 0
                       ? formatMoney(currencySymbol, subtotal)
                       : "Price Upon Request"}
@@ -1410,7 +1371,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     </p>
                   </div>
                   {subtotal > 0 && nextTier ? (
-                    <div className="max-w-[160px] text-right text-[11.5px] leading-relaxed text-steel">
+                    <div className="max-w-[160px] text-right text-[12px] font-medium leading-relaxed text-steel">
                       Add{" "}
                       {formatMoney(
                         currencySymbol,
@@ -1419,11 +1380,11 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                       more to unlock {nextTier.percentage}% off.
                     </div>
                   ) : subtotal > 0 ? (
-                    <div className="max-w-[160px] text-right text-[11.5px] leading-relaxed text-[#355246]">
+                    <div className="max-w-[160px] text-right text-[12px] font-bold leading-relaxed text-[#355246]">
                       Highest volume discount tier reached.
                     </div>
                   ) : (
-                    <div className="max-w-[160px] text-right text-[11.5px] leading-relaxed text-steel">
+                    <div className="max-w-[160px] text-right text-[12px] font-medium leading-relaxed text-steel">
                       Custom quote pricing applies for selected region.
                     </div>
                   )}
@@ -1459,7 +1420,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     open();
                   }
                 }}
-                className="mt-5 inline-flex w-full items-center justify-center rounded-pill bg-brand px-5 py-3 text-[13px] font-semibold text-white transition hover:bg-brand/90"
+                className="mt-5 inline-flex w-full items-center justify-center rounded-pill bg-brand px-5 py-3.5 text-[14px] font-bold text-white transition hover:bg-brand/90 cursor-pointer shadow-xs"
               >
                 {currentPrice ? "Add To Quote" : "Request Quote (RFQ)"}
               </button>

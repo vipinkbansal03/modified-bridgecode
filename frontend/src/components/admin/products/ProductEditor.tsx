@@ -1103,6 +1103,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [variantCountryOverrides, setVariantCountryOverrides] = useState<Record<string, boolean>>({});
   const [inventoryOverrideDrafts, setInventoryOverrideDrafts] = useState<Record<string, { countryId: string; stock: string }>>({});
   const [selectedMappingAttributeId, setSelectedMappingAttributeId] = useState("");
+  const [isAttributeModalOpen, setIsAttributeModalOpen] = useState(false);
   const [newMappingRequired, setNewMappingRequired] = useState(true);
   const [newMappingGridAxis, setNewMappingGridAxis] = useState<GridAxis | null>(null);
   const [newMappingValueIds, setNewMappingValueIds] = useState<string[]>([]);
@@ -1122,6 +1123,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const attributeEditPanelRef = useRef<HTMLDivElement>(null);
   const draggingCardAttrRef = useRef<string | null>(null);
   const draggedCardElementRef = useRef<HTMLElement | null>(null);
+  const draggingValueRef = useRef<{ mappingId: string; valIdx: number } | null>(null);
+  const draggedValueElementRef = useRef<HTMLElement | null>(null);
 
   const clearCardDragStyles = () => {
     if (draggedCardElementRef.current) {
@@ -1132,6 +1135,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       document.body.classList.remove("card-drag-in-progress");
       document.querySelectorAll(".mapped-attr-card").forEach((el) => {
         el.classList.remove("opacity-40", "border-dashed", "border-[#E31E24]", "ring-2", "ring-[#E31E24]/20", "shadow-md");
+      });
+    }
+  };
+
+  const clearValueDragStyles = () => {
+    if (draggedValueElementRef.current) {
+      draggedValueElementRef.current.classList.remove("opacity-40", "border-dashed", "border-[#E31E24]");
+      draggedValueElementRef.current = null;
+    }
+    if (typeof document !== "undefined") {
+      document.querySelectorAll(".val-drag-item").forEach((el) => {
+        el.classList.remove("opacity-40", "border-dashed", "border-[#E31E24]", "ring-2", "ring-[#E31E24]/30", "bg-red-50/50");
       });
     }
   };
@@ -3792,11 +3807,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const resetAttributeMappingForm = () => {
     setSelectedMappingAttributeId("");
+    setIsAttributeModalOpen(false);
     setNewMappingRequired(true);
     setNewMappingGridAxis(null);
     setNewMappingValueIds([]);
     setMappingValueFilter("ALL");
     setMappingValueSearch("");
+  };
+
+  const handleOpenAddAttributeModal = () => {
+    resetAttributeMappingForm();
+    setIsAttributeModalOpen(true);
   };
 
   const toggleNewMappingValue = (valueId: string) => {
@@ -3951,8 +3972,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     setNewMappingValueIds(mapping.allowedValues.map((v) => v.attributeValueId));
     setMappingValueFilter(mapping.allowedValues.length > 0 ? "SELECTED" : "ALL");
     setMappingValueSearch("");
-    // Scroll edit panel into view without pushing header off-screen
-    attributeEditPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setIsAttributeModalOpen(true);
   };
 
   const handleToggleMappedRequired = async (attributeId: string, required: boolean) => {
@@ -8634,6 +8654,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {canManageAttributes && (
+                  <button
+                    type="button"
+                    onClick={handleOpenAddAttributeModal}
+                    className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs cursor-pointer"
+                    title="Add and map a new attribute to this product"
+                  >
+                    <Plus size={15} />
+                    Add Attribute
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleExportProductAttributes}
@@ -8659,13 +8690,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               </div>
             </div>
 
-            <div className={cn("grid gap-4", canManageAttributes ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-1")}>
+            <div className="w-full">
               <div className="space-y-3">
                 {productAttributesLoading ? (
                   <div className="h-28 animate-pulse rounded-lg bg-[#F2F2F2]" />
                 ) : mappedAttributeRows.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-[#E6E6E6] py-12 text-center text-[13.5px] text-[#9A9A9A]">
-                    No attributes mapped to this product yet.
+                    No attributes mapped to this product yet. Click <strong>&quot;Add Attribute&quot;</strong> to map values.
                   </div>
                 ) : (
                   <>
@@ -8725,12 +8756,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           handleReorderMappedAttributes(fromId, mapping.id);
                         }
                       }}
-                      className={cn(
-                        "mapped-attr-card rounded-lg border bg-white p-4 transition-all",
-                        selectedMappingAttributeId === mapping.attributeId
-                          ? "border-[#E31E24] ring-2 ring-[#E31E24]/20 shadow-sm"
-                          : "border-[#E6E6E6]"
-                      )}
+                      className="mapped-attr-card rounded-lg border border-[#E6E6E6] bg-white p-4 transition-all shadow-2xs hover:border-gray-300"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-start gap-2.5">
@@ -8774,77 +8800,118 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           )}
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="text-[13.5px] font-semibold text-[#1A1A1A]">{mapping.attribute.name}</h4>
-                              <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(mapping.gridAxis)))}>
+                              <h4 className="text-[14px] font-bold text-[#1A1A1A]">
+                                {mapping.attribute.name}
+                              </h4>
+                              <span className={cn("rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium", roleBadgeClass(getDisplayTypeRole(mapping.gridAxis)))}>
                                 {getDisplayTypeLabel(mapping.gridAxis)}
                               </span>
-                              {selectedMappingAttributeId === mapping.attributeId && (
-                                <span className="rounded-full bg-[#E31E24] text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-2xs">
-                                  Editing Now
-                                </span>
-                              )}
                             </div>
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <div className="mt-2 flex flex-wrap gap-1.5">
                               {mapping.allowedValues.length ? (
-                                mapping.allowedValues.map((allowedValue, valIndex) => (
+                                mapping.allowedValues.map((allowedValue, valIdx) => (
                                   <span
                                     key={allowedValue.attributeValueId}
-                                    className="group inline-flex items-center gap-1 rounded-full border border-[#E2E2E2] bg-[#F7F7F7] pl-2.5 pr-2 py-0.5 text-[11.5px] font-medium text-[#444] hover:bg-white hover:border-gray-300 transition-colors"
+                                    draggable={canManageAttributes && mapping.allowedValues.length > 1}
+                                    onDragStart={(e) => {
+                                      e.stopPropagation();
+                                      clearValueDragStyles();
+                                      e.dataTransfer.effectAllowed = "move";
+                                      e.dataTransfer.setData("application/x-attr-value", JSON.stringify({ mappingId: mapping.id, valIdx }));
+                                      draggingValueRef.current = { mappingId: mapping.id, valIdx };
+                                      draggedValueElementRef.current = e.currentTarget;
+                                      const el = e.currentTarget;
+                                      setTimeout(() => {
+                                        if (draggingValueRef.current) {
+                                          el.classList.add("opacity-40", "border-dashed", "border-[#E31E24]");
+                                        }
+                                      }, 0);
+                                    }}
+                                    onDragEnd={(e) => {
+                                      e.stopPropagation();
+                                      clearValueDragStyles();
+                                      draggingValueRef.current = null;
+                                    }}
+                                    onDragOver={(e) => {
+                                      if (draggingValueRef.current && draggingValueRef.current.mappingId === mapping.id) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        e.dataTransfer.dropEffect = "move";
+                                      }
+                                    }}
+                                    onDragEnter={(e) => {
+                                      if (draggingValueRef.current && draggingValueRef.current.mappingId === mapping.id && draggingValueRef.current.valIdx !== valIdx) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        e.currentTarget.classList.add("border-[#E31E24]", "ring-2", "ring-[#E31E24]/30", "bg-red-50/50");
+                                      }
+                                    }}
+                                    onDragLeave={(e) => {
+                                      e.currentTarget.classList.remove("border-[#E31E24]", "ring-2", "ring-[#E31E24]/30", "bg-red-50/50");
+                                    }}
+                                    onDrop={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      const dragInfo = draggingValueRef.current;
+                                      clearValueDragStyles();
+                                      draggingValueRef.current = null;
+                                      if (dragInfo && dragInfo.mappingId === mapping.id && dragInfo.valIdx !== valIdx) {
+                                        handleMoveCardAllowedValue(mapping, dragInfo.valIdx, valIdx);
+                                      }
+                                    }}
+                                    title={canManageAttributes && mapping.allowedValues.length > 1 ? "Drag to reorder or use arrows" : undefined}
+                                    className={cn(
+                                      "val-drag-item inline-flex items-center gap-1 rounded border border-[#E6E6E6] bg-[#FAFAFA] px-2.5 py-1 text-[12px] text-[#555] font-medium transition-all select-none",
+                                      canManageAttributes && mapping.allowedValues.length > 1 ? "cursor-grab active:cursor-grabbing hover:border-gray-400" : ""
+                                    )}
                                   >
-                                    <span
-                                      className="cursor-pointer no-card-drag"
-                                      title="Click to edit attribute values"
-                                      onClick={() => handleEditMappedAttribute(mapping)}
-                                    >
-                                      {allowedValue.attributeValue.value}
-                                    </span>
-                                    {mapping.allowedValues.length > 1 && canManageAttributes && (
-                                      <span className="flex items-center gap-0.5 ml-0.5">
-                                        {valIndex > 0 && (
-                                          <button
-                                            type="button"
-                                            title="Move value left"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleMoveCardAllowedValue(mapping, valIndex, valIndex - 1);
-                                            }}
-                                            className="flex h-3.5 w-3.5 items-center justify-center rounded-full hover:bg-gray-200 text-gray-600 text-[10px] font-bold leading-none cursor-pointer"
-                                          >
-                                            ‹
-                                          </button>
-                                        )}
-                                        {valIndex < mapping.allowedValues.length - 1 && (
-                                          <button
-                                            type="button"
-                                            title="Move value right"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleMoveCardAllowedValue(mapping, valIndex, valIndex + 1);
-                                            }}
-                                            className="flex h-3.5 w-3.5 items-center justify-center rounded-full hover:bg-gray-200 text-gray-600 text-[10px] font-bold leading-none cursor-pointer"
-                                          >
-                                            ›
-                                          </button>
-                                        )}
+                                    <span className="pointer-events-none">{allowedValue.attributeValue.value}</span>
+                                    {canManageAttributes && mapping.allowedValues.length > 1 && (
+                                      <span className="no-card-drag flex items-center ml-0.5 gap-0.5">
+                                        <button
+                                          type="button"
+                                          title="Move left"
+                                          disabled={valIdx === 0}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMoveCardAllowedValue(mapping, valIdx, valIdx - 1);
+                                          }}
+                                          className="text-[9px] text-gray-400 hover:text-[#E31E24] disabled:opacity-20 cursor-pointer"
+                                        >
+                                          ◀
+                                        </button>
+                                        <button
+                                          type="button"
+                                          title="Move right"
+                                          disabled={valIdx === mapping.allowedValues.length - 1}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMoveCardAllowedValue(mapping, valIdx, valIdx + 1);
+                                          }}
+                                          className="text-[9px] text-gray-400 hover:text-[#E31E24] disabled:opacity-20 cursor-pointer"
+                                        >
+                                          ▶
+                                        </button>
                                       </span>
                                     )}
                                   </span>
                                 ))
                               ) : (
-                                <span className="rounded-full bg-[#EBF5FF] text-[#1E40AF] px-2 py-0.5 text-[11.5px] font-medium">All attribute values allowed</span>
+                                <span className="text-[12px] text-[#9A9A9A]">All values allowed</span>
                               )}
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-wrap items-center justify-end gap-3">
-                          <div className="min-w-[180px]">
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="w-40">
                             <AdminSelect
                               value={getDisplayTypeValue(mapping.gridAxis)}
-                              disabled={!canManageAttributes}
                               onChange={(e) => {
                                 const next = e.target.value as GridAxis | "";
                                 handleSetMappedGridAxis(mapping.attributeId, next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
                               }}
+                              disabled={!canManageAttributes || assignProductAttributes.isPending}
                               options={[
                                 { value: "", label: "Dropdown filter" },
                                 { value: "COLUMN", label: "Matrix columns" },
@@ -8878,20 +8945,15 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                 type="button"
                                 onClick={() => handleEditMappedAttribute(mapping)}
                                 disabled={removeProductAttribute.isPending || assignProductAttributes.isPending}
-                                className={cn(
-                                  "rounded-md border px-3 py-1.5 text-[12.5px] font-medium transition-colors disabled:opacity-50 cursor-pointer",
-                                  selectedMappingAttributeId === mapping.attributeId
-                                    ? "border-[#E31E24] bg-red-50 text-[#E31E24] font-semibold"
-                                    : "border-[#E6E6E6] bg-white text-[#1A1A1A] hover:bg-[#F5F5F5]"
-                                )}
+                                className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] transition-colors disabled:opacity-50 cursor-pointer"
                               >
-                                {selectedMappingAttributeId === mapping.attributeId ? "Editing" : "Edit"}
+                                Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveProductAttribute(mapping.attributeId)}
                                 disabled={removeProductAttribute.isPending}
-                                className="rounded-md border border-[#F2C9C9] px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                className="rounded-md border border-[#F2C9C9] px-2.5 py-1.5 text-[12px] text-red-600 hover:bg-red-50 disabled:opacity-50 cursor-pointer"
                               >
                                 <Trash2 size={13} />
                               </button>
@@ -8904,284 +8966,258 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </>
                 )}
               </div>
+            </div>
 
-              {canManageAttributes && (
-                <div
-                  ref={attributeEditPanelRef}
-                  className="rounded-lg border border-[#E6E6E6] bg-white shadow-sm xl:sticky xl:top-20 xl:self-start flex flex-col max-h-[calc(100vh-6rem)] overflow-hidden"
-                >
-                  <div className="p-4 pb-3 border-b border-[#F0F0F0] shrink-0 bg-white z-10">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-[14px] font-bold text-[#1A1A1A]">
-                            {mappedAttributeIds.has(selectedMappingAttributeId) ? "Edit Attribute" : "Add Attribute"}
-                          </h4>
-                          {selectedAttributeDetail && (
-                            <span className="rounded-md bg-red-50 border border-red-200 px-2.5 py-0.5 text-[12px] font-bold text-[#E31E24]">
-                              {selectedAttributeDetail.name}
-                            </span>
-                          )}
+            {/* Modal Popup for Add / Edit Attribute */}
+            {canManageAttributes && (
+              <Modal
+                open={isAttributeModalOpen}
+                onClose={resetAttributeMappingForm}
+                title={mappedAttributeIds.has(selectedMappingAttributeId) ? "Edit Product Attribute" : "Add Product Attribute"}
+                subtitle={
+                  selectedAttributeDetail
+                    ? `Attribute: ${selectedAttributeDetail.name} • ${newMappingValueIds.length} of ${selectedAttributeValues.length} values selected`
+                    : "Select an attribute from the catalog and choose its allowed values for this product."
+                }
+                size="2xl"
+                footer={
+                  <div className="flex items-center justify-end gap-2.5 w-full">
+                    <button
+                      type="button"
+                      onClick={resetAttributeMappingForm}
+                      className="rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <LoadingButton
+                      type="button"
+                      onClick={handleAddProductAttribute}
+                      loading={assignProductAttributes.isPending}
+                      loadingText={mappedAttributeIds.has(selectedMappingAttributeId) ? "Updating..." : "Mapping..."}
+                      disabled={!selectedMappingAttributeId || !selectedAttributeDetail || assignProductAttributes.isPending}
+                      className="rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+                    >
+                      {mappedAttributeIds.has(selectedMappingAttributeId) ? "Update Attribute" : "Map Attribute"}
+                    </LoadingButton>
+                  </div>
+                }
+              >
+                <div className="p-6 space-y-4">
+                  <AdminSelect
+                    label="Attribute"
+                    value={selectedMappingAttributeId}
+                    onChange={(e) => {
+                      setSelectedMappingAttributeId(e.target.value);
+                      setNewMappingGridAxis(null);
+                      setNewMappingValueIds([]);
+                      setMappingValueFilter("ALL");
+                      setMappingValueSearch("");
+                    }}
+                    options={[
+                      { value: "", label: "Select attribute..." },
+                      ...availableMappingAttributes.map((attribute) => ({ value: attribute.id, label: attribute.name })),
+                    ]}
+                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-[#FAFAFA] p-3.5 rounded-lg border border-[#E6E6E6]">
+                    <div>
+                      <AdminSelect
+                        label="Storefront Display Type"
+                        value={getDisplayTypeValue(newMappingGridAxis)}
+                        onChange={(e) => {
+                          const next = e.target.value as GridAxis | "";
+                          setNewMappingGridAxis(next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
+                        }}
+                        options={[
+                          { value: "", label: "Dropdown filter" },
+                          { value: "COLUMN", label: "Matrix columns (X-axis)" },
+                          { value: "ROW", label: "Matrix rows (Y-axis)" },
+                        ]}
+                      />
+                    </div>
+                    <div className="flex items-center pt-5">
+                      <label className="flex items-center gap-2 text-[13px] font-medium text-[#1A1A1A] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newMappingRequired}
+                          onChange={(e) => setNewMappingRequired(e.target.checked)}
+                          className="h-4 w-4 accent-[#E31E24] cursor-pointer"
+                        />
+                        Required for this product
+                      </label>
+                    </div>
+                  </div>
+
+                  {selectedMappingAttributeId && selectedAttributeDetail ? (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F0F0F0] pb-2">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={selectAllNewMappingValues}
+                            className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] cursor-pointer"
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearAllNewMappingValues}
+                            className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5] cursor-pointer"
+                          >
+                            Clear all
+                          </button>
                         </div>
-                        {selectedAttributeDetail ? (
-                          <p className="mt-1 text-[11.5px] text-[#6B6B6B]">
-                            Attribute: <span className="font-semibold text-[#1A1A1A]">{selectedAttributeDetail.name}</span> &bull; {newMappingValueIds.length} of {selectedAttributeValues.length} selected
-                          </p>
-                        ) : (
-                          <p className="mt-1 text-[11.5px] text-[#6B6B6B]">Select an attribute to map values</p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setMappingValueFilter("ALL")}
+                            className={cn(
+                              "rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition cursor-pointer",
+                              mappingValueFilter === "ALL"
+                                ? "bg-[#1A1A1A] text-white"
+                                : "border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                            )}
+                          >
+                            All ({selectedAttributeValues.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMappingValueFilter("SELECTED")}
+                            className={cn(
+                              "rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition cursor-pointer",
+                              mappingValueFilter === "SELECTED"
+                                ? "bg-[#E31E24] text-white shadow-2xs"
+                                : "border border-red-200 bg-red-50 text-[#E31E24] hover:bg-red-100"
+                            )}
+                          >
+                            Selected ({newMappingValueIds.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMappingValueFilter("UNSELECTED")}
+                            className={cn(
+                              "rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition cursor-pointer",
+                              mappingValueFilter === "UNSELECTED"
+                                ? "bg-[#1A1A1A] text-white"
+                                : "border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5]"
+                            )}
+                          >
+                            Unselected ({selectedAttributeValues.length - newMappingValueIds.length})
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="relative">
+                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={mappingValueSearch}
+                          onChange={(e) => setMappingValueSearch(e.target.value)}
+                          placeholder="Search values..."
+                          className="w-full rounded-md border border-[#E6E6E6] bg-white pl-8 pr-7 py-1.5 text-[12px] text-[#1A1A1A] placeholder-gray-400 focus:border-[#E31E24] focus:outline-none"
+                        />
+                        {mappingValueSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setMappingValueSearch("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold cursor-pointer"
+                          >
+                            ✕
+                          </button>
                         )}
                       </div>
-                      {selectedMappingAttributeId && (
-                        <button
-                          type="button"
-                          onClick={resetAttributeMappingForm}
-                          className="rounded border border-[#E6E6E6] bg-white px-2.5 py-1 text-[11px] font-medium text-[#6B6B6B] hover:bg-gray-50 hover:text-[#1A1A1A] cursor-pointer shrink-0"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="p-4 overflow-y-auto flex-1 space-y-4">
-                    <AdminSelect
-                      label="Attribute"
-                      value={selectedMappingAttributeId}
-                      onChange={(e) => {
-                        setSelectedMappingAttributeId(e.target.value);
-                        setNewMappingGridAxis(null);
-                        setNewMappingValueIds([]);
-                        setMappingValueFilter("ALL");
-                        setMappingValueSearch("");
-                      }}
-                      options={[
-                        { value: "", label: "Select attribute..." },
-                        ...availableMappingAttributes.map((attribute) => ({ value: attribute.id, label: attribute.name })),
-                      ]}
-                    />
-                    <label className="flex items-center gap-2 text-[13px] text-[#555]">
-                      <input
-                        type="checkbox"
-                        checked={newMappingRequired}
-                        onChange={(e) => setNewMappingRequired(e.target.checked)}
-                        className="h-4 w-4 accent-[#E31E24]"
-                      />
-                      Required for this product
-                    </label>
-                    <AdminSelect
-                      value={getDisplayTypeValue(newMappingGridAxis)}
-                      onChange={(e) => {
-                        const next = e.target.value as GridAxis | "";
-                        setNewMappingGridAxis(next === "ROW" ? "ROW" : next === "COLUMN" ? "COLUMN" : null);
-                      }}
-                      options={[
-                        { value: "", label: "Dropdown filter" },
-                        { value: "COLUMN", label: "Matrix columns" },
-                        { value: "ROW", label: "Matrix rows" },
-                      ]}
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={cn("rounded-full border px-2.5 py-1 text-[11.5px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
-                        {getDisplayTypeLabel(newMappingGridAxis)}
-                      </span>
-                      <span className="text-[12px] text-[#9A9A9A]">Current display type</span>
-                    </div>
-                    <p className="text-[12px] leading-5 text-[#9A9A9A]">
-                      Product-level display types control the storefront exactly: Dropdown for filtering, Matrix columns for the X axis, and Matrix rows for the Y axis. Multiple row or column attributes are combined automatically. Product Packages are displayed separately as tabs.
-                    </p>
 
-                    {selectedMappingAttributeId && selectedAttributeDetail ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", roleBadgeClass(getDisplayTypeRole(newMappingGridAxis)))}>
-                            {getDisplayTypeLabel(newMappingGridAxis)}
-                          </span>
-                          <span className="text-[12px] font-semibold text-[#1A1A1A]">{newMappingValueIds.length} of {selectedAttributeValues.length} selected</span>
-                        </div>
-
-
-
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={selectAllNewMappingValues}
-                              className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                            >
-                              Select all
-                            </button>
-                            <button
-                              type="button"
-                              onClick={clearAllNewMappingValues}
-                              className="rounded-full border border-[#E6E6E6] bg-white px-3 py-1 text-[11.5px] font-medium text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                            >
-                              Clear all
-                            </button>
+                      <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
+                        {filteredAttributeValues.length === 0 ? (
+                          <div className="p-4 text-center text-[12px] text-gray-500 border border-dashed border-gray-200 rounded-md">
+                            {mappingValueFilter === "SELECTED"
+                              ? "No values selected yet. Click 'All' to choose values."
+                              : mappingValueFilter === "UNSELECTED"
+                              ? "All values are currently selected."
+                              : `No values matching "${mappingValueSearch}"`}
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setMappingValueFilter("ALL")}
-                              className={cn(
-                                "rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition",
-                                mappingValueFilter === "ALL"
-                                  ? "bg-[#1A1A1A] text-white"
-                                  : "border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                              )}
-                            >
-                              All ({selectedAttributeValues.length})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMappingValueFilter("SELECTED")}
-                              className={cn(
-                                "rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition",
-                                mappingValueFilter === "SELECTED"
-                                  ? "bg-[#E31E24] text-white shadow-2xs"
-                                  : "border border-red-200 bg-red-50 text-[#E31E24] hover:bg-red-100"
-                              )}
-                            >
-                              Selected ({newMappingValueIds.length})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMappingValueFilter("UNSELECTED")}
-                              className={cn(
-                                "rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition",
-                                mappingValueFilter === "UNSELECTED"
-                                  ? "bg-[#1A1A1A] text-white"
-                                  : "border border-[#E6E6E6] bg-white text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                              )}
-                            >
-                              Unselected ({selectedAttributeValues.length - newMappingValueIds.length})
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="relative">
-                          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                          <input
-                            type="text"
-                            value={mappingValueSearch}
-                            onChange={(e) => setMappingValueSearch(e.target.value)}
-                            placeholder="Search values..."
-                            className="w-full rounded-md border border-[#E6E6E6] bg-white pl-8 pr-7 py-1.5 text-[12px] text-[#1A1A1A] placeholder-gray-400 focus:border-[#E31E24] focus:outline-none"
-                          />
-                          {mappingValueSearch && (
-                            <button
-                              type="button"
-                              onClick={() => setMappingValueSearch("")}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1">
-                          {filteredAttributeValues.length === 0 ? (
-                            <div className="p-4 text-center text-[12px] text-gray-500 border border-dashed border-gray-200 rounded-md">
-                              {mappingValueFilter === "SELECTED"
-                                ? "No values selected yet. Click 'All' to choose values."
-                                : mappingValueFilter === "UNSELECTED"
-                                ? "All values are currently selected."
-                                : `No values matching "${mappingValueSearch}"`}
-                            </div>
-                          ) : (
-                            <SortableList
-                              disabled={mappingValueFilter !== "SELECTED" || newMappingValueIds.length <= 1}
-                              className="w-full min-w-0"
-                              rowWidthClassName="w-full min-w-0"
-                              contentClassName="flex-1 min-w-0"
-                              items={filteredAttributeValues}
-                              onReorder={handleReorderFilteredValues}
-                              renderItem={(value, index) => {
-                                const isSelected = newMappingValueIds.includes(value.id);
-                                return (
-                                  <div
-                                    className={cn(
-                                      "flex flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-[12.5px] transition-all",
-                                      isSelected
-                                        ? "border-[#E31E24] bg-red-50/70 font-semibold text-[#1A1A1A] shadow-2xs ring-1 ring-[#E31E24]/20"
-                                        : "border-[#E6E6E6] bg-white text-[#4A4A4A] hover:bg-gray-50/60 hover:border-gray-300"
-                                    )}
-                                  >
-                                    <label className="flex items-center gap-2.5 min-w-0 cursor-pointer select-none">
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => toggleNewMappingValue(value.id)}
-                                        className="h-4 w-4 accent-[#E31E24] cursor-pointer rounded"
-                                      />
-                                      <span className={cn("truncate", isSelected ? "font-bold text-[#1A1A1A]" : "font-normal text-[#4A4A4A]")}>
-                                        {value.value}
+                        ) : (
+                          <SortableList
+                            disabled={mappingValueFilter !== "SELECTED" || newMappingValueIds.length <= 1}
+                            className="w-full min-w-0"
+                            rowWidthClassName="w-full min-w-0"
+                            contentClassName="flex-1 min-w-0"
+                            items={filteredAttributeValues}
+                            onReorder={handleReorderFilteredValues}
+                            renderItem={(value, index) => {
+                              const isSelected = newMappingValueIds.includes(value.id);
+                              return (
+                                <div
+                                  className={cn(
+                                    "flex flex-1 items-center justify-between gap-2 rounded-md border px-3 py-2 text-[12.5px] transition-all",
+                                    isSelected
+                                      ? "border-[#E31E24] bg-red-50/70 font-semibold text-[#1A1A1A] shadow-2xs ring-1 ring-[#E31E24]/20"
+                                      : "border-[#E6E6E6] bg-white text-[#4A4A4A] hover:bg-gray-50/60 hover:border-gray-300"
+                                  )}
+                                >
+                                  <label className="flex items-center gap-2.5 min-w-0 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleNewMappingValue(value.id)}
+                                      className="h-4 w-4 accent-[#E31E24] cursor-pointer rounded"
+                                    />
+                                    <span className={cn("truncate", isSelected ? "font-bold text-[#1A1A1A]" : "font-normal text-[#4A4A4A]")}>
+                                      {value.value}
+                                    </span>
+                                  </label>
+                                  <div className="flex items-center gap-2 shrink-0 select-none">
+                                    {isSelected && (
+                                      <span className="rounded-full bg-[#E31E24] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-2xs">
+                                        Selected
                                       </span>
-                                    </label>
-                                    <div className="flex items-center gap-2 shrink-0 select-none">
-                                      {isSelected && (
-                                        <span className="rounded-full bg-[#E31E24] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-2xs">
-                                          Selected
-                                        </span>
-                                      )}
-                                      {mappingValueFilter === "SELECTED" && newMappingValueIds.length > 1 && (
-                                        <div className="flex items-center gap-1">
-                                          <button
-                                            type="button"
-                                            title="Move up"
-                                            disabled={index === 0}
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              handleMoveSelectedItem(index, index - 1);
-                                            }}
-                                            className="flex h-5 w-5 items-center justify-center rounded border border-[#D5D5D5] bg-white text-[11px] font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                                          >
-                                            ↑
-                                          </button>
-                                          <button
-                                            type="button"
-                                            title="Move down"
-                                            disabled={index === filteredAttributeValues.length - 1}
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              handleMoveSelectedItem(index, index + 1);
-                                            }}
-                                            className="flex h-5 w-5 items-center justify-center rounded border border-[#D5D5D5] bg-white text-[11px] font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                                          >
-                                            ↓
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
+                                    )}
+                                    {mappingValueFilter === "SELECTED" && newMappingValueIds.length > 1 && (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          title="Move up"
+                                          disabled={index === 0}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleMoveSelectedItem(index, index - 1);
+                                          }}
+                                          className="flex h-5 w-5 items-center justify-center rounded border border-[#D5D5D5] bg-white text-[11px] font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                        >
+                                          ↑
+                                        </button>
+                                        <button
+                                          type="button"
+                                          title="Move down"
+                                          disabled={index === filteredAttributeValues.length - 1}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleMoveSelectedItem(index, index + 1);
+                                          }}
+                                          className="flex h-5 w-5 items-center justify-center rounded border border-[#D5D5D5] bg-white text-[11px] font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                        >
+                                          ↓
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
-                                );
-                              }}
-                            />
-                          )}
-                        </div>
-
+                                </div>
+                              );
+                            }}
+                          />
+                        )}
                       </div>
-                    ) : (
-                      <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-6 text-center text-[12.5px] text-[#9A9A9A]">
-                        Select an attribute to choose allowed values.
-                      </p>
-                    )}
-                  </div>
-                  {selectedMappingAttributeId && selectedAttributeDetail && (
-                    <div className="p-3 border-t border-[#F0F0F0] shrink-0 bg-white">
-                      <button
-                        type="button"
-                        onClick={handleAddProductAttribute}
-                        disabled={assignProductAttributes.isPending}
-                        className="w-full rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer shadow-2xs"
-                      >
-                        {assignProductAttributes.isPending ? "Saving..." : (mappedAttributeIds.has(selectedMappingAttributeId) ? "Update Attribute" : "Map Attribute")}
-                      </button>
                     </div>
+                  ) : (
+                    <p className="rounded-md border border-dashed border-[#E6E6E6] px-3 py-6 text-center text-[12.5px] text-[#9A9A9A]">
+                      Select an attribute from the dropdown above to view and select allowed values.
+                    </p>
                   )}
                 </div>
-              )}
-            </div>
+              </Modal>
+            )}
           </div>
         )}
 

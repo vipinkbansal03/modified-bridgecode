@@ -48,7 +48,9 @@ async function calculateCustomerOrder(
   }
 
   input.items.forEach((item) => {
-    if (item.variantId === item.productId) item.variantId = undefined;
+    if (!item.variantId || item.variantId === item.productId || String(item.variantId).startsWith("base-")) {
+      item.variantId = undefined;
+    }
     if (item.warehouseId === "default") item.warehouseId = undefined;
   });
 
@@ -628,7 +630,18 @@ export async function listCustomerOrders(customerId: string) {
     where: { customerId: customer.id },
     orderBy: { createdAt: "desc" },
     include: {
-      items: { include: { product: true, variant: true } },
+      items: {
+        include: {
+          product: {
+            include: {
+              media: {
+                orderBy: { sortOrder: "asc" },
+              },
+            },
+          },
+          variant: true,
+        },
+      },
       country: true,
       currency: true,
       shippingZone: { include: { provider: true, countries: { include: { country: true } } } },

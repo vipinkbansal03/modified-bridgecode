@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
@@ -10,8 +11,8 @@ import { PillCTA } from "../ui/PillCTA";
 
 export interface HeroSlide {
   image: string;
-  kicker: string;
-  title: string;
+  kicker?: string | null;
+  title?: string | null;
   ctaLabel?: string | null;
   ctaHref?: string | null;
 }
@@ -121,20 +122,20 @@ export function HeroSection({ data }: HeroSectionProps) {
 
   if (!slides || slides.length === 0) {
     return (
-      <section className="relative flex h-[calc(100dvh-64px)] xl:h-[calc(100dvh-130px)] xl:min-h-[580px] xl:max-h-[760px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D]">
-        <Container className="relative flex h-full flex-col justify-end md:justify-center items-start pb-16 sm:pb-14 pt-8">
-          <div className="flex w-full max-w-[820px] flex-col justify-end text-left">
-            <span className="mb-3.5 inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
+      <section className="relative flex h-[260px] sm:h-[340px] md:h-[400px] lg:h-[460px] xl:h-[480px] items-center overflow-hidden bg-gradient-to-br from-[#0F2D52] via-[#1A1A1A] to-[#0D0D0D]">
+        <Container className="relative flex h-full flex-col justify-center items-start py-8">
+          <div className="flex w-full max-w-[820px] flex-col justify-center text-left">
+            <span className="mb-2.5 inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-0.5 text-[11px] sm:text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
               <span className="h-1.5 w-1.5 rounded-full bg-brand" />
               Modern Orthodontics
             </span>
-            <h1 className="max-w-[780px] text-left text-[clamp(32px,7.5vw,46px)] sm:text-[clamp(36px,5vw,64px)] xl:text-[clamp(48px,5.5vw,72px)] font-light leading-[1.08] text-white drop-shadow-sm">
+            <h1 className="max-w-[780px] text-left text-[clamp(24px,4.5vw,40px)] sm:text-[clamp(30px,3.8vw,48px)] xl:text-[clamp(36px,3.2vw,56px)] font-light leading-[1.12] text-white drop-shadow-sm">
               Engineering precision orthodontic hardware, since 1994.
             </h1>
-            <p className="mt-4 max-w-[620px] text-[15px] sm:text-[16px] text-white/80 leading-relaxed">
+            <p className="mt-2.5 max-w-[620px] text-[14px] sm:text-[15px] text-white/80 leading-relaxed line-clamp-2 sm:line-clamp-none">
               Global manufacturer of premium orthodontic brackets, molar tubes, archwires, and OEM solutions.
             </p>
-            <div className="mt-6 flex justify-start">
+            <div className="mt-4 sm:mt-5 flex justify-start">
               <PillCTA href="/products" label="Explore Products" />
             </div>
           </div>
@@ -146,10 +147,14 @@ export function HeroSection({ data }: HeroSectionProps) {
   const slide = slides[index];
   const kicker = slide.kicker === "Since 1994" ? t("ui.home.since1994") : slide.kicker;
   const ctaLabel = slide.ctaLabel === "Shop by category" ? t("ui.home.shopByCategory") : slide.ctaLabel;
+  const hasKicker = Boolean(kicker?.trim());
+  const hasTitle = Boolean(slide.title?.trim());
+  const hasCta = Boolean(slide.ctaHref?.trim() && ctaLabel?.trim());
+  const hasTextOverlay = hasKicker || hasTitle || hasCta;
 
   return (
     <section
-      className="relative h-[calc(100dvh-64px)] xl:h-[calc(100dvh-130px)] xl:min-h-[580px] xl:max-h-[760px] overflow-hidden select-none touch-pan-y"
+      className="relative h-[260px] sm:h-[340px] md:h-[400px] lg:h-[460px] xl:h-[480px] overflow-hidden select-none touch-pan-y"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={handleTouchStart}
@@ -177,37 +182,47 @@ export function HeroSection({ data }: HeroSectionProps) {
               quality={90}
               className="object-cover object-center"
             />
-            {/* Vibrant, high-contrast gradient overlay ensuring crystal-clear text readability */}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
           </div>
-          <Container className="relative flex h-full flex-col justify-end md:justify-center items-start pb-16 sm:pb-14 pt-8">
-            <div className="flex w-full max-w-[820px] flex-col justify-end text-left">
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.05, ease: "easeOut" }}
-                className="flex flex-col items-start text-left"
-              >
-                <span className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3.5 py-1 text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                  {kicker}
-                </span>
-                <h1 className="max-w-[780px] text-left text-[clamp(32px,7.5vw,46px)] sm:text-[clamp(38px,5vw,56px)] xl:text-[clamp(48px,5.5vw,72px)] font-light leading-[1.08] text-white drop-shadow-sm">
-                  {slide.title}
-                </h1>
-                {slide.ctaHref && ctaLabel ? (
-                  <div className="mt-6 flex justify-start">
-                    <PillCTA href={slide.ctaHref} label={ctaLabel} />
-                  </div>
-                ) : null}
-              </motion.div>
-            </div>
-          </Container>
+
+          {hasTextOverlay ? (
+            <Container className="relative flex h-full flex-col justify-center items-start py-8">
+              <div className="flex w-full max-w-[820px] flex-col justify-center text-left">
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.05, ease: "easeOut" }}
+                  className="flex flex-col items-start text-left"
+                >
+                  {hasKicker ? (
+                    <span className="mb-2.5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-0.5 text-[11px] sm:text-[12px] font-semibold tracking-wider uppercase text-white backdrop-blur-sm shadow-xs">
+                      <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                      {kicker}
+                    </span>
+                  ) : null}
+                  {hasTitle ? (
+                    <h1 className="max-w-[780px] text-left text-[clamp(24px,4.5vw,40px)] sm:text-[clamp(30px,3.8vw,48px)] xl:text-[clamp(36px,3.2vw,56px)] font-light leading-[1.12] text-white drop-shadow-sm">
+                      {slide.title}
+                    </h1>
+                  ) : null}
+                  {hasCta ? (
+                    <div className="mt-4 sm:mt-5 flex justify-start">
+                      <PillCTA href={slide.ctaHref!} label={ctaLabel!} />
+                    </div>
+                  ) : null}
+                </motion.div>
+              </div>
+            </Container>
+          ) : slide.ctaHref ? (
+            <Link
+              href={slide.ctaHref}
+              className="absolute inset-0 z-[1]"
+              aria-label={slide.title || "Promotional banner link"}
+            />
+          ) : null}
         </motion.div>
       </AnimatePresence>
 
-      <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3.5 sm:left-auto sm:right-10 sm:translate-x-0 pointer-events-auto">
+      <div className="absolute bottom-4 sm:bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3.5 sm:left-auto sm:right-10 sm:translate-x-0 pointer-events-auto">
         <div className="flex gap-2 items-center">
           {slides.map((_, i) => (
             <button

@@ -65,13 +65,37 @@ async function fetchHomepageHeroBanners(countryCode?: string): Promise<HeroSlide
     if (!res.ok) return [];
     const json = await res.json();
     const banners = (json.data ?? []) as { image: string; title: string; linkText?: string | null; linkUrl?: string | null }[];
-    return banners.map((banner) => ({
-      image: banner.image,
-      kicker: "Modern Orthodontics",
-      title: banner.title,
-      ctaLabel: banner.linkText?.trim() || null,
-      ctaHref: banner.linkUrl?.trim() || null,
-    }));
+    return banners.map((banner) => {
+      let kicker: string | null = null;
+      let title: string | null = null;
+      let ctaLabel: string | null = banner.linkText?.trim() || null;
+
+      if (banner.linkText && banner.linkText.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(banner.linkText);
+          if (parsed.showOverlay) {
+            kicker = parsed.kicker || "Modern Orthodontics";
+            title = parsed.customTitle || banner.title;
+            ctaLabel = parsed.buttonText?.trim() || null;
+          } else {
+            kicker = null;
+            title = null;
+            ctaLabel = parsed.buttonText?.trim() || null;
+          }
+        } catch {
+          kicker = null;
+          title = null;
+        }
+      }
+
+      return {
+        image: banner.image,
+        kicker,
+        title,
+        ctaLabel,
+        ctaHref: banner.linkUrl?.trim() || null,
+      };
+    });
   } catch {
     return [];
   }

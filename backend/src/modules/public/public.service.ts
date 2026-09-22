@@ -510,7 +510,7 @@ export async function previewPublicProductPrices(
 
   // Validate variant selection compatibility with product variant configuration
   for (const item of items) {
-    const isBaseProductRequest = item.variantId === product.id;
+    const isBaseProductRequest = !item.variantId || item.variantId === product.id || String(item.variantId).startsWith("base-");
     if (product.hasVariants && isBaseProductRequest) {
       throw new AppError(
         "One or more requested variants are not available for this product or country.",
@@ -527,7 +527,7 @@ export async function previewPublicProductPrices(
 
   const processedItems = items.map(item => ({
     ...item,
-    actualVariantId: item.variantId === product.id ? null : item.variantId
+    actualVariantId: (!item.variantId || item.variantId === product.id || String(item.variantId).startsWith("base-")) ? null : item.variantId
   }));
 
   const requestedVariantIds = Array.from(

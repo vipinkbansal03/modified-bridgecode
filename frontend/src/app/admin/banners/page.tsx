@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X, Image as ImageIcon, Globe, Calendar, ExternalLink, Sparkles, CheckCircle2, Info } from "lucide-react";
 import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -90,6 +90,9 @@ const empty = {
   mobileImage: "",
   linkUrl: "",
   linkText: "",
+  showOverlay: false,
+  kicker: "Modern Orthodontics",
+  customTitle: "",
   placement: "HOMEPAGE_HERO",
   countryId: "",
   countryIds: [] as string[],
@@ -221,13 +224,33 @@ export default function BannersPage() {
   );
 
   const edit = useCallback((row: Banner) => {
+    let showOverlay = false;
+    let kicker = "Modern Orthodontics";
+    let linkText = row.linkText ?? "";
+    let customTitle = "";
+
+    if (row.linkText && row.linkText.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(row.linkText);
+        showOverlay = Boolean(parsed.showOverlay);
+        kicker = parsed.kicker || "Modern Orthodontics";
+        linkText = parsed.buttonText || "";
+        customTitle = parsed.customTitle || "";
+      } catch {
+        // use plain string
+      }
+    }
+
     setForm({
       id: row.id,
       title: row.title,
       image: row.image,
       mobileImage: row.mobileImage ?? "",
       linkUrl: row.linkUrl ?? "",
-      linkText: row.linkText ?? "",
+      linkText,
+      showOverlay,
+      kicker,
+      customTitle,
       placement: row.placement,
       countryId: row.countryId ?? "",
       countryIds: row.countryId ? [row.countryId] : [],
@@ -350,15 +373,31 @@ export default function BannersPage() {
     setPreviewUrls({});
   };
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const save = async (event?: React.FormEvent) => {
+    if (event?.preventDefault) event.preventDefault();
     const selectedCountries = form.countryIds?.length ? form.countryIds : form.countryId ? [form.countryId] : [];
+
+    let linkTextPayload: string | null = null;
+    if (form.showOverlay) {
+      linkTextPayload = JSON.stringify({
+        showOverlay: true,
+        kicker: form.kicker?.trim() || "Modern Orthodontics",
+        customTitle: form.customTitle?.trim() || form.title?.trim() || "",
+        buttonText: form.linkText?.trim() || "",
+      });
+    } else if (form.linkText?.trim()) {
+      linkTextPayload = JSON.stringify({
+        showOverlay: false,
+        buttonText: form.linkText.trim(),
+      });
+    }
+
     const basePayload = {
       title: form.title,
       image: form.image,
       mobileImage: form.mobileImage || null,
       linkUrl: form.linkUrl || null,
-      linkText: form.linkText || null,
+      linkText: linkTextPayload,
       placement: form.placement,
       countryIds: selectedCountries,
       countryId: selectedCountries[0] || null,
@@ -700,62 +739,97 @@ export default function BannersPage() {
       <Modal
         open={showModal}
         onClose={closeModal}
-        panelClassName="max-w-3xl max-h-[90vh] overflow-y-auto"
-      >
-        <form onSubmit={save} className="flex flex-col h-full">
-          {/* Unified Sticky Action Header Bar matching ProductEditor style */}
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#E6E6E6] bg-white px-6 py-4 shadow-xs">
+        title={
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-[#E31E24]">
+              <ImageIcon size={20} />
+            </div>
             <div>
-              <h3 className="text-[15.5px] font-bold text-ink">
-                {form.id ? "Edit Banner" : "New Banner"}
+              <h3 className="text-[17px] font-bold text-[#1A1A1A] leading-tight">
+                {form.id ? "Edit Banner" : "Create New Banner"}
               </h3>
-              <p className="text-[11.5px] text-steel-2">
-                Changes are not applied until you save.
+              <p className="text-[12px] text-gray-500 mt-0.5">
+                {form.id ? `Editing configuration for "${form.title || "Untitled Banner"}"` : "Configure banner artwork, storefront placement, target link, and schedule"}
               </p>
             </div>
+          </div>
+        }
+        size="2xl"
+        panelClassName="max-w-4xl max-h-[92vh] flex flex-col"
+        bodyClassName="p-0 bg-[#F9FAFB]"
+        footer={
+          <div className="flex w-full items-center justify-between">
+            <p className="text-[12px] text-gray-400">
+              * Required fields
+            </p>
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={closeModal}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#555] hover:bg-gray-50 transition-colors"
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors cursor-pointer"
               >
-                <ArrowLeft size={14} /> Back
+                Cancel
               </button>
               <LoadingButton
-                type="submit"
+                type="button"
+                onClick={() => save()}
                 loading={createBanner.isPending || updateBanner.isPending}
                 loadingText="Saving..."
-                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#E31E24] px-6 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-xs cursor-pointer"
               >
-                <Save size={14} /> Save Changes
+                <Save size={15} /> {form.id ? "Save Changes" : "Create Banner"}
               </LoadingButton>
             </div>
           </div>
+        }
+      >
+        <form onSubmit={save} className="p-6 space-y-5">
+          {/* Section 1: Placement & Status */}
+          <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5.5 w-5.5 items-center justify-center rounded-md bg-blue-50 text-[11px] font-bold text-blue-600">1</span>
+                <h4 className="text-[14px] font-bold text-gray-900">Placement & Visibility</h4>
+              </div>
+              <span className="text-[11.5px] text-gray-400 font-medium">Core Configuration</span>
+            </div>
 
-          {/* Scrollable Form Body */}
-          <div className="p-6 space-y-5">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <AdminInput
-                label="Banner Title"
+                label="Banner Title *"
                 value={form.title}
                 onChange={(event) => set("title", event.target.value)}
+                placeholder="e.g. Curio Brackets Promo"
                 required
               />
-              <div className="space-y-1">
+              <AdminSelect
+                label="Status"
+                value={form.status ? "true" : "false"}
+                onChange={(event) => set("status", event.target.value === "true")}
+                options={[
+                  { value: "true", label: "Active (Visible on Storefront)" },
+                  { value: "false", label: "Inactive (Hidden)" },
+                ]}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
                 <AdminSelect
-                  label="Placement"
+                  label="Placement Position"
                   value={form.placement}
                   onChange={(event) => set("placement", event.target.value)}
                   options={availablePlacementOptions}
                 />
                 {form.placement && PLACEMENT_CONFIG[form.placement] && (
-                  <p className="text-[11px] text-gray-500 italic">
-                    {PLACEMENT_CONFIG[form.placement].description}
-                  </p>
+                  <div className="rounded-md bg-blue-50/70 px-3 py-1.5 text-[11.5px] text-blue-800 border border-blue-100/60 leading-relaxed">
+                    <span className="font-semibold">{PLACEMENT_CONFIG[form.placement].context}:</span> {PLACEMENT_CONFIG[form.placement].description}
+                  </div>
                 )}
               </div>
+
               <AdminMultiSearchableSelect
-                label="Countries"
+                label="Target Countries"
                 values={form.countryIds ?? (form.countryId ? [form.countryId] : [])}
                 onValuesChange={(values) =>
                   setForm((prev) => ({ ...prev, countryIds: values, countryId: values[0] ?? "" }))
@@ -764,81 +838,260 @@ export default function BannersPage() {
                   value: country.id,
                   label: `${country.name} (${country.code})`,
                 }))}
-                placeholder="Select countries"
+                placeholder="Select target countries"
                 allowSelectAll
-                selectAllLabel="All countries"
+                selectAllLabel="All countries (Global)"
               />
+            </div>
+          </div>
+
+          {/* Section 2: Banner Artwork & Media */}
+          <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5.5 w-5.5 items-center justify-center rounded-md bg-red-50 text-[11px] font-bold text-[#E31E24]">2</span>
+                <h4 className="text-[14px] font-bold text-gray-900">Banner Artwork & Media</h4>
+              </div>
+              <span className="text-[11.5px] text-gray-400 font-medium">Desktop & Mobile Images</span>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              {/* Desktop Image */}
+              <div className="flex flex-col rounded-xl border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[13px] font-bold text-gray-900">Desktop Image *</span>
+                    <p className="text-[11px] text-gray-500">Recommended: 1920 × 480px (PNG, WebP, JPG)</p>
+                  </div>
+                  {previewUrls.image || form.image ? (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 border border-emerald-200">
+                      Uploaded
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-700 border border-amber-200">
+                      Required
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative flex aspect-[16/7] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-neutral-900 shadow-inner">
+                  {previewUrls.image || form.image ? (
+                    <>
+                      <img
+                        src={previewUrls.image || form.image}
+                        alt="Desktop Banner Preview"
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMediaSelector({ open: true, field: "image" })}
+                          className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-900 shadow-sm hover:bg-gray-100 transition-colors cursor-pointer"
+                        >
+                          Change Image
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-center p-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
+                        <ImageIcon size={20} />
+                      </div>
+                      <p className="text-[12px] text-gray-400">No desktop image selected</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMediaSelector({ open: true, field: "image" })}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <ImageIcon size={14} /> Browse Media Library
+                  </button>
+                </div>
+
+                <AdminInput
+                  label="Direct Image Key / URL"
+                  value={String(form.image ?? "")}
+                  onChange={(event) => {
+                    set("image", event.target.value);
+                    setPreviewUrls((prev) => ({ ...prev, image: event.target.value }));
+                  }}
+                  placeholder="banners/... or https://..."
+                />
+              </div>
+
+              {/* Mobile Image */}
+              <div className="flex flex-col rounded-xl border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[13px] font-bold text-gray-900">Mobile Override (Optional)</span>
+                    <p className="text-[11px] text-gray-500">Recommended: 768 × 600px</p>
+                  </div>
+                  {previewUrls.mobileImage || form.mobileImage ? (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 border border-emerald-200">
+                      Uploaded
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10.5px] font-semibold text-gray-500">
+                      Auto-Scales Desktop
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative flex aspect-[16/7] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-neutral-900 shadow-inner">
+                  {previewUrls.mobileImage || form.mobileImage ? (
+                    <>
+                      <img
+                        src={previewUrls.mobileImage || form.mobileImage}
+                        alt="Mobile Banner Preview"
+                        className="h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMediaSelector({ open: true, field: "mobileImage" })}
+                          className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-900 shadow-sm hover:bg-gray-100 transition-colors cursor-pointer"
+                        >
+                          Change Image
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-center p-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
+                        <ImageIcon size={20} />
+                      </div>
+                      <p className="text-[12px] text-gray-400">Uses desktop image if empty</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMediaSelector({ open: true, field: "mobileImage" })}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-[12.5px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <ImageIcon size={14} /> Browse Media Library
+                  </button>
+                  {(previewUrls.mobileImage || form.mobileImage) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        set("mobileImage", "");
+                        setPreviewUrls((prev) => ({ ...prev, mobileImage: "" }));
+                      }}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <AdminInput
+                  label="Direct Mobile Key / URL"
+                  value={String(form.mobileImage ?? "")}
+                  onChange={(event) => {
+                    set("mobileImage", event.target.value);
+                    setPreviewUrls((prev) => ({ ...prev, mobileImage: event.target.value }));
+                  }}
+                  placeholder="banners/... or https://..."
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Storefront Text & Tag Overlay */}
+          <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5.5 w-5.5 items-center justify-center rounded-md bg-amber-50 text-[11px] font-bold text-amber-600">3</span>
+                <h4 className="text-[14px] font-bold text-gray-900">Storefront Text & Tag Overlay</h4>
+              </div>
+              <span className="text-[11.5px] text-gray-400 font-medium">Title & Tag Visibility</span>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/70 p-3.5">
+                <div className="space-y-0.5">
+                  <div className="text-[13px] font-bold text-gray-900">
+                    Display Banner Title & Badge on Storefront
+                  </div>
+                  <p className="text-[12px] text-gray-500">
+                    Enable if you want text overlay (e.g., &quot;Modern Orthodontics&quot; badge and headline) over your banner.
+                  </p>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={form.showOverlay}
+                    onChange={(e) => set("showOverlay", e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-[#E31E24] peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                </label>
+              </div>
+
+              {form.showOverlay && (
+                <div className="grid gap-4 sm:grid-cols-2 pt-1">
+                  <AdminInput
+                    label="Badge / Tag Text (Kicker)"
+                    value={form.kicker}
+                    onChange={(event) => set("kicker", event.target.value)}
+                    placeholder="e.g. Modern Orthodontics or Since 1994"
+                  />
+                  <AdminInput
+                    label="Headline Title Overlay"
+                    value={form.customTitle || form.title}
+                    onChange={(event) => set("customTitle", event.target.value)}
+                    placeholder="e.g. Banner Headline"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 4: Link Destination & Scheduling */}
+          <div className="rounded-xl border border-gray-200/90 bg-white p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5.5 w-5.5 items-center justify-center rounded-md bg-purple-50 text-[11px] font-bold text-purple-700">4</span>
+                <h4 className="text-[14px] font-bold text-gray-900">Destination & Scheduling (Optional)</h4>
+              </div>
+              <span className="text-[11.5px] text-gray-400 font-medium">Target Action & Dates</span>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <AdminInput
-                label="Link URL"
+                label="Target Link URL"
                 value={form.linkUrl}
                 onChange={(event) => set("linkUrl", event.target.value)}
-                placeholder="e.g. /products or https://..."
+                placeholder="e.g. /products/curio or https://..."
               />
               <AdminInput
-                label="Link Button Text"
+                label="Button Label (Optional)"
                 value={form.linkText}
                 onChange={(event) => set("linkText", event.target.value)}
-                placeholder="e.g. Explore Now"
+                placeholder="e.g. Explore Products (leave empty if in image artwork)"
               />
-              <AdminSelect
-                label="Status"
-                value={form.status ? "true" : "false"}
-                onChange={(event) => set("status", event.target.value === "true")}
-                options={[
-                  { value: "true", label: "Active" },
-                  { value: "false", label: "Inactive" },
-                ]}
-              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <AdminInput
-                label="Start Date"
+                label="Start Date (Optional)"
                 type="date"
                 value={form.startDate}
                 onChange={(event) => set("startDate", event.target.value)}
               />
               <AdminInput
-                label="End Date"
+                label="End Date (Optional)"
                 type="date"
                 value={form.endDate}
                 onChange={(event) => set("endDate", event.target.value)}
               />
-            </div>
-
-            {/* Images Upload Section */}
-            <div className="grid gap-4 md:grid-cols-2 pt-2">
-              {(["image", "mobileImage"] as const).map((field) => {
-                const currentPreview = previewUrls[field] || form[field];
-                return (
-                  <div key={field} className="rounded-lg border border-[#E6E6E6] bg-gray-50/50 p-4">
-                    <div className="mb-2 text-[13px] font-semibold text-[#1A1A1A]">
-                      {field === "image" ? "Desktop Image *" : "Mobile Image Override (Optional)"}
-                    </div>
-                    {currentPreview ? (
-                      <div className="relative mb-3 overflow-hidden rounded-md border border-[#E6E6E6]">
-                        <img src={currentPreview} alt="" className="h-36 w-full object-cover" />
-                      </div>
-                    ) : null}
-                    <AdminInput
-                      label={field === "image" ? "Desktop Key / URL" : "Mobile Key / URL"}
-                      value={String(form[field] ?? "")}
-                      onChange={(event) => {
-                        set(field, event.target.value);
-                        setPreviewUrls((prev) => ({ ...prev, [field]: event.target.value }));
-                      }}
-                      placeholder="banners/uuid-desktop.webp or https://..."
-                    />
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMediaSelector({ open: true, field })}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs"
-                      >
-                        <ImageIcon size={14} />
-                        Browse Media Library
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </form>

@@ -312,14 +312,21 @@ export default function CustomerOrderTrackingPage() {
     <div className="min-h-screen bg-[#FDFBF7] py-8 sm:py-12">
       <Container className="max-w-4xl space-y-6">
         {/* Navigation Breadcrumb */}
-        <div>
-          <Link
-            href="/account"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-steel hover:text-ink transition-colors"
-          >
-            <ArrowLeft size={15} />
-            <span>Back to Orders</span>
-          </Link>
+        <div className="space-y-2">
+          <div>
+            <Link
+              href="/account"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+            >
+              <ArrowLeft size={14} className="text-[#E31E24]" />
+              <span>Back to Orders</span>
+            </Link>
+          </div>
+          <nav className="text-[13px] text-steel-2">
+            <Link href="/" className="hover:text-brand">Home</Link> /{" "}
+            <Link href="/account" className="hover:text-brand">Your Account</Link> /{" "}
+            <span className="font-semibold text-[#111827]">Order #{tracking?.orderNumber || orderId}</span>
+          </nav>
         </div>
 
         {/* Loading Skeleton */}

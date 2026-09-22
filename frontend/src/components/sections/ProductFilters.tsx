@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCategories } from "@/hooks/api/useCategories";
 import { cn } from "@/utils/cn";
 
@@ -123,103 +123,36 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
   const showCategories = true;
 
   return (
-    <aside>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-steel-2">Filters</p>
-        {hasActiveFilters && (
-          <button type="button" onClick={clearFilters} className="text-[12px] font-medium text-brand hover:underline">
-            Clear
-          </button>
-        )}
+    <div className="w-full">
+      <div className="pb-2">
+        <h3 className="text-[16px] font-bold text-ink tracking-tight">Filters</h3>
       </div>
-
-      {showAvailability && (
-        <div className="border-b border-line">
-          <button
-            type="button"
-            onClick={() => setOpenGroup(openGroup === "Availability" ? null : "Availability")}
-            className="flex w-full items-center justify-between py-4.5 text-left text-[15px] font-semibold text-ink"
-          >
-            Availability
-            <ChevronDown size={12} className={cn("text-steel transition-transform duration-200", openGroup === "Availability" && "rotate-180")} />
-          </button>
-          {openGroup === "Availability" && (
-            <div className="pb-3">
-              <label className="flex cursor-pointer items-center gap-2.5 py-1.5 text-[13.5px] text-steel">
-                <input
-                  type="checkbox"
-                  className="accent-brand"
-                  checked={value.featuredOnly}
-                  onChange={(event) => onChange({ ...value, featuredOnly: event.target.checked })}
-                />
-                Featured only
-              </label>
-            </div>
-          )}
-        </div>
-      )}
-
-      {showCategories && (
-        <div className="border-b border-line">
-          <button
-            type="button"
-            onClick={() => setOpenGroup(openGroup === "Categories" ? null : "Categories")}
-            className="flex w-full items-center justify-between py-4.5 text-left text-[15px] font-semibold text-ink"
-          >
-            Categories
-            <ChevronDown size={12} className={cn("text-steel transition-transform duration-200", openGroup === "Categories" && "rotate-180")} />
-          </button>
-          {openGroup === "Categories" && (
-            <div className="pb-3">
-              {categories.length === 0 ? (
-                <p className="py-1.5 text-[13px] text-steel-2">No categories available.</p>
-              ) : (
-                categories.map((category) => (
-                  <label key={category.slug} className="flex cursor-pointer items-center gap-2.5 py-1.5 text-[13.5px] text-steel">
-                    <input
-                      type="checkbox"
-                      className="accent-brand"
-                      checked={value.categorySlugs.includes(category.slug)}
-                      onChange={(event) => toggleCategory(category.slug, event.target.checked)}
-                    />
-                    <span className="flex-1">{category.name}</span>
-                    {typeof category.productCount === "number" && (
-                      <span className="text-[11px] text-steel-2">{category.productCount}</span>
-                    )}
-                  </label>
-                ))
-              )}
-              <Link href="/products" className="mt-2 inline-block text-[12px] font-medium text-brand hover:underline">
-                Browse all products
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
 
       {attributeGroups.map((group) => {
         const open = openGroup === group.attributeName;
         return (
-          <div key={group.attributeName} className="border-b border-line">
+          <div key={group.attributeName} className="border-b border-line py-3.5">
             <button
               type="button"
               onClick={() => setOpenGroup(open ? null : group.attributeName)}
-              className="flex w-full items-center justify-between py-4.5 text-left text-[15px] font-semibold text-ink"
+              className="flex w-full items-center justify-between text-left text-[14px] font-semibold text-ink cursor-pointer"
             >
-              {group.attributeName}
-              <ChevronDown size={12} className={cn("text-steel transition-transform duration-200", open && "rotate-180")} />
+              <span>{group.attributeName}</span>
+              <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", open && "rotate-180")} />
             </button>
             {open && (
-              <div className="pb-3">
+              <div className="mt-3 space-y-2">
                 {group.options.map((option) => (
-                  <label key={option.value} className="flex cursor-pointer items-center gap-2.5 py-1.5 text-[13.5px] text-steel">
-                    <input
-                      type="checkbox"
-                      className="accent-brand"
-                      checked={value.attributeValues.includes(option.value)}
-                      onChange={(event) => toggleAttributeValue(option.value, event.target.checked)}
-                    />
-                    {option.value}
+                  <label key={option.value} className="flex cursor-pointer items-center justify-between text-[13.5px] text-steel hover:text-ink">
+                    <span className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 rounded border-line accent-[#E31E24] cursor-pointer"
+                        checked={value.attributeValues.includes(option.value)}
+                        onChange={(event) => toggleAttributeValue(option.value, event.target.checked)}
+                      />
+                      <span>{option.value}</span>
+                    </span>
                   </label>
                 ))}
               </div>
@@ -227,7 +160,47 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
           </div>
         );
       })}
-    </aside>
+
+      {showAvailability && (
+        <div className="border-b border-line py-3.5">
+          <button
+            type="button"
+            onClick={() => setOpenGroup(openGroup === "Availability" ? null : "Availability")}
+            className="flex w-full items-center justify-between text-left text-[14px] font-semibold text-ink cursor-pointer"
+          >
+            <span>Availability</span>
+            <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", openGroup === "Availability" && "rotate-180")} />
+          </button>
+          {openGroup === "Availability" && (
+            <div className="mt-3 space-y-2">
+              <label className="flex cursor-pointer items-center justify-between text-[13.5px] text-steel hover:text-ink">
+                <span className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-line accent-[#E31E24] cursor-pointer"
+                    checked={value.featuredOnly}
+                    onChange={(event) => onChange({ ...value, featuredOnly: event.target.checked })}
+                  />
+                  <span>Featured only</span>
+                </span>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasActiveFilters && (
+        <div className="pt-4">
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-[13px] font-semibold text-[#E31E24] hover:underline cursor-pointer"
+          >
+            Clear all filters
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

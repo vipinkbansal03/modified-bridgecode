@@ -16,13 +16,15 @@ function QuickOrderPageContent() {
   return (
     <section className="min-h-[70vh] bg-[linear-gradient(180deg,#FAFAFA_0%,#FFFFFF_42%,#FFFFFF_100%)] py-8 sm:py-10 lg:py-12">
       <Container>
-        <Link
-          href={slug ? `/products/${slug}` : "/products"}
-          className="inline-flex items-center gap-2 text-[13px] font-medium text-[#6B6B6B] transition-colors hover:text-[#E31E24]"
-        >
-          <ArrowLeft size={14} />
-          Back to product page
-        </Link>
+        <div>
+          <Link
+            href={slug ? `/products/${slug}` : "/products"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+          >
+            <ArrowLeft size={14} className="text-[#E31E24]" />
+            <span>Back to Product</span>
+          </Link>
+        </div>
 
         <div className="mt-5 overflow-hidden rounded-2xl border border-line bg-white shadow-[0_20px_70px_rgba(0,0,0,0.06)]">
           <div className="border-b border-line bg-[linear-gradient(135deg,#FFFFFF_0%,#FFF7F7_100%)] p-5 sm:p-7 lg:p-8">

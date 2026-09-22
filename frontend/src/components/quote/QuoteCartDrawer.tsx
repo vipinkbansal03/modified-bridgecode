@@ -142,7 +142,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
         onClick={onClose}
       />
       {/* Drawer */}
-      <div className="fixed right-0 top-0 z-[61] flex h-full w-full max-w-[480px] flex-col bg-white shadow-2xl">
+      <div className="fixed right-0 top-0 z-[61] flex h-full w-full max-w-[520px] sm:max-w-[540px] flex-col bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E6E6E6] px-5 py-4">
           <div className="flex items-center gap-2">

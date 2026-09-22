@@ -64,14 +64,21 @@ export default function CustomerReturnsPage() {
   return (
     <div className="min-h-screen bg-[#FDFBF7] py-8 sm:py-12">
       <Container className="max-w-4xl space-y-6">
-        <div>
-          <Link
-            href="/account"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-steel hover:text-ink transition-colors"
-          >
-            <ArrowLeft size={15} />
-            <span>Back to Account</span>
-          </Link>
+        <div className="space-y-2">
+          <div>
+            <Link
+              href="/account"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+            >
+              <ArrowLeft size={14} className="text-[#E31E24]" />
+              <span>Back to Account</span>
+            </Link>
+          </div>
+          <nav className="text-[13px] text-steel-2">
+            <Link href="/" className="hover:text-brand">Home</Link> /{" "}
+            <Link href="/account" className="hover:text-brand">Your Account</Link> /{" "}
+            <span className="font-semibold text-[#111827]">Returns & Refunds</span>
+          </nav>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-5">

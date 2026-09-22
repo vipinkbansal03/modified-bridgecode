@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Heart, ImageOff, ShoppingBag, Trash2, ArrowRight, UserCheck } from "lucide-react";
+import { Heart, ImageOff, ShoppingBag, Trash2, ArrowLeft, ArrowRight, UserCheck } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -35,13 +35,25 @@ export default function WishlistPage() {
   return (
     <div className="py-6 lg:py-[34px] bg-[#FAFAFA] min-h-[70vh]">
       <Container>
-        {/* Breadcrumbs */}
-        <nav className="mb-6 text-[13px] text-steel">
-          <Link href="/" className="hover:text-brand transition-colors">
-            Home
-          </Link>{" "}
-          / <span className="font-medium text-ink">My Wishlist</span>
-        </nav>
+        {/* Top Bar: Back Navigation and Breadcrumbs */}
+        <div className="mb-6 space-y-2">
+          <div>
+            <Link
+              href="/products"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+            >
+              <ArrowLeft size={14} className="text-[#E31E24]" />
+              <span>Back to Products</span>
+            </Link>
+          </div>
+
+          <nav className="text-[13px] text-steel">
+            <Link href="/" className="hover:text-brand transition-colors">
+              Home
+            </Link>{" "}
+            / <span className="font-medium text-ink">My Wishlist</span>
+          </nav>
+        </div>
 
         {/* Title Section */}
         <div className="mb-8 flex items-center justify-between border-b border-line pb-4">

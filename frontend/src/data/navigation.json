@@ -1,6 +1,6 @@
 {
   "primary": [
-    { "label": "Products", "href": "/products" },
+    { "label": "All Products", "href": "/products" },
     { "label": "Quality Certifications", "href": "/quality-certifications" },
     { "label": "Contact Us", "href": "/contact" }
   ],

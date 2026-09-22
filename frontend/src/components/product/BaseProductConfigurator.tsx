@@ -85,18 +85,23 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
     : (apiProduct.inventory?.available ?? 0);
   const isOutOfStock = totalAvailableStock <= 0;
 
-  const handleAddToCart = async (buyNow = false) => {
+  const handleAddToCart = async (continueShopping = false) => {
     try {
       setIsAdding(true);
       addItem({
         productId: apiProduct.id,
         productSlug: apiProduct.slug,
         productTitle: apiProduct.title,
-        variantId: apiProduct.id, // Using product ID as variant ID for base products
-        variantTitle: "Base Product",
-        sku: apiProduct.productCode,
-        quantity,
-        unitPrice: basePrice.sellingPrice,
+        variantId: apiProduct.id,
+        variantTitle: "Standard",
+        image:
+          apiProduct.thumbnail?.trim() ||
+          (typeof apiProduct.images?.[0] === "string"
+            ? apiProduct.images[0]
+            : (apiProduct.images?.[0] as any)?.url ?? null),
+        sku: apiProduct.productCode || null,
+        quantity: quantity,
+        unitPrice: Number(basePrice.sellingPrice),
         currencyCode: basePrice.currencyCode,
         currencySymbol: basePrice.currencySymbol,
         countryCode: basePrice.countryCode,
@@ -106,14 +111,14 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         isOutOfStock: isOutOfStock,
       });
 
-      if (buyNow) {
-        router.push("/checkout");
-      } else {
-        showToast({
-          title: "Added to Cart",
-          message: `${quantity}x ${apiProduct.title} has been added to your cart.`,
-          type: "success",
-        });
+      showToast({
+        title: "Added to Cart",
+        message: `${quantity}x ${apiProduct.title} has been added to your cart.`,
+        type: "success",
+      });
+
+      if (continueShopping) {
+        router.push("/products");
       }
     } catch (err: any) {
       showToast({
@@ -191,26 +196,28 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2.5">
         <button
+          type="button"
           onClick={() => handleAddToCart(false)}
           disabled={isOutOfStock || isAdding}
-          className="flex flex-1 min-w-[130px] h-11 items-center justify-center gap-2 rounded-pill bg-[#1a1a1a] px-5 text-[13.5px] font-semibold text-white transition hover:bg-[#333] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
+          className="flex flex-1 min-w-[130px] h-11 items-center justify-center gap-2 whitespace-nowrap rounded-pill bg-brand px-4 text-[13.5px] font-bold text-white transition hover:bg-brand/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
         >
           <ShoppingBag size={16} />
           {isAdding ? "Adding..." : "Add to Cart"}
         </button>
         <button
+          type="button"
           onClick={() => handleAddToCart(true)}
           disabled={isOutOfStock || isAdding}
-          className="flex flex-1 min-w-[110px] h-11 items-center justify-center rounded-pill bg-brand px-5 text-[13.5px] font-semibold text-white transition hover:bg-brand/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
+          className="flex flex-1 min-w-[155px] h-11 items-center justify-center whitespace-nowrap rounded-pill border-2 border-line-deep bg-slate-50 px-4 text-[13.5px] font-bold text-ink transition hover:border-ink hover:bg-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-xs"
         >
-          Buy Now
+          Continue Shopping
         </button>
         <WishlistButton
           productId={apiProduct.id}
           showText={true}
-          className="h-11 px-5 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] cursor-pointer"
+          className="h-11 px-4 border-2 border-line-deep bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] font-bold cursor-pointer whitespace-nowrap"
           iconSize={18}
         />
       </div>

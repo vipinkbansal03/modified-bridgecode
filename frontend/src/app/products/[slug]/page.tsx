@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { ProductGallery } from "@/components/sections/ProductGallery";
 import { ProductTabs } from "@/components/sections/ProductTabs";
@@ -189,21 +190,37 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <>
       <section className="pt-6 lg:pt-8.5 pb-4">
         <Container>
-          {/* Breadcrumbs */}
-          <nav className="mb-3 text-[13px] text-steel-2">
-            <Link href="/" className="hover:text-brand">
-              Home
-            </Link>{" "}
-            /{" "}
-            <Link href="/products" className="hover:text-brand">
-              Products
-            </Link>{" "}
-            /{" "}
-            <Link href={`/products?category=${product.categorySlug}`} className="hover:text-brand">
-              {product.category}
-            </Link>{" "}
-            / {product.title}
-          </nav>
+          {/* Top Bar: Back Navigation and Breadcrumbs */}
+          <div className="mb-4 space-y-2">
+            <div>
+              <Link
+                href="/products"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+              >
+                <ArrowLeft size={14} className="text-[#E31E24]" />
+                <span>Back to Products</span>
+              </Link>
+            </div>
+
+            <nav className="text-[13px] text-steel-2">
+              <Link href="/" className="hover:text-brand">
+                Home
+              </Link>{" "}
+              /{" "}
+              <Link href="/products" className="hover:text-brand">
+                Products
+              </Link>{" "}
+              {product.category && (
+                <>
+                  /{" "}
+                  <Link href={`/products?category=${product.categorySlug}`} className="hover:text-brand">
+                    {product.category}
+                  </Link>{" "}
+                </>
+              )}
+              / <span className="font-semibold text-[#111827]">{product.title}</span>
+            </nav>
+          </div>
 
           {/* Top Fold: Gallery Left, Header & Description Right */}
           <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr] items-start">
@@ -280,9 +297,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
               {/* Primary Buy Box & Actions */}
               {hasVariants ? (
-                <div className="my-5 rounded-2xl border border-line bg-[#FAFAFA] p-4 sm:p-5 space-y-3">
+                <div className="my-5 rounded-2xl border-2 border-red-100 bg-gradient-to-br from-red-50/50 via-white to-slate-50/60 p-4 sm:p-5 space-y-3 shadow-xs">
                   <div className="flex flex-wrap items-center gap-3">
-                    <ConfigureButton label="Configure Product" className="h-11 flex-1 min-w-[150px]" />
+                    <ConfigureButton label="Buy Now" className="h-11 flex-1 min-w-[150px]" />
                     {apiProduct?.id && (
                       <WishlistButton
                         productId={apiProduct.id}
@@ -292,13 +309,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       />
                     )}
                   </div>
-                  <p className="text-[12.5px] text-steel flex items-center gap-1.5">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand shrink-0" />
+                  <p className="text-[12.5px] font-medium text-ink/80 flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-full bg-brand shrink-0 animate-pulse" />
                     Select your preferred prescription, slot size, and package below to order.
                   </p>
                 </div>
               ) : (apiProduct?.prices?.length ?? 0) > 0 ? (
-                <div className="my-5 rounded-2xl border border-line bg-[#FAFAFA] p-4 sm:p-5">
+                <div className="my-5 rounded-2xl border-2 border-red-100 bg-gradient-to-br from-red-50/50 via-white to-slate-50/60 p-4 sm:p-5 shadow-xs">
                   <BaseProductConfigurator apiProduct={apiProduct} />
                 </div>
               ) : (

@@ -1,5 +1,6 @@
 export const staticMessages = {
-  "ui.nav.products": "Products",
+  "ui.nav.home": "Home",
+  "ui.nav.products": "All Products",
   "ui.nav.capabilities": "Capabilities",
   "ui.nav.search": "Search",
   "ui.nav.account": "Account",

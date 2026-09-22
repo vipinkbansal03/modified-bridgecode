@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, ChevronRight } from "lucide-react";
 
 import { Modal } from "@/components/ui/Modal";
 import { useCustomerAddresses } from "@/hooks/api/useCustomerAddresses";
+import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import type { CustomerAddress } from "@/types/delivery.types";
 
 import { CurrentLocationCard } from "./CurrentLocationCard";
@@ -22,6 +25,8 @@ export function DeliveryAddressModal({
   open,
   onClose,
 }: DeliveryAddressModalProps) {
+  const router = useRouter();
+  const { currentCustomer } = useCustomerAuth();
   const { showToast } = useToast();
   const { data: addresses = [], isLoading } = useCustomerAddresses(); 
 
@@ -458,6 +463,37 @@ export function DeliveryAddressModal({
         ) : (
           <EmptyAddresses />
         )}
+
+        {/* Amazon-style Add an address or pick-up point Action */}
+        <div className="pt-2 border-t border-[#E5E7EB]">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              if (currentCustomer) {
+                router.push("/account?tab=addresses");
+              } else {
+                router.push("/login?returnTo=" + encodeURIComponent("/account?tab=addresses"));
+              }
+            }}
+            className="flex w-full items-center justify-between rounded-xl border border-[#E5E7EB] bg-white p-3.5 text-left transition-all hover:border-[#E31E24]/50 hover:bg-red-50/20 group cursor-pointer shadow-2xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-[#E31E24] group-hover:scale-105 transition-transform">
+                <Plus size={18} />
+              </div>
+              <div>
+                <span className="text-[13.5px] font-bold text-[#111827] group-hover:text-[#E31E24] transition-colors">
+                  Add an address or pick-up point
+                </span>
+                <p className="text-[11.5px] text-[#6B7280]">
+                  Manage your saved shipping addresses and delivery preferences
+                </p>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-[#9CA3AF] group-hover:text-[#E31E24] group-hover:translate-x-0.5 transition-all" />
+          </button>
+        </div>
       </div>
     </Modal>
   );

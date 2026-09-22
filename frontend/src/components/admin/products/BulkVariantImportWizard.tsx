@@ -712,7 +712,7 @@ export function BulkVariantImportWizard({
           id="bulk-import-overlay"
         >
           <motion.div
-            className="flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+            className="flex w-full max-w-6xl h-[90vh] max-h-[860px] min-h-0 flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
             initial={{ opacity: 0, y: 24, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.97 }}
@@ -745,7 +745,7 @@ export function BulkVariantImportWizard({
             </div>
 
             {/* ── Body (with step transitions) ── */}
-            <div className="flex-1 overflow-hidden relative">
+            <div className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
               <AnimatePresence mode="wait">
                 {step === 0 && (
                   <motion.div
@@ -754,7 +754,7 @@ export function BulkVariantImportWizard({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -30 }}
                     transition={{ duration: 0.2 }}
-                    className="h-full flex flex-col"
+                    className="h-full min-h-0 flex-1 flex flex-col overflow-hidden"
                   >
                     <UploadStep
                       file={file}
@@ -786,7 +786,7 @@ export function BulkVariantImportWizard({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -30 }}
                     transition={{ duration: 0.2 }}
-                    className="h-full flex flex-col"
+                    className="h-full min-h-0 flex-1 flex flex-col overflow-hidden"
                   >
                     <PreviewStep
                       preview={preview}
@@ -834,7 +834,7 @@ export function BulkVariantImportWizard({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -30 }}
                     transition={{ duration: 0.2 }}
-                    className="h-full flex flex-col"
+                    className="h-full min-h-0 flex-1 flex flex-col overflow-y-auto"
                   >
                     <ExecuteStep
                       executing={executing}
@@ -903,7 +903,7 @@ function UploadStep({
 }: UploadStepProps) {
   return (
     <>
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
         {/* Drop zone */}
         <div
           className={cn(
@@ -1397,7 +1397,7 @@ function PreviewStep({
 
   return (
     <>
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {/* Navigation Sub-Tabs */}
         <div className="shrink-0 flex items-center justify-between border-b border-[#E5E7EB] bg-[#F9FAFB] px-6">
           <div className="flex gap-1">
@@ -1482,7 +1482,7 @@ function PreviewStep({
 
         {/* ── Tab 1: Variants Matrix ── */}
         {activeTab === "variants" && (
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Summary bar */}
             <div className="shrink-0 px-6 py-3.5 flex flex-wrap items-center justify-between border-b border-[#F3F4F6] bg-white gap-3">
               <div className="flex items-center gap-2">
@@ -1543,7 +1543,7 @@ function PreviewStep({
             </div>
 
             {/* Table */}
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full text-[12px]">
                 <thead className="sticky top-0 z-10 bg-[#F9FAFB] border-b border-[#E5E7EB]">
                   <tr>
@@ -1871,7 +1871,7 @@ function PreviewStep({
 
         {/* ── Tab 2: Tier Overrides ── */}
         {activeTab === "tierOverrides" && (
-          <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-auto flex flex-col p-6 space-y-4">
             {/* Header / Info bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
               <div>
@@ -2112,7 +2112,7 @@ function PreviewStep({
 
         {/* ── Tab 3: MOQ Overrides ── */}
         {activeTab === "moqOverrides" && (
-          <div className="flex-1 overflow-auto flex flex-col p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-auto flex flex-col p-6 space-y-4">
             {/* Header / Info bar */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-4">
               <div>
