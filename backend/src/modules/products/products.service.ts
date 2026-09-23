@@ -671,7 +671,7 @@ export async function listProducts(query: ProductListQuery) {
       ? [{ category: { name: sortDir as Prisma.SortOrder } }, { createdAt: "desc" }]
       : isDeleted
       ? [{ deletedAt: "desc" }, { updatedAt: "desc" }]
-      : [{ sortOrder: "asc" }, { createdAt: "desc" }];
+      : [{ sortOrder: sortDir as Prisma.SortOrder }, { createdAt: "desc" }];
 
   const [data, total] = await Promise.all([
     prisma.product.findMany({
@@ -681,13 +681,13 @@ export async function listProducts(query: ProductListQuery) {
       orderBy,
       include: {
         category: { select: { id: true, name: true, slug: true, status: true } },
-        media: { orderBy: { sortOrder: "asc" }, take: 1 },
+        media: { orderBy: { sortOrder: "asc" }, take: 1, select: { id: true, url: true, altText: true } },
         countries: { where: { enabled: true }, select: { countryId: true } },
-        inventories: { select: { stock: true, reservedStock: true } },
         prices: {
           where: { status: "ACTIVE", variantId: null, deletedAt: null },
           orderBy: [{ currency: { isBase: "desc" } }, { sellingPrice: "asc" }],
           include: { country: true, currency: true },
+          take: 5,
         },
         _count: { select: { variants: true, collections: true } },
       },
@@ -695,7 +695,36 @@ export async function listProducts(query: ProductListQuery) {
     prisma.product.count({ where }),
   ]);
 
-  return { data, total, page, limit };
+  if (data.length === 0) {
+    return { data: [], total, page, limit };
+  }
+
+  const productIds = data.map((p) => p.id);
+  const inventorySums = await prisma.inventory.groupBy({
+    by: ["productId"],
+    where: {
+      productId: { in: productIds },
+      ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+    },
+    _sum: {
+      stock: true,
+      reservedStock: true,
+    },
+  });
+
+  const inventoryMap = new Map(
+    inventorySums.map((inv) => [
+      inv.productId,
+      [{ stock: inv._sum.stock ?? 0, reservedStock: inv._sum.reservedStock ?? 0 }],
+    ]),
+  );
+
+  const enrichedData = data.map((product) => ({
+    ...product,
+    inventories: inventoryMap.get(product.id) || [{ stock: 0, reservedStock: 0 }],
+  }));
+
+  return { data: enrichedData, total, page, limit };
 }
 
 export async function listVariants(query: VariantListQuery) {
