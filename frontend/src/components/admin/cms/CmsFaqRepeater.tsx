@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown, GripVertical } from "lucide-react";
 import { AdminInput, AdminTextarea } from "@/components/admin/AdminComponents";
 import { cn } from "@/utils/cn";
 
@@ -30,6 +30,9 @@ export function CmsFaqRepeater({
   showHeading = false,
 }: CmsFaqRepeaterProps) {
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [activeHandleIndex, setActiveHandleIndex] = useState<number | null>(null);
   const faqRefs = useRef<(HTMLDivElement | null)[]>([]);
   const pendingScrollIndexRef = useRef<number | null>(null);
 
@@ -85,6 +88,43 @@ export function CmsFaqRepeater({
     onChange({ ...values, items: updated });
   };
 
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", `${index}`);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = (_e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (dragOverIndex === index) {
+      setDragOverIndex(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+      const updated = [...values.items];
+      const [moved] = updated.splice(draggedIndex, 1);
+      updated.splice(targetIndex, 0, moved);
+      onChange({ ...values, items: updated });
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <div className="space-y-4">
       {showHeading && (
@@ -115,22 +155,54 @@ export function CmsFaqRepeater({
                 ref={(el) => {
                   faqRefs.current[idx] = el;
                 }}
+                draggable={activeHandleIndex === idx}
+                onDragStart={(e) => {
+                  if (activeHandleIndex !== idx) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleDragStart(e, idx);
+                }}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragLeave={(e) => handleDragLeave(e, idx)}
+                onDrop={(e) => {
+                  setActiveHandleIndex(null);
+                  handleDrop(e, idx);
+                }}
+                onDragEnd={() => {
+                  setActiveHandleIndex(null);
+                  handleDragEnd();
+                }}
                 className={cn(
-                  "rounded-lg border border-[#E6E6E6] bg-gray-50/50 p-4 space-y-3 transition-all duration-300 hover:shadow-xs",
+                  "rounded-lg border bg-gray-50/50 p-4 space-y-3 transition-all duration-200",
+                  draggedIndex === idx && "opacity-40 border-dashed border-[#E31E24] scale-[0.99]",
+                  dragOverIndex === idx && draggedIndex !== idx && "border-[#E31E24] ring-2 ring-red-200 bg-red-50/20 shadow-sm",
+                  draggedIndex === null && dragOverIndex === null && "border-[#E6E6E6] hover:border-gray-300",
                   highlightedIndex === idx && "ring-2 ring-[#E31E24]/70 border-[#E31E24] shadow-md bg-red-50/20"
                 )}
               >
                 <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
-                  <span className="text-[13.5px] font-semibold text-[#1A1A1A] truncate">
-                    Q{idx + 1}: {item.question || "(Untitled Question)"}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className="flex items-center text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-200/60 transition-colors shrink-0"
+                      title="Drag to reorder FAQ"
+                      onMouseDown={() => setActiveHandleIndex(idx)}
+                      onMouseUp={() => setActiveHandleIndex(null)}
+                      onMouseLeave={() => setActiveHandleIndex(null)}
+                    >
+                      <GripVertical size={16} />
+                    </div>
+                    <span className="text-[13.5px] font-semibold text-[#1A1A1A] truncate">
+                      Q{idx + 1}: {item.question || "(Untitled Question)"}
+                    </span>
+                  </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       disabled={idx === 0}
                       onClick={() => handleMove(idx, "up")}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200/60 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                       title="Move Up"
                     >
                       <ArrowUp size={14} />
@@ -139,7 +211,7 @@ export function CmsFaqRepeater({
                       type="button"
                       disabled={idx === values.items.length - 1}
                       onClick={() => handleMove(idx, "down")}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200/60 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                       title="Move Down"
                     >
                       <ArrowDown size={14} />
@@ -147,7 +219,7 @@ export function CmsFaqRepeater({
                     <button
                       type="button"
                       onClick={() => handleDeleteFaq(idx)}
-                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors ml-1"
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded ml-1 transition-colors cursor-pointer"
                       title="Delete FAQ"
                     >
                       <Trash2 size={14} />

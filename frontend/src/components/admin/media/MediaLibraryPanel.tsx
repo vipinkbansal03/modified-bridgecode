@@ -27,7 +27,7 @@ import { getAdminErrorMessage } from "@/services/adminApi";
 type Props = {
   mode?: "select" | "manage";
   value?: string;
-  initialType?: "all" | "image" | "document";
+  initialType?: "all" | "image" | "document" | "video";
   onSelect?: (media: MediaItem) => void;
   multiple?: boolean;
   onSelectMultiple?: (mediaList: MediaItem[]) => void;
@@ -64,7 +64,7 @@ function isVideo(media?: MediaItem | null) {
   return (
     media.type === "VIDEO" ||
     media.mimeType?.startsWith("video/") ||
-    /\.(mp4|webm|ogg|mov)$/i.test(media.url || media.filename || "")
+    /\.(mp4|webm|ogg|mov|m4v)$/i.test(media.url || media.filename || "")
   );
 }
 
@@ -100,8 +100,8 @@ export default function MediaLibraryPanel({
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
 
-  const [type, setType] = useState<"all" | "image" | "document">(
-    initialType || (mode === "select" ? "image" : "all")
+  const [type, setType] = useState<"all" | "image" | "document" | "video">(
+    initialType || (mode === "select" ? "all" : "all")
   );
   const [entityType, setEntityType] = useState<string>("ALL");
 
@@ -296,6 +296,14 @@ export default function MediaLibraryPanel({
       setSuccess(`Uploaded ${count} file${count === 1 ? "" : "s"} successfully.`);
       showToast(`Uploaded ${count} file${count === 1 ? "" : "s"}.`);
 
+      const hasVideo = fileArray.some((f) => f.type.startsWith("video/") || /\.(mp4|webm|ogg|mov|m4v)$/i.test(f.name));
+      const hasDoc = fileArray.some((f) => !f.type.startsWith("image/") && !f.type.startsWith("video/"));
+      if (hasVideo && type !== "all" && type !== "video") {
+        setType("all");
+      } else if (hasDoc && type !== "all" && type !== "document") {
+        setType("all");
+      }
+
       await loadMedia(1);
       if (res[0]?.mediaId) {
         setSelectedId(res[0].mediaId);
@@ -397,16 +405,17 @@ export default function MediaLibraryPanel({
           <div className="inline-flex rounded-lg border border-[#E6E6E6] bg-[#F5F5F5] p-0.5 text-[12.5px] font-medium">
             {(
               [
-                { id: "image", label: "Images" },
-                { id: "document", label: "Documents" },
                 { id: "all", label: "All" },
+                { id: "image", label: "Images" },
+                { id: "video", label: "Videos" },
+                { id: "document", label: "Documents" },
               ] as const
             ).map((opt) => (
               <button
                 key={opt.id}
                 type="button"
                 onClick={() => setType(opt.id)}
-                className={`px-3 py-1.5 rounded-md transition-all ${
+                className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
                   type === opt.id
                     ? "bg-white text-[#1A1A1A] shadow-xs font-semibold"
                     : "text-[#6B6B6B] hover:text-[#1A1A1A]"
@@ -719,11 +728,18 @@ export default function MediaLibraryPanel({
                             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
                         ) : isItemVideo ? (
-                          <div className="flex flex-col items-center justify-center gap-1.5 text-[#9A9A9A]">
-                            <Video size={26} />
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-white/80 px-1.5 py-0.5 rounded border border-[#E6E6E6]">
-                              {formatLabel}
-                            </span>
+                          <div className="relative w-full h-full bg-neutral-900 flex items-center justify-center overflow-hidden">
+                            <video
+                              src={`${item.url}#t=0.001`}
+                              preload="metadata"
+                              muted
+                              playsInline
+                              className="w-full h-full object-cover pointer-events-none transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/65 backdrop-blur-xs text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs z-10">
+                              <Video size={11} />
+                              <span>{formatLabel}</span>
+                            </div>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center justify-center gap-1.5 text-[#9A9A9A]">
@@ -868,12 +884,12 @@ export default function MediaLibraryPanel({
                             className="max-h-full max-w-full object-contain rounded transition-all duration-200"
                           />
                         ) : isVideo(selectedMedia) ? (
-                          <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
-                            <Video size={36} />
-                            <span className="text-[11px] font-semibold text-[#6B6B6B] truncate max-w-[200px]">
-                              {selectedMedia.originalName}
-                            </span>
-                          </div>
+                          <video
+                            key={selectedMedia.id}
+                            src={selectedMedia.url}
+                            controls
+                            className="max-h-full max-w-full rounded object-contain"
+                          />
                         ) : (
                           <div className="flex flex-col items-center justify-center gap-2 text-[#9A9A9A]">
                             <FileText size={36} />

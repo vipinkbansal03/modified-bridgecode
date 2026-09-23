@@ -130,14 +130,28 @@ export default function BlogDetailPage() {
   }
 
   const date = formatBlogDate(blog.publishedAt || blog.createdAt);
-  const paragraphs = blog.content
-    ? blog.content
-        .split(/\n{2,}/)
-        .map((paragraph) => paragraph.trim())
-        .filter(Boolean)
-    : [];
-
   const hasFeaturedImage = Boolean(blog.featuredImage && blog.featuredImage.trim() && !imageError);
+
+  const cleanHtml = (html: string) => {
+    if (!html) return "";
+    return html
+      .replace(/<button[^>]*>[\s\S]*?<\/button>/gi, "")
+      .replace(/<span[^>]*class="[^"]*truncate[^"]*"[^>]*>[\s\S]*?<\/span>/gi, "")
+      .replace(/✓ Uploaded Image/gi, "")
+      .replace(/Remove/gi, "");
+  };
+
+  const formattedContent = (() => {
+    if (!blog.content) return "";
+    const cleaned = cleanHtml(blog.content);
+    if (!cleaned.includes("<p>") && !cleaned.includes("<div") && !cleaned.includes("<h") && cleaned.includes("\n")) {
+      return cleaned
+        .split(/\n\s*\n/)
+        .map((p) => `<p>${p.replace(/\n/g, "<br/>")}</p>`)
+        .join("");
+    }
+    return cleaned;
+  })();
 
   return (
     <main className="bg-white">
@@ -221,11 +235,10 @@ export default function BlogDetailPage() {
                 </div>
               )}
 
-              <div className="max-w-[760px] space-y-6 text-[16px] leading-8 text-[#444]">
-                {paragraphs.map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
-                ))}
-              </div>
+              <div
+                className="max-w-[760px] text-[15.5px] sm:text-[16.5px] leading-relaxed text-[#374151] prose prose-slate max-w-none prose-headings:font-bold prose-headings:text-gray-900 prose-headings:tracking-tight prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 prose-p:my-4 prose-p:leading-relaxed prose-a:text-[#E31E24] prose-a:font-semibold prose-a:underline hover:prose-a:text-[#B5151B] prose-img:rounded-2xl prose-img:shadow-sm prose-ul:my-4 prose-ul:list-disc prose-ul:pl-6 prose-ol:my-4 prose-ol:list-decimal prose-ol:pl-6 prose-li:my-1.5 prose-strong:text-gray-900"
+                dangerouslySetInnerHTML={{ __html: formattedContent }}
+              />
             </article>
 
             <aside className="min-w-0 space-y-5 lg:sticky lg:top-24">

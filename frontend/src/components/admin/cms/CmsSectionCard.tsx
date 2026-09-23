@@ -59,14 +59,27 @@ export function CmsSectionCard({
   className,
 }: CmsSectionCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isHandleActive, setIsHandleActive] = useState(false);
 
   return (
     <div
-      draggable={isDraggable}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      draggable={isDraggable && isHandleActive}
+      onDragStart={(e) => {
+        if (!isHandleActive) {
+          e.preventDefault();
+          return;
+        }
+        onDragStart?.(e);
+      }}
+      onDragEnd={(e) => {
+        setIsHandleActive(false);
+        onDragEnd?.(e);
+      }}
       onDragOver={onDragOver}
-      onDrop={onDrop}
+      onDrop={(e) => {
+        setIsHandleActive(false);
+        onDrop?.(e);
+      }}
       className={cn(
         "rounded-xl border bg-white transition-all shadow-xs overflow-hidden",
         isDragging && "opacity-50 scale-[0.99]",
@@ -85,9 +98,12 @@ export function CmsSectionCard({
           {/* Drag Handle */}
           {isDraggable && (
             <div
-              className="flex shrink-0 items-center px-1 text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing"
+              className="flex shrink-0 items-center px-1 text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
               title="Drag to reorder section"
               onClick={(e) => e.stopPropagation()}
+              onMouseDown={() => setIsHandleActive(true)}
+              onMouseUp={() => setIsHandleActive(false)}
+              onMouseLeave={() => setIsHandleActive(false)}
             >
               <GripVertical size={16} />
             </div>

@@ -9,6 +9,7 @@ import {
   transformStats,
   transformCertifications,
   transformAboutIntro,
+  transformCapabilities,
   transformContactCta,
 } from "@/utils/cmsTransform";
 
@@ -21,6 +22,10 @@ const FeaturedProductsSection = dynamic(
 );
 const CategoriesSection = dynamic(
   () => import("@/components/sections/CategoriesSection").then((m) => m.CategoriesSection),
+  { ssr: true }
+);
+const CapabilitiesSection = dynamic(
+  () => import("@/components/sections/CapabilitiesSection").then((m) => m.CapabilitiesSection),
   { ssr: true }
 );
 const StatsSection = dynamic(
@@ -109,20 +114,18 @@ function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
 
   if (section.sectionKey === "home.about") {
     const transformed = transformAboutIntro(section);
-    const aboutData = transformed
-      ? {
-          heading: transformed.title,
-          lede: transformed.description,
-          ctaLabel: transformed.ctaLabel,
-          ctaHref: transformed.ctaHref,
-        }
-      : homeContent.about;
+    const aboutData = transformed || homeContent.about;
 
     return [
       <AboutSection key="home.about" data={aboutData} />,
       <FeaturedProductsSection key="home.featuredProducts" slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />,
       <CategoriesSection key="home.categories" />,
     ];
+  }
+
+  if (section.sectionKey === "home.capabilities") {
+    const transformed = transformCapabilities(section);
+    return [<CapabilitiesSection key="home.capabilities" items={transformed || undefined} />];
   }
 
   if (section.sectionKey === "home.stats") {
@@ -137,9 +140,17 @@ function renderCmsHomeSection(section: CmsSection, bannerSlides: HeroSlide[]) {
     const certifications = transformCertifications(section);
     return [
       <CertificationsSection key="home.certifications" data={certifications.length > 0 ? certifications : homeContent.certifications} />,
-      <TestimonialsSection key="home.testimonials" />,
-      <BlogSection key="home.blog" />,
     ];
+  }
+
+  if (section.sectionKey === "home.testimonials") {
+    return [<TestimonialsSection key="home.testimonials" />];
+  }
+
+  if (section.sectionKey === "home.blog") {
+    const transformed = transformContactCta(section);
+    const blogData = transformed ? { title: transformed.title, description: transformed.description } : undefined;
+    return [<BlogSection key="home.blog" data={blogData} />];
   }
 
   if (section.sectionKey === "home.contactCta") {
@@ -186,6 +197,7 @@ export default async function HomePage() {
       <AboutSection data={homeContent.about} />
       <FeaturedProductsSection slugs={homeContent.featuredProductSlugs} captions={homeContent.featuredCaptions} />
       <CategoriesSection />
+      <CapabilitiesSection />
       <StatsSection data={homeContent.stats} />
       <LocationsSection data={staticLocations} />
       <CertificationsSection data={homeContent.certifications} />

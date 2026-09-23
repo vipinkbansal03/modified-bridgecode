@@ -33,36 +33,25 @@ export function CategoriesSection() {
   }
 
   return (
-    <section id="categories" className="border-t border-line py-6 lg:py-[34px]">
+    <section id="categories" className="border-t border-line py-8 lg:py-12">
       <Container>
-        <div className="mb-6">
-          <h2 className="text-[clamp(28px,3.4vw,40px)] leading-[1.2] font-light text-ink">{t("ui.home.shopByCategory")}</h2>
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-[clamp(26px,3.2vw,36px)] leading-[1.2] font-light text-ink tracking-tight">
+            {t("ui.home.shopByCategory")}
+          </h2>
         </div>
-        {/* <div className="mb-10 flex gap-2.5">
-          {(["doctor", "dealer"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={cn(
-                "rounded-pill px-5 py-2.5 text-[14.5px] font-medium transition-colors",
-                view === v ? "bg-ink text-white" : "bg-grey text-steel"
-              )}
-            >
-              {v === "doctor" ? t("ui.home.forDoctors") : t("ui.home.forDealers")}
-            </button>
-          ))}
-        </div> */}
 
         {isLoading ? (
           <SkeletonGrid count={8} columns={4} />
         ) : (
-          <div className="grid grid-cols-1 gap-5.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:gap-6">
             {categories?.map((cat, i) => (
               <Reveal key={cat.slug} delay={i * 0.04}>
                 <CategoryCard
                   title={cat.title}
                   image={CATEGORY_STOCK_IMAGES[cat.slug] || cat.image || null}
                   slug={cat.slug}
+                  description={cat.description || undefined}
                   productCount={cat.productCount}
                   meta={view === "doctor" ? (cat.doctorMeta ?? "") : (cat.dealerMeta ?? "")}
                 />

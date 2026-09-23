@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play, Pause } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { PillCTA } from "../ui/PillCTA";
@@ -23,17 +23,44 @@ interface HeroSectionProps {
 
 const AUTOPLAY_MS = 5500;
 
+export function isVideoUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const clean = url.split("?")[0].toLowerCase();
+  return (
+    clean.endsWith(".mp4") ||
+    clean.endsWith(".webm") ||
+    clean.endsWith(".ogg") ||
+    clean.endsWith(".mov") ||
+    clean.endsWith(".m4v") ||
+    url.includes("/video/") ||
+    url.includes("video/upload")
+  );
+}
+
 export function HeroSection({ data }: HeroSectionProps) {
   const { t } = useStaticTranslations();
   const { slides } = data;
   const [index, setIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isTempPaused, setIsTempPaused] = useState(false);
   const pauseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Touch gesture refs
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const touchTimeRef = useRef<number>(0);
+
+  // Sync video play/pause with isPlaying state
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.play().catch(() => {});
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isPlaying, index]);
 
   // Cleanup pause timer on component unmount
   useEffect(() => {
@@ -42,37 +69,41 @@ export function HeroSection({ data }: HeroSectionProps) {
     };
   }, []);
 
-  // Auto-slide effect with pause support
+  // Auto-slide effect with play/pause support
   useEffect(() => {
-    if (isPaused || slides.length <= 1) return;
+    if (!isPlaying || isHovered || isTempPaused || slides.length <= 1) return;
     const timer = setInterval(() => {
       setIndex((i) => (i + 1) % slides.length);
     }, AUTOPLAY_MS);
     return () => clearInterval(timer);
-  }, [isPaused, slides.length]);
+  }, [isPlaying, isHovered, isTempPaused, slides.length]);
 
   // Handle manual navigation with temporary pause
   const go = useCallback(
     (delta: number) => {
       if (slides.length <= 1) return;
       setIndex((i) => (i + delta + slides.length) % slides.length);
-      setIsPaused(true);
-      if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
-      pauseTimerRef.current = setTimeout(() => {
-        setIsPaused(false);
-      }, 7000);
+      if (isPlaying) {
+        setIsTempPaused(true);
+        if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
+        pauseTimerRef.current = setTimeout(() => {
+          setIsTempPaused(false);
+        }, 7000);
+      }
     },
-    [slides.length],
+    [isPlaying, slides.length],
   );
 
   const goToSlide = useCallback((targetIndex: number) => {
     setIndex(targetIndex);
-    setIsPaused(true);
-    if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
-    pauseTimerRef.current = setTimeout(() => {
-      setIsPaused(false);
-    }, 7000);
-  }, []);
+    if (isPlaying) {
+      setIsTempPaused(true);
+      if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
+      pauseTimerRef.current = setTimeout(() => {
+        setIsTempPaused(false);
+      }, 7000);
+    }
+  }, [isPlaying]);
 
   // Touch gesture handlers (swipe left -> next, swipe right -> prev)
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -155,8 +186,8 @@ export function HeroSection({ data }: HeroSectionProps) {
   return (
     <section
       className="relative h-[260px] sm:h-[340px] md:h-[400px] lg:h-[460px] xl:h-[480px] overflow-hidden select-none touch-pan-y"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -172,16 +203,28 @@ export function HeroSection({ data }: HeroSectionProps) {
           className="absolute inset-0"
         >
           <div className="absolute inset-0">
-            <Image
-              src={slide.image}
-              alt={slide.title || "Modern Orthodontics Hero Banner"}
-              fill
-              priority={index === 0}
-              fetchPriority={index === 0 ? "high" : "auto"}
-              sizes="100vw"
-              quality={90}
-              className="object-cover object-center"
-            />
+            {isVideoUrl(slide.image) ? (
+              <video
+                ref={videoRef}
+                src={slide.image}
+                autoPlay={isPlaying}
+                muted
+                loop
+                playsInline
+                className="h-full w-full object-cover object-center pointer-events-none"
+              />
+            ) : (
+              <Image
+                src={slide.image}
+                alt={slide.title || "Modern Orthodontics Hero Banner"}
+                fill
+                priority={index === 0}
+                fetchPriority={index === 0 ? "high" : "auto"}
+                sizes="100vw"
+                quality={90}
+                className="object-cover object-center"
+              />
+            )}
           </div>
 
           {hasTextOverlay ? (
@@ -222,8 +265,8 @@ export function HeroSection({ data }: HeroSectionProps) {
         </motion.div>
       </AnimatePresence>
 
-      <div className="absolute bottom-4 sm:bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3.5 sm:left-auto sm:right-10 sm:translate-x-0 pointer-events-auto">
-        <div className="flex gap-2 items-center">
+      <div className="absolute bottom-4 sm:bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/20 bg-black/70 px-3 py-1.5 shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-md sm:left-auto sm:right-10 sm:translate-x-0 pointer-events-auto">
+        <div className="flex gap-1.5 items-center px-1">
           {slides.map((_, i) => (
             <button
               key={i}
@@ -233,35 +276,61 @@ export function HeroSection({ data }: HeroSectionProps) {
                 e.stopPropagation();
                 goToSlide(i);
               }}
-              className={`h-2 rounded-full bg-white transition-all duration-300 ${
-                i === index ? "w-6 bg-white" : "w-2 bg-white/40 hover:bg-white/70"
+              className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                i === index ? "w-5 bg-white shadow-xs" : "w-2 bg-white/40 hover:bg-white/80"
               }`}
             />
           ))}
         </div>
-        <button
-          type="button"
-          aria-label={t("ui.common.previousSlide")}
-          onClick={(e) => {
-            e.stopPropagation();
-            go(-1);
-          }}
-          className="hidden sm:flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white transition-colors hover:border-white hover:bg-white/10"
-        >
-          <ChevronLeft size={14} />
-        </button>
 
-        <button
-          type="button"
-          aria-label={t("ui.common.nextSlide")}
-          onClick={(e) => {
-            e.stopPropagation();
-            go(1);
-          }}
-          className="hidden sm:flex h-9.5 w-9.5 items-center justify-center rounded-full border border-white/40 text-white transition-colors hover:border-white hover:bg-white/10"
-        >
-          <ChevronRight size={14} />
-        </button>
+        {slides.length > 1 && (
+          <div className="flex items-center gap-1 border-l border-white/20 pl-2">
+            <button
+              type="button"
+              aria-label={isPlaying ? "Pause banner autoplay" : "Play banner autoplay"}
+              title={isPlaying ? "Pause banner" : "Play banner"}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPlaying((prev) => !prev);
+                setIsTempPaused(false);
+                if (pauseTimerRef.current) clearTimeout(pauseTimerRef.current);
+              }}
+              className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full text-white/90 transition-colors hover:bg-white/20 hover:text-white cursor-pointer"
+            >
+              {isPlaying ? (
+                <Pause size={13} className="fill-white text-white" />
+              ) : (
+                <Play size={13} className="fill-white text-white translate-x-0.5" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              aria-label={t("ui.common.previousSlide")}
+              title="Previous slide"
+              onClick={(e) => {
+                e.stopPropagation();
+                go(-1);
+              }}
+              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-white/90 transition-colors hover:bg-white/20 hover:text-white cursor-pointer"
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            <button
+              type="button"
+              aria-label={t("ui.common.nextSlide")}
+              title="Next slide"
+              onClick={(e) => {
+                e.stopPropagation();
+                go(1);
+              }}
+              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-white/90 transition-colors hover:bg-white/20 hover:text-white cursor-pointer"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -13,6 +13,7 @@ export type CmsBlock = {
   icon?: string | null;
   linkLabel?: string | null;
   linkUrl?: string | null;
+  status?: string | null;
   dataJson?: unknown;
   sortOrder: number;
 };

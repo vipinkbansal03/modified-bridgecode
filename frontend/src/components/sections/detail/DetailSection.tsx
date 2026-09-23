@@ -28,11 +28,22 @@ export function DetailSection({ section }: { section: Section }) {
             <div className="mt-6 grid grid-cols-1 border-l border-t border-line sm:grid-cols-2 lg:grid-cols-3">
               {section.capabilityGrid.map((box) => (
                 <div key={box.title} className="border-b border-r border-line p-5 sm:p-8.5">
-                  <Icon name={box.icon} size={26} className="mb-4.5 text-brand" />
+                  {box.image ? (
+                    <div className="mb-4.5 h-40 sm:h-44 w-full overflow-hidden rounded-xl bg-gray-100 border border-gray-100 flex items-center justify-center">
+                      <img src={box.image} alt={box.title} className="h-full w-full object-cover transition-transform duration-300 hover:scale-105" />
+                    </div>
+                  ) : box.icon && box.icon !== "none" ? (
+                    <Icon name={box.icon} size={26} className="mb-4.5 text-brand" />
+                  ) : null}
                   <h4 className="mb-2.5 text-[17.5px] font-semibold leading-snug text-ink">{box.title}</h4>
                   <p className="text-sm leading-relaxed text-steel">{box.description}</p>
                   {box.linkLabel && box.linkHref && (
-                    <Link href={box.linkHref} target="_blank" className="mt-3.5 inline-block text-[13.5px] font-medium text-brand hover:underline">
+                    <Link
+                      href={box.linkHref}
+                      target={box.linkHref.startsWith("http") || box.linkHref.endsWith(".pdf") || box.linkHref.includes("/uploads/") ? "_blank" : undefined}
+                      rel={box.linkHref.startsWith("http") || box.linkHref.endsWith(".pdf") || box.linkHref.includes("/uploads/") ? "noopener noreferrer" : undefined}
+                      className="mt-3.5 inline-block text-[13.5px] font-medium text-brand hover:underline"
+                    >
                       {box.linkLabel}
                     </Link>
                   )}

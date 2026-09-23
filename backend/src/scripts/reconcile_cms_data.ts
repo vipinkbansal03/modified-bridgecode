@@ -477,12 +477,243 @@ async function verifyAllPages() {
   }
 }
 
+async function reconcileHomePageCapabilities() {
+  console.log("🔄 Reconciling Homepage Capabilities CMS section...");
+  const homePage = await prisma.cMSPage.findUnique({
+    where: { pageKey: "home" },
+  });
+  if (!homePage) return;
+
+  const capSec = await upsertSectionHelper(homePage.id, "home.capabilities", "Capabilities & Services", 2);
+  await syncBlocksHelper(capSec.id, [
+    {
+      blockType: "card",
+      title: "Design & Engineering",
+      description: "Modern Orthodontics has a complete in-house product design and engineering team to ensure direct supervision over the design, prototyping and continuous innovation.",
+      image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?fm=jpg&q=80&w=400&auto=format&fit=crop",
+      linkUrl: "/design-and-engineering",
+      linkLabel: "Read more »",
+      sortOrder: 0,
+    },
+    {
+      blockType: "card",
+      title: "Manufacturing Services",
+      description: "Having served the OEM market for many years, Modern Orthodontics is a leading manufacturer of all orthodontic parts with world-class SNC, MIM and robotic polishing.",
+      image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?fm=jpg&q=80&w=400&auto=format&fit=crop",
+      linkUrl: "/manufacturing-services",
+      linkLabel: "Read more »",
+      sortOrder: 1,
+    },
+    {
+      blockType: "card",
+      title: "OEM Services",
+      description: "Modern Orthodontics takes pride in its history as a preferred OEM for orthodontic industry giants over the last 20 years, ensuring complete IP protection and high precision.",
+      image: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?fm=jpg&q=80&w=400&auto=format&fit=crop",
+      linkUrl: "/oem-services",
+      linkLabel: "Read more »",
+      sortOrder: 2,
+    },
+    {
+      blockType: "card",
+      title: "Custom Packaging",
+      description: "Modern Orthodontics is a full service assembly facility, offering complete and partial product assembly, sterile blisters, private labelling and specialized custom kits.",
+      image: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?fm=jpg&q=80&w=400&auto=format&fit=crop",
+      linkUrl: "/custom-packaging",
+      linkLabel: "Read more »",
+      sortOrder: 3,
+    },
+  ]);
+
+  // Ensure later sections have sequential sort order
+  await prisma.cMSSection.updateMany({
+    where: { pageId: homePage.id, sectionKey: "home.stats" },
+    data: { sortOrder: 3 },
+  });
+  await prisma.cMSSection.updateMany({
+    where: { pageId: homePage.id, sectionKey: "home.certifications" },
+    data: { sortOrder: 4 },
+  });
+
+  const homeTestimonialsSection = await upsertSectionHelper(homePage.id, "home.testimonials", "Client Testimonials Carousel", 5);
+  await syncBlocksHelper(homeTestimonialsSection.id, [
+    {
+      blockType: "card",
+      title: "Dr. Mathew P Sunny",
+      description: "I have been using Modern Orthodontics products for the past 7 years now. Their MBT Sapphire Bracket system is at par with the best with excellent tip torque and in-out expressions providing excellent results. The customer service is also excellent with immediate response to all queries and order placements. I highly recommend them.",
+      image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 1,
+    },
+    {
+      blockType: "card",
+      title: "Dr. Neil David Andrade",
+      description: "I have been working with Modern Orthodontics for over 10 years now, I can testify that I am very happy with their service. The staff is kind and courteous in all conversations. The orders are always perfect and delivery is always on time. I highly recommend their services.",
+      image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 2,
+    },
+    {
+      blockType: "card",
+      title: "Dr. Shiv Priya Aher",
+      description: "The finish on the occlusion with correct placement is why I keep choosing them. Exceptional quality control and great precision in their brackets and wire series.",
+      image: "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 3,
+    },
+    {
+      blockType: "card",
+      title: "Dr. Aby Augustine",
+      description: "Reasonable prices, fast service, and the Sapphire Plus metal bracket kit is genuinely excellent. Highly dependable partner for our clinical needs.",
+      image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 4,
+    },
+  ]);
+
+  const homeBlogSection = await upsertSectionHelper(homePage.id, "home.blog", "From the Resource Center", 6);
+  await syncBlocksHelper(homeBlogSection.id, [
+    {
+      blockType: "rich_text",
+      title: "From the resource center",
+      description: "Explore our latest clinical studies, product announcements, and orthodontic innovation guides.",
+      linkLabel: "View all articles",
+      linkUrl: "/blog",
+      sortOrder: 1,
+    },
+  ]);
+
+  const homeCtaSection = await upsertSectionHelper(homePage.id, "home.contactCta", "Bottom Contact CTA Banner", 7);
+  await syncBlocksHelper(homeCtaSection.id, [
+    {
+      blockType: "rich_text",
+      title: "Get in touch",
+      description: "Have any questions about products, pricing or becoming a dealer? Our team is ready to assist you.",
+      linkLabel: "Contact us",
+      linkUrl: "/contact",
+      image: "https://images.unsplash.com/photo-1769152683420-f4eff91cb30b?fm=jpg&q=80&w=1920&auto=format&fit=crop",
+      sortOrder: 1,
+    },
+  ]);
+
+  console.log("  ✅ Homepage Capabilities, Testimonials, Blog and Contact CTA sections reconciled.");
+}
+
+async function reconcileTestimonials() {
+  console.log("🔄 Reconciling Testimonials CMS data...");
+  const page = await upsertPageHelper({
+    title: "What our client say",
+    slug: "testimonials",
+    pageKey: "testimonials",
+    seoTitle: "Client Testimonials & Feedback — Modern Orthodontics",
+    seoDescription: "Read clinical reviews and testimonials from orthodontists and dental professionals worldwide using Modern Orthodontics products.",
+  });
+
+  const heroSection = await upsertSectionHelper(page.id, "testimonials.hero", "Hero Banner", 1);
+  await syncBlocksHelper(heroSection.id, [
+    {
+      blockType: "hero",
+      title: "What our client say",
+      subtitle: "Testimonials",
+      description: "Clinical experiences and feedback from orthodontists worldwide",
+      sortOrder: 1,
+    },
+  ]);
+
+  const listSection = await upsertSectionHelper(page.id, "testimonials.list", "Doctor Reviews & Feedback", 2);
+  await syncBlocksHelper(listSection.id, [
+    {
+      blockType: "card",
+      title: "Dr. Harish Koshik",
+      description: "Modern Orthodontics is one of the best orthodontic products companies in India. Highly reliable bracket systems with exceptional clinical precision.",
+      image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 1,
+    },
+    {
+      blockType: "card",
+      title: "Floyd Fernandes",
+      description: "Their service is prompt and polite. They are transparent when dealing with doctors and are very supportive throughout the procurement process.",
+      image: "",
+      sortOrder: 2,
+    },
+    {
+      blockType: "card",
+      title: "Dr. Mathew P Sunny",
+      description: "I have been using Modern Orthodontics products for the past 7 years now. Their MBT Sapphire Bracket system is at par with the best with excellent tip torque and in-out expressions providing excellent results. The customer service is also excellent with immediate response to all queries and order placements. I highly recommend them.",
+      image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 3,
+    },
+    {
+      blockType: "card",
+      title: "Vishal Parashar",
+      description: "The material provided by Modern Orthodontics is very good and effective. The team has always been updating me for the requirements and provided me the material on time as when required.",
+      image: "",
+      sortOrder: 4,
+    },
+    {
+      blockType: "card",
+      title: "Dr. Neil David Andrade",
+      description: "I have been working with Modern Orthodontics for over 10 years now, I can testify that I am very happy with their service. The staff is kind and courteous in all conversations. The orders are always perfect and delivery is always on time. I highly recommend their services.",
+      image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 5,
+    },
+    {
+      blockType: "card",
+      title: "Dr. Shiv Priya Aher",
+      description: "The finish on the occlusion with correct placement is why I keep choosing them. Exceptional quality control and great precision in their brackets and wire series.",
+      image: "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 6,
+    },
+    {
+      blockType: "card",
+      title: "Dr. Aby Augustine",
+      description: "Reasonable prices, fast service, and the Sapphire Plus metal bracket kit is genuinely excellent. Highly dependable partner for our clinical needs.",
+      image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?fm=jpg&q=80&w=200&auto=format&fit=crop",
+      sortOrder: 7,
+    },
+  ]);
+
+  console.log("  ✅ Testimonials page reconciled.");
+}
+
+async function reconcileBlogPage() {
+  console.log("🔄 Reconciling Blog CMS data...");
+  const page = await upsertPageHelper({
+    title: "Resource Center (Blog)",
+    slug: "blog",
+    pageKey: "blog",
+    seoTitle: "Orthodontic Insights & Resource Center — Modern Orthodontics",
+    seoDescription: "Explore practical articles, clinical guides, manufacturing updates, and industry insights from Modern Orthodontics.",
+  });
+
+  const heroSection = await upsertSectionHelper(page.id, "blog.hero", "Hero Banner", 1);
+  await syncBlocksHelper(heroSection.id, [
+    {
+      blockType: "hero",
+      title: "Orthodontic insights, product updates and industry notes.",
+      subtitle: "Resources",
+      description: "Explore practical articles from Modern Orthodontics around products, clinical trends, manufacturing, and better buying decisions for dental professionals.",
+      sortOrder: 1,
+    },
+  ]);
+
+  const articlesSection = await upsertSectionHelper(page.id, "blog.articles", "Latest Articles Copy", 2);
+  await syncBlocksHelper(articlesSection.id, [
+    {
+      blockType: "rich_text",
+      title: "From the blog",
+      description: "Explore our latest clinical studies, product announcements, and orthodontic innovation guides.",
+      sortOrder: 1,
+    },
+  ]);
+
+  console.log("  ✅ Blog page reconciled.");
+}
+
 async function main() {
+  await reconcileHomePageCapabilities();
   await reconcileQualityCertifications();
   await reconcileManufacturingServices();
   await reconcileDesignAndEngineering();
   await reconcileOemServices();
   await reconcileCustomPackaging();
+  await reconcileTestimonials();
+  await reconcileBlogPage();
   await verifyAllPages();
 }
 

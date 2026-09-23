@@ -13,6 +13,14 @@ export interface StorefrontBannerProps {
   variant?: "full" | "compact" | "sidebar";
 }
 
+function isVideoUrl(url?: string | null): boolean {
+  if (!url) return false;
+  return Boolean(
+    url.toLowerCase().match(/\.(mp4|webm|ogg|mov|m4v)($|\?)/) ||
+    url.toLowerCase().includes("/video/")
+  );
+}
+
 export function StorefrontBanner({
   banner,
   className = "",
@@ -21,6 +29,9 @@ export function StorefrontBanner({
 }: StorefrontBannerProps) {
   const [imageError, setImageError] = useState(false);
   const [mobileImageError, setMobileImageError] = useState(false);
+
+  const isDesktopVideo = isVideoUrl(banner.image);
+  const isMobileVideo = isVideoUrl(banner.mobileImage);
 
   const hasDesktopImage = Boolean(banner.image && banner.image.trim() && !imageError);
   const hasMobileImage = Boolean(
@@ -71,16 +82,27 @@ export function StorefrontBanner({
     return (
       <div className={`overflow-hidden rounded-xl border border-line bg-white p-4 ${className}`}>
         {hasDesktopImage ? (
-          <div className="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-grey">
-            <Image
-              src={banner.image}
-              alt={banner.title || "Promotional Banner"}
-              fill
-              className="object-cover"
-              sizes="(min-width: 768px) 300px, 100vw"
-              onError={() => setImageError(true)}
-              unoptimized={banner.image?.startsWith("http://") || banner.image?.startsWith("https://")}
-            />
+          <div className="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-neutral-900">
+            {isDesktopVideo ? (
+              <video
+                src={banner.image}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <Image
+                src={banner.image}
+                alt={banner.title || "Promotional Banner"}
+                fill
+                className="object-cover"
+                sizes="(min-width: 768px) 300px, 100vw"
+                onError={() => setImageError(true)}
+                unoptimized={banner.image?.startsWith("http://") || banner.image?.startsWith("https://")}
+              />
+            )}
           </div>
         ) : (
           <div className="flex h-28 items-center justify-center rounded-lg bg-grey text-steel">
@@ -93,32 +115,54 @@ export function StorefrontBanner({
   }
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-line bg-grey ${className}`}>
+    <div className={`relative overflow-hidden rounded-2xl border border-line bg-neutral-900 ${className}`}>
       <div className={`relative w-full ${aspectRatioClassName}`}>
-        {/* Mobile override image */}
+        {/* Mobile override image/video */}
         {hasMobileImage && (
-          <Image
-            src={banner.mobileImage!}
-            alt={banner.title || "Banner"}
-            fill
-            className="object-cover sm:hidden"
-            sizes="100vw"
-            onError={() => setMobileImageError(true)}
-            unoptimized={banner.mobileImage?.startsWith("http://") || banner.mobileImage?.startsWith("https://")}
-          />
+          isMobileVideo ? (
+            <video
+              src={banner.mobileImage!}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 h-full w-full object-cover sm:hidden"
+            />
+          ) : (
+            <Image
+              src={banner.mobileImage!}
+              alt={banner.title || "Banner"}
+              fill
+              className="object-cover sm:hidden"
+              sizes="100vw"
+              onError={() => setMobileImageError(true)}
+              unoptimized={banner.mobileImage?.startsWith("http://") || banner.mobileImage?.startsWith("https://")}
+            />
+          )
         )}
 
-        {/* Desktop / Default image */}
+        {/* Desktop / Default image/video */}
         {hasDesktopImage ? (
-          <Image
-            src={banner.image}
-            alt={banner.title || "Banner"}
-            fill
-            className={`object-cover ${hasMobileImage ? "hidden sm:block" : "block"}`}
-            sizes="100vw"
-            onError={() => setImageError(true)}
-            unoptimized={banner.image?.startsWith("http://") || banner.image?.startsWith("https://")}
-          />
+          isDesktopVideo ? (
+            <video
+              src={banner.image}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className={`absolute inset-0 h-full w-full object-cover ${hasMobileImage ? "hidden sm:block" : "block"}`}
+            />
+          ) : (
+            <Image
+              src={banner.image}
+              alt={banner.title || "Banner"}
+              fill
+              className={`object-cover ${hasMobileImage ? "hidden sm:block" : "block"}`}
+              sizes="100vw"
+              onError={() => setImageError(true)}
+              unoptimized={banner.image?.startsWith("http://") || banner.image?.startsWith("https://")}
+            />
+          )
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-grey text-steel-2 p-6 text-center">
             <ImageOff size={32} className="text-steel/50" />

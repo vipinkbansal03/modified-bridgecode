@@ -38,7 +38,7 @@ interface ProductFiltersProps {
 
 export function ProductFilters({ value, onChange, availableAttributeValues = [], filterConfig }: ProductFiltersProps) {
   const { data: categories = [] } = useCategories();
-  const [openGroup, setOpenGroup] = useState<string | null>("Availability");
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   // Build attribute groups from available values, but filter by config.
   // When no config is present OR the config has no attribute filters defined,
@@ -118,15 +118,45 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
 
   const hasActiveFilters = value.featuredOnly || value.categorySlugs.length > 0 || value.attributeValues.length > 0;
 
-  // Availability and Categories are core storefront filters and are always shown.
-  const showAvailability = true;
-  const showCategories = true;
+  // Availability and Categories are core storefront filters and are shown unless explicitly disabled in config.
+  const showAvailability = filterConfig?.featuredOnly !== undefined ? filterConfig.featuredOnly : true;
+  const showCategories = filterConfig?.categoryFilterEnabled !== undefined ? filterConfig.categoryFilterEnabled : true;
 
   return (
     <div className="w-full">
       <div className="pb-2">
         <h3 className="text-[16px] font-bold text-ink tracking-tight">Filters</h3>
       </div>
+
+      {showCategories && categories.length > 0 && (
+        <div className="border-b border-line py-3.5">
+          <button
+            type="button"
+            onClick={() => setOpenGroup(openGroup === "Category" ? null : "Category")}
+            className="flex w-full items-center justify-between text-left text-[14px] font-semibold text-ink cursor-pointer"
+          >
+            <span>Category</span>
+            <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", openGroup === "Category" && "rotate-180")} />
+          </button>
+          {openGroup === "Category" && (
+            <div className="mt-3 space-y-2">
+              {categories.map((cat) => (
+                <label key={cat.id || cat.slug} className="flex cursor-pointer items-center justify-between text-[13.5px] text-steel hover:text-ink">
+                  <span className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded border-line accent-[#E31E24] cursor-pointer"
+                      checked={value.categorySlugs.includes(cat.slug)}
+                      onChange={(event) => toggleCategory(cat.slug, event.target.checked)}
+                    />
+                    <span>{cat.name || cat.title}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {attributeGroups.map((group) => {
         const open = openGroup === group.attributeName;

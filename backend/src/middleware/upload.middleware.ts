@@ -23,13 +23,17 @@ const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFil
     "image/gif",
     "application/pdf",
     "video/mp4",
+    "video/webm",
+    "video/ogg",
+    "video/quicktime",
+    "video/x-m4v",
     "text/csv",
     "text/plain",
     "application/csv",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ];
-  if (allowed.includes(file.mimetype)) {
+  if (allowed.includes(file.mimetype) || file.mimetype.startsWith("video/")) {
     cb(null, true);
   } else {
     cb(new AppError(`File type '${file.mimetype}' is not allowed.`, 400));
@@ -39,12 +43,12 @@ const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFil
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
 });
 
 export const uploadMemory = multer({
   storage: multer.memoryStorage(),
   fileFilter,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
 });
 

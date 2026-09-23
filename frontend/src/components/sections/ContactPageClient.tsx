@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Container } from "@/components/ui/Container";
+import { BackButton } from "@/components/ui/BackButton";
 import { ContactForm } from "@/components/forms/ContactForm";
 import { DealerInquiryForm } from "@/components/forms/DealerInquiryForm";
 import { COMPANY_ADDRESS, INDIA_PHONE, ORDERS_EMAIL, USA_ADDRESS, USA_EMAIL, USA_PHONE } from "@/utils/constants";
@@ -44,6 +46,19 @@ export function ContactPageClient({ cmsPage }: ContactPageClientProps) {
 
   return (
     <Container className="py-6 lg:py-[34px]">
+      {/* Back Button */}
+      <div className="mb-2.5">
+        <BackButton />
+      </div>
+
+      {/* Breadcrumbs */}
+      <nav aria-label="Breadcrumb" className="mb-4 text-[13px] text-steel-2">
+        <Link href="/" className="hover:text-brand">
+          Home
+        </Link>{" "}
+        / <span className="font-semibold text-ink">Contact</span>
+      </nav>
+
       <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
         {kicker}
       </span>

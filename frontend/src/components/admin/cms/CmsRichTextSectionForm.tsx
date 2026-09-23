@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminInput, AdminTextarea } from "@/components/admin/AdminComponents";
+import ImageUploadField from "@/components/admin/ImageUploadField";
 import type { RichTextConfig } from "@/config/detailPageConfigs";
 
 export interface CmsRichTextSectionValues {
@@ -83,11 +84,13 @@ export function CmsRichTextSectionForm({
 
       {allowImage && (
         <div className="pt-2 border-t border-[#EDEDED]">
-          <AdminInput
-            label="Section Image URL"
-            placeholder="https://images.unsplash.com/..."
+          <ImageUploadField
+            label={config?.imageLabel || "Section Image / Banner Background"}
             value={values.image || ""}
-            onChange={(e) => onChange({ ...values, image: e.target.value })}
+            onChange={(url) => onChange({ ...values, image: url })}
+            showUrlInput
+            title="Select Banner / Section Image"
+            hint="Upload or select the high-resolution background visual for this banner"
           />
         </div>
       )}

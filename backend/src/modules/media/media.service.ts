@@ -192,17 +192,21 @@ function validateUploadRequest(data: { mimeType: string; size: number }) {
     "image/gif",
     "application/pdf",
     "video/mp4",
+    "video/webm",
+    "video/ogg",
+    "video/quicktime",
+    "video/x-m4v",
     "text/csv",
     "text/plain",
     "application/csv",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ];
-  if (!allowed.includes(data.mimeType)) {
+  if (!allowed.includes(data.mimeType) && !data.mimeType.startsWith("video/")) {
     throw new AppError(`File type '${data.mimeType}' is not allowed.`, 400);
   }
-  if (!Number.isFinite(data.size) || data.size <= 0 || data.size > 20 * 1024 * 1024) {
-    throw new AppError("File size exceeds the maximum limit of 20MB.", 400);
+  if (!Number.isFinite(data.size) || data.size <= 0 || data.size > 100 * 1024 * 1024) {
+    throw new AppError("File size exceeds the maximum limit of 100MB.", 400);
   }
 }
 
@@ -394,9 +398,11 @@ export async function uploadMedia(
           size: results[i].size,
           type: f.mimetype.startsWith("image")
             ? "IMAGE" as const
-            : f.mimetype.includes("pdf")
-              ? "PDF" as const
-              : "DOCUMENT" as const,
+            : f.mimetype.startsWith("video") || /\.(mp4|webm|ogg|mov|m4v)$/i.test(f.originalname || "")
+              ? "VIDEO" as const
+              : f.mimetype.includes("pdf")
+                ? "PDF" as const
+                : "DOCUMENT" as const,
           storageProvider: results[i].storageProvider,
           folder: resolvedFolder,
           entityType,

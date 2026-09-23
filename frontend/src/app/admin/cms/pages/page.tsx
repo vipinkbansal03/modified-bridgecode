@@ -29,6 +29,7 @@ import {
 import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
+import { Modal } from "@/components/ui/Modal";
 import {
   AdminInput,
   AdminSelect,
@@ -41,6 +42,7 @@ import {
   StatusBadge,
   useToast,
   AdminStickySaveBar,
+  LoadingButton,
 } from "@/components/admin/AdminComponents";
 import {
   useAdminCmsPage,
@@ -286,6 +288,130 @@ function CmsPagesManagementContent() {
     }
   };
 
+  // Create & Delete Page State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPageTitle, setNewPageTitle] = useState("");
+  const [newPageSlug, setNewPageSlug] = useState("");
+  const [creatingPage, setCreatingPage] = useState(false);
+  const [deletingPageId, setDeletingPageId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleCreatePage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanTitle = newPageTitle.trim();
+    const cleanSlug = newPageSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+
+    if (!cleanTitle || !cleanSlug) {
+      showToast("Please provide both a Page Title and a URL slug.", "error");
+      return;
+    }
+
+    try {
+      setCreatingPage(true);
+      const res = await adminApi.post("/cms/pages", {
+        title: cleanTitle,
+        slug: cleanSlug,
+        pageKey: cleanSlug,
+        status: "ACTIVE",
+      });
+
+      const newPage = res.data?.data || res.data;
+
+      // Create initial default hero section
+      if (newPage?.id) {
+        await adminApi.post(`/cms/pages/${newPage.id}/sections`, {
+          sectionKey: `${cleanSlug}.hero`,
+          title: cleanTitle,
+          sortOrder: 0,
+          status: "ACTIVE",
+        });
+      }
+
+      showToast(`Page "${cleanTitle}" created successfully!`, "success");
+      setShowCreateModal(false);
+      setNewPageTitle("");
+      setNewPageSlug("");
+
+      await queryClient.invalidateQueries({ queryKey: ["admin-cms-pages"] });
+
+      if (newPage?.id) {
+        setSelectedPageId(newPage.id);
+        setViewMode("studio");
+        router.push(`/admin/cms/pages?pageId=${newPage.id}`);
+      }
+    } catch (err) {
+      console.error("Failed to create page:", err);
+      showToast("Failed to create page. URL slug may already exist.", "error");
+    } finally {
+      setCreatingPage(false);
+    }
+  };
+
+  const handleDeletePage = async () => {
+    if (!deletingPageId) return;
+    try {
+      setIsDeleting(true);
+      await adminApi.delete(`/cms/pages/${deletingPageId}`);
+      showToast("Page deleted successfully.", "success");
+      setDeletingPageId(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin-cms-pages"] });
+      if (selectedPageId === deletingPageId) {
+        setSelectedPageId(pages[0]?.id || "");
+        setViewMode("overview");
+        router.push("/admin/cms/pages");
+      }
+    } catch (err) {
+      console.error("Failed to delete page:", err);
+      showToast("Failed to delete page.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Edit Page Info (Title & Slug) State
+  const [showEditInfoModal, setShowEditInfoModal] = useState(false);
+  const [editPageTitle, setEditPageTitle] = useState("");
+  const [editPageSlug, setEditPageSlug] = useState("");
+  const [savingPageInfo, setSavingPageInfo] = useState(false);
+
+  const openEditInfoModal = () => {
+    if (!selectedPage) return;
+    setEditPageTitle(selectedPage.title);
+    setEditPageSlug(selectedPage.slug);
+    setShowEditInfoModal(true);
+  };
+
+  const handleUpdatePageInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPage) return;
+    const cleanTitle = editPageTitle.trim();
+    const cleanSlug = editPageSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+
+    if (!cleanTitle || !cleanSlug) {
+      showToast("Please provide both a Page Title and a URL slug.", "error");
+      return;
+    }
+
+    try {
+      setSavingPageInfo(true);
+      await adminApi.put(`/cms/pages/${selectedPage.id}`, {
+        title: cleanTitle,
+        slug: cleanSlug,
+      });
+
+      showToast("Page title & URL slug updated successfully!", "success");
+      setShowEditInfoModal(false);
+      await queryClient.invalidateQueries({ queryKey: ["admin-cms-pages"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-cms-page", selectedPage.id] });
+      refetchPage();
+    } catch (err) {
+      console.error("Failed to update page info:", err);
+      showToast("Failed to update page info. URL slug may already be in use.", "error");
+    } finally {
+      setSavingPageInfo(false);
+    }
+  };
+
   // SEO Form State
   const [seoForm, setSeoForm] = useState({
     seoTitle: "",
@@ -436,23 +562,37 @@ function CmsPagesManagementContent() {
     {
       key: "actions",
       label: "Actions",
-      render: (row) => (
-        <div className="flex items-center justify-start">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedPageId(row.id);
-              setViewMode("studio");
-              router.push(`/admin/cms/pages?pageId=${row.id}`);
-            }}
-            className="inline-flex items-center justify-center rounded-lg border border-[#E6E6E6] bg-white p-2 text-[#555] hover:bg-gray-50 hover:text-[#E31E24] hover:border-red-200 transition-colors shadow-2xs"
-            title="Edit in Page Studio"
-            aria-label={`Edit ${row.title} in Page Studio`}
-          >
-            <Edit2 size={14} className="text-[#E31E24]" />
-          </button>
-        </div>
-      ),
+      render: (row) => {
+        const isSystemPage = CORE_SYSTEM_PAGES.has(row.pageKey);
+        return (
+          <div className="flex items-center gap-1.5 justify-start">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPageId(row.id);
+                setViewMode("studio");
+                router.push(`/admin/cms/pages?pageId=${row.id}`);
+              }}
+              className="inline-flex items-center justify-center rounded-lg border border-[#E6E6E6] bg-white p-2 text-[#555] hover:bg-gray-50 hover:text-[#E31E24] hover:border-red-200 transition-colors shadow-2xs"
+              title="Edit in Page Studio"
+              aria-label={`Edit ${row.title} in Page Studio`}
+            >
+              <Edit2 size={14} className="text-[#E31E24]" />
+            </button>
+            {!isSystemPage && canUpdate && (
+              <button
+                type="button"
+                onClick={() => setDeletingPageId(row.id)}
+                className="inline-flex items-center justify-center rounded-lg border border-[#E6E6E6] bg-white p-2 text-[#555] hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors shadow-2xs"
+                title="Delete Page"
+                aria-label={`Delete ${row.title}`}
+              >
+                <Trash2 size={14} className="text-red-500" />
+              </button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -510,19 +650,36 @@ function CmsPagesManagementContent() {
           </button>
         </div>
 
-        {viewMode === "studio" && (
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode("overview");
-              router.push("/admin/cms/pages");
-            }}
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#555] hover:text-[#1A1A1A] transition-colors"
-          >
-            <ArrowLeft size={14} />
-            <span>Back to All Pages</span>
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {canUpdate && (
+            <button
+              type="button"
+              onClick={() => {
+                setNewPageTitle("");
+                setNewPageSlug("");
+                setShowCreateModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-2 text-[13px] font-bold text-white hover:bg-[#B5151B] transition-colors shadow-xs cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Create New Page</span>
+            </button>
+          )}
+
+          {viewMode === "studio" && (
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("overview");
+                router.push("/admin/cms/pages");
+              }}
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#555] hover:text-[#1A1A1A] transition-colors cursor-pointer"
+            >
+              <ArrowLeft size={14} />
+              <span>Back to All Pages</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── VIEW 1: CMS OVERVIEW TABLE ── */}
@@ -564,23 +721,39 @@ function CmsPagesManagementContent() {
 
               {/* Status & Quick Actions */}
               {selectedPage && (
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-gray-100 border border-gray-200 px-3 py-1.5 text-xs text-gray-700 font-mono">
+                    <span className="text-gray-400 font-sans text-[11px] uppercase tracking-wider font-semibold">Storefront:</span>
+                    <a
+                      href={`/${selectedPage.slug === "home" ? "" : selectedPage.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold text-[#0F2D52] hover:text-[#E31E24] hover:underline inline-flex items-center gap-1"
+                      title="Open page live in new tab"
+                    >
+                      <span>/{selectedPage.slug === "home" ? "" : selectedPage.slug}</span>
+                      <ExternalLink size={12} className="text-gray-400" />
+                    </a>
+                  </div>
+
+                  {!CORE_SYSTEM_PAGES.has(selectedPage.pageKey) && canUpdate && (
+                    <button
+                      type="button"
+                      onClick={openEditInfoModal}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-gray-50 transition-colors shadow-2xs cursor-pointer"
+                      title="Edit Page Title or URL Slug"
+                    >
+                      <Edit2 size={13} className="text-gray-600" />
+                      <span>Edit Title & Slug</span>
+                    </button>
+                  )}
+
                   <PageStatusButton
                     row={selectedPage}
                     onToggle={() => togglePageStatus(selectedPage)}
                     disabled={!canUpdate}
                     size="md"
                   />
-
-                  <a
-                    href={`/${selectedPage.slug === "home" ? "" : selectedPage.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#1A1A1A] hover:bg-gray-50 transition-colors shadow-2xs"
-                  >
-                    <Eye size={13} />
-                    <span>View Storefront</span>
-                  </a>
                 </div>
               )}
             </div>
@@ -628,15 +801,7 @@ function CmsPagesManagementContent() {
             <>
               {/* ── TAB 1: PAGE CONTENT ── */}
               {studioTab === "content" && (
-                DETAIL_PAGE_CONFIGS[selectedPage.pageKey] ? (
-                  <DetailPageEditor
-                    page={selectedPage}
-                    onSaved={() => {
-                      refetchPage();
-                      queryClient.invalidateQueries({ queryKey: ["admin-cms-pages"] });
-                    }}
-                  />
-                ) : selectedPage.pageKey === "products" ? (
+                selectedPage.pageKey === "products" ? (
                   <div className="rounded-xl border border-[#E6E6E6] bg-white p-8 space-y-4">
                     <div className="flex items-start gap-4 rounded-xl border border-blue-200 bg-blue-50/70 p-5">
                       <Info size={24} className="text-blue-600 shrink-0 mt-0.5" />
@@ -667,44 +832,13 @@ function CmsPagesManagementContent() {
                     </div>
                   </div>
                 ) : (
-                  /* Structure for remaining pages (About Us, Manufacturing, Home, Contact) until their structured Page Studios are built */
-                  <div className="space-y-4">
-                    <AdminStickySaveBar
-                      title={`${selectedPage.title} — Content Sections`}
-                      subtitle="Manage structured layout blocks for this page."
-                      saveLabel="Save Changes"
-                      showSave={false}
-                    />
-                    <div className="rounded-xl border border-[#E6E6E6] bg-white p-6 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-[15px] font-bold text-[#1A1A1A]">Managed Sections</h3>
-                          <p className="text-[12.5px] text-[#6B6B6B]">
-                            {selectedPage.sections.length} content sections configured in PostgreSQL.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="divide-y divide-[#E6E6E6] border border-[#E6E6E6] rounded-lg overflow-hidden">
-                        {selectedPage.sections.map((section, idx) => (
-                          <div key={section.id} className="flex items-center justify-between p-4 bg-white hover:bg-gray-50">
-                            <div className="flex items-center gap-3">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-50 text-[11.5px] font-bold text-[#E31E24]">
-                                {idx + 1}
-                              </span>
-                              <div>
-                                <h4 className="text-[14px] font-semibold text-[#1A1A1A]">{section.title || section.sectionKey}</h4>
-                                <span className="text-[11.5px] font-mono text-gray-400">#{section.sectionKey}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <StatusBadge status={section.status} />
-                              <span className="text-[12px] text-gray-400">{section.blocks.length} block{section.blocks.length !== 1 ? "s" : ""}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <DetailPageEditor
+                    page={selectedPage}
+                    onSaved={() => {
+                      refetchPage();
+                      queryClient.invalidateQueries({ queryKey: ["admin-cms-pages"] });
+                    }}
+                  />
                 )
               )}
 
@@ -881,6 +1015,137 @@ function CmsPagesManagementContent() {
         onSelect={(media) => setSeoForm((prev) => ({ ...prev, ogImage: media.url }))}
         title="Select Social Share Image"
         acceptTypes={["IMAGE"]}
+      />
+
+      {/* Create New Page Modal */}
+      <Modal
+        open={showCreateModal}
+        onClose={() => !creatingPage && setShowCreateModal(false)}
+        title="Create New CMS Page"
+      >
+        <form onSubmit={handleCreatePage} className="space-y-4 p-4">
+          <p className="text-xs text-gray-600">
+            Create a custom CMS page with its own URL route. You can immediately customize its hero banner, introduction, feature cards, and CTA sections in Page Studio.
+          </p>
+
+          <AdminInput
+            label="PAGE TITLE *"
+            placeholder="e.g. Clinical Research & Innovation"
+            value={newPageTitle}
+            onChange={(e) => {
+              const val = e.target.value;
+              setNewPageTitle(val);
+              const autoSlug = val
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9\s-]/g, "")
+                .replace(/\s+/g, "-");
+              setNewPageSlug(autoSlug);
+            }}
+            required
+            autoFocus
+          />
+
+          <div>
+            <AdminInput
+              label="URL SLUG *"
+              placeholder="e.g. clinical-research"
+              value={newPageSlug}
+              onChange={(e) => setNewPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+              required
+            />
+            {newPageSlug && (
+              <p className="mt-1 text-[11.5px] text-gray-500 font-mono">
+                Storefront URL preview: <span className="font-semibold text-[#0F2D52]">/{newPageSlug}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3 pt-3 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(false)}
+              disabled={creatingPage}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              loading={creatingPage}
+              className="rounded-lg bg-[#E31E24] px-5 py-2 text-xs font-bold text-white hover:bg-[#B5151B] cursor-pointer"
+            >
+              Create Page & Open Studio
+            </LoadingButton>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Page Info (Title & Slug) Modal */}
+      <Modal
+        open={showEditInfoModal}
+        onClose={() => !savingPageInfo && setShowEditInfoModal(false)}
+        title="Edit Page Title & URL Slug"
+      >
+        <form onSubmit={handleUpdatePageInfo} className="space-y-4 p-4">
+          <p className="text-xs text-gray-600">
+            Update the page name and storefront route. Changing the URL slug will immediately change the public web address of this page.
+          </p>
+
+          <AdminInput
+            label="PAGE TITLE *"
+            placeholder="e.g. Our Mission"
+            value={editPageTitle}
+            onChange={(e) => setEditPageTitle(e.target.value)}
+            required
+            autoFocus
+          />
+
+          <div>
+            <AdminInput
+              label="URL SLUG *"
+              placeholder="e.g. our-mission"
+              value={editPageSlug}
+              onChange={(e) => setEditPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+              required
+            />
+            {editPageSlug && (
+              <p className="mt-1 text-[11.5px] text-gray-500 font-mono">
+                Storefront URL preview: <span className="font-semibold text-[#0F2D52]">/{editPageSlug}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3 pt-3 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setShowEditInfoModal(false)}
+              disabled={savingPageInfo}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              loading={savingPageInfo}
+              className="rounded-lg bg-[#E31E24] px-5 py-2 text-xs font-bold text-white hover:bg-[#B5151B] cursor-pointer"
+            >
+              Save Page Info
+            </LoadingButton>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete Page Confirm Modal */}
+      <ConfirmModal
+        open={Boolean(deletingPageId)}
+        onCancel={() => setDeletingPageId(null)}
+        onConfirm={handleDeletePage}
+        title="Delete CMS Page"
+        message="Are you sure you want to delete this custom page? This action will remove the page and all its content from the live storefront. This action cannot be undone."
+        confirmText="Yes, Delete Page"
+        danger
+        isLoading={isDeleting}
       />
     </AdminLayout>
   );

@@ -13,12 +13,14 @@ export interface RichTextConfig {
   ctaLabelDefault?: string;
   ctaHrefDefault?: string;
   allowImage?: boolean;
+  imageLabel?: string;
 }
 
 export interface CardRepeaterConfig {
   itemLabel?: string;
   defaultIcon?: string;
   allowIcon?: boolean;
+  allowImage?: boolean;
   allowLinks?: boolean;
   allowFileUpload?: boolean;
   linkLabelDefault?: string;
@@ -85,6 +87,8 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
         cardConfig: {
           itemLabel: "Certification",
           defaultIcon: "BadgeCheck",
+          allowIcon: true,
+          allowImage: true,
           allowLinks: true,
           allowFileUpload: true,
           linkLabelDefault: "View certificate",
@@ -439,16 +443,37 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
       {
         key: "about",
         sectionKey: "home.about",
-        title: "About Section Intro",
-        subtitle: "Introduction section below hero banner",
-        description: "Introductory headline, mission statement paragraph, and 'Know More' CTA button.",
-        type: "rich_text",
-        richTextConfig: {
-          headingLabel: "About Section Heading",
-          paragraph1Label: "Mission & Background Narrative",
-          allowCtaButton: true,
-          ctaLabelDefault: "Know more",
-          ctaHrefDefault: "/about",
+        title: "About Section Cards",
+        subtitle: "3 Cards below hero banner (About Us, Our Mission, Quality)",
+        description: "Configure the 3 featured homepage cards with title, description, image, and link.",
+        type: "cards",
+        cardConfig: {
+          itemLabel: "Card",
+          allowIcon: false,
+          allowImage: true,
+          allowLinks: true,
+          allowFileUpload: false,
+          allowSubtitle: false,
+          allowParagraphs: false,
+          linkLabelDefault: "Read more »",
+        },
+      },
+      {
+        key: "capabilities",
+        sectionKey: "home.capabilities",
+        title: "Capabilities & Services Cards",
+        subtitle: "4 Cards below Shop by Category (Design & Engineering, Manufacturing, OEM, Packaging)",
+        description: "Configure the 4 capability cards with circular image, title, description, and link.",
+        type: "cards",
+        cardConfig: {
+          itemLabel: "Capability Card",
+          allowIcon: false,
+          allowImage: true,
+          allowLinks: true,
+          allowFileUpload: false,
+          allowSubtitle: false,
+          allowParagraphs: false,
+          linkLabelDefault: "Read more »",
         },
       },
       {
@@ -477,9 +502,44 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
         cardConfig: {
           itemLabel: "Certification Badge",
           defaultIcon: "ShieldCheck",
+          allowIcon: true,
+          allowImage: true,
           allowLinks: true,
-          allowFileUpload: false,
+          allowFileUpload: true,
           linkLabelDefault: "View certificate",
+        },
+      },
+      {
+        key: "testimonials",
+        sectionKey: "home.testimonials",
+        title: "Client Testimonials Carousel",
+        subtitle: "What our client say (Doctor feedback & reviews)",
+        description: "Featured doctor testimonials displayed in the homepage carousel.",
+        type: "cards",
+        cardConfig: {
+          itemLabel: "Doctor Testimonial",
+          allowIcon: false,
+          allowImage: true,
+          allowLinks: false,
+          allowFileUpload: true,
+          allowSubtitle: false,
+          allowParagraphs: false,
+        },
+      },
+      {
+        key: "blog",
+        sectionKey: "home.blog",
+        title: "From the Resource Center (Blog Articles)",
+        subtitle: "Homepage latest articles & clinical case studies carousel",
+        description: "Homepage blog article showcase. Articles, categories and authors are managed in Admin > Blog.",
+        type: "rich_text",
+        richTextConfig: {
+          headingLabel: "Section Heading",
+          paragraph1Label: "Section Subtitle / Description",
+          allowCtaButton: true,
+          ctaLabelDefault: "View all articles",
+          ctaHrefDefault: "/blog",
+          allowImage: false,
         },
       },
       {
@@ -496,6 +556,7 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
           ctaLabelDefault: "Contact us",
           ctaHrefDefault: "/contact",
           allowImage: true,
+          imageLabel: "CTA Banner Background Image",
         },
       },
     ],
@@ -534,6 +595,68 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
     ],
   },
 
+  testimonials: {
+    pageKey: "testimonials",
+    slug: "testimonials",
+    title: "What our client say",
+    breadcrumbLabel: "Testimonials",
+    defaultHero: {
+      kicker: "Testimonials",
+      title: "What our client say",
+      description: "Clinical experiences and feedback from orthodontists worldwide",
+      image: "",
+    },
+    sections: [
+      {
+        key: "list",
+        sectionKey: "testimonials.list",
+        title: "Doctor Reviews & Feedback",
+        subtitle: "#testimonials",
+        description: "Clinical reviews, quotes, and doctor photos displayed on the testimonials page and homepage.",
+        type: "cards",
+        cardConfig: {
+          itemLabel: "Doctor Testimonial",
+          allowIcon: false,
+          allowImage: true,
+          allowLinks: false,
+          allowFileUpload: true,
+          allowSubtitle: false,
+          allowParagraphs: false,
+        },
+      },
+    ],
+  },
+
+  blog: {
+    pageKey: "blog",
+    slug: "blog",
+    title: "Resource Center (Blog)",
+    breadcrumbLabel: "Blog",
+    defaultHero: {
+      kicker: "Resources",
+      title: "Orthodontic insights, product updates and industry notes.",
+      description:
+        "Explore practical articles from Modern Orthodontics around products, clinical trends, manufacturing, and better buying decisions for dental professionals.",
+      image: "",
+    },
+    sections: [
+      {
+        key: "articles",
+        sectionKey: "blog.articles",
+        title: "Latest Articles Section Copy",
+        subtitle: "#articles",
+        description: "Configure the articles section heading and intro. Individual posts, authors, and categories are managed in Admin > Blog.",
+        type: "rich_text",
+        richTextConfig: {
+          headingLabel: "Section Heading",
+          paragraph1Label: "Section Subtitle / Narrative",
+          allowCtaButton: false,
+          allowImage: false,
+        },
+      },
+    ],
+  },
+
   products: {
     pageKey: "products",
     slug: "products",
@@ -550,6 +673,138 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
   },
 };
 
-export function getDetailPageConfig(pageKey: string): DetailPageConfig | null {
-  return DETAIL_PAGE_CONFIGS[pageKey] || null;
+function inferSectionType(sectionKey: string, layoutType?: string | null): "rich_text" | "cards" | "symbols" | "faqs" {
+  if (layoutType === "cards" || layoutType === "symbols" || layoutType === "faqs" || layoutType === "rich_text") {
+    return layoutType;
+  }
+  const suffix = sectionKey.split(".").pop()?.toLowerCase() || "";
+  if (["features", "cards", "grid", "values", "pillars", "capabilities", "process", "highlights", "services"].includes(suffix)) {
+    return "cards";
+  }
+  if (["faqs", "faq", "questions"].includes(suffix)) {
+    return "faqs";
+  }
+  if (["symbols", "marks"].includes(suffix)) {
+    return "symbols";
+  }
+  return "rich_text";
+}
+
+export function getDetailPageConfig(
+  pageKey: string,
+  pageTitle = "Custom Page",
+  pageSlug = "",
+  existingSections: { sectionKey: string; title?: string | null; layoutType?: string | null }[] = []
+): DetailPageConfig {
+  if (DETAIL_PAGE_CONFIGS[pageKey]) {
+    return DETAIL_PAGE_CONFIGS[pageKey];
+  }
+
+  const nonHeroExisting = existingSections.filter((s) => !s.sectionKey.endsWith(".hero"));
+
+  const dynamicSections: DetailPageSectionDef[] =
+    nonHeroExisting.length > 0
+      ? nonHeroExisting.map((s, idx) => {
+          const secType = inferSectionType(s.sectionKey, s.layoutType);
+          const suffix = s.sectionKey.split(".").pop() || `section-${idx}`;
+          const isCta = suffix === "cta" || suffix.includes("banner");
+          const isCards = secType === "cards";
+          const isFaqs = secType === "faqs";
+          return {
+            key: suffix,
+            sectionKey: s.sectionKey,
+            title: s.title || (isCards ? "Feature Cards Grid" : isFaqs ? "Frequently Asked Questions" : isCta ? "Call to Action Banner" : `Section ${idx + 1}`),
+            subtitle: `#${suffix}`,
+            description: isCards
+              ? "Feature cards with icons/images, titles, descriptions, and links."
+              : isFaqs
+              ? "Questions and answers accordion section."
+              : isCta
+              ? "Closing banner message and button at the bottom of the page."
+              : "Manage headline, content text, images and links.",
+            type: secType,
+            richTextConfig: {
+              headingLabel: isCta ? "CTA Headline" : "Section Heading",
+              paragraph1Label: isCta ? "CTA Description" : "Primary Narrative Content",
+              paragraph2Label: isCta ? undefined : "Secondary Paragraph (Optional)",
+              allowCtaButton: true,
+              allowImage: true,
+            },
+            cardConfig: {
+              itemLabel: "Feature Card",
+              allowIcon: true,
+              allowImage: true,
+              allowLinks: true,
+              linkLabelDefault: "Learn more",
+            },
+          };
+        })
+      : [
+          {
+            key: "overview",
+            sectionKey: `${pageKey}.overview`,
+            title: "Main Content / Story",
+            subtitle: "#overview",
+            description: "Primary section heading, introduction narrative, image, and action button.",
+            type: "rich_text",
+            richTextConfig: {
+              headingLabel: "Section Heading",
+              paragraph1Label: "Main Overview Paragraph",
+              paragraph2Label: "Supplementary Paragraph (Optional)",
+              allowCtaButton: true,
+              allowImage: true,
+            },
+          },
+          {
+            key: "features",
+            sectionKey: `${pageKey}.features`,
+            title: "Highlights & Features Grid",
+            subtitle: "#features",
+            description: "Feature cards with icons/images, titles, descriptions, and links.",
+            type: "cards",
+            cardConfig: {
+              itemLabel: "Feature Card",
+              allowIcon: true,
+              allowImage: true,
+              allowLinks: true,
+              linkLabelDefault: "Learn more",
+            },
+          },
+          {
+            key: "faqs",
+            sectionKey: `${pageKey}.faqs`,
+            title: "Frequently Asked Questions",
+            subtitle: "#faqs",
+            description: "Questions and answers accordion section.",
+            type: "faqs",
+          },
+          {
+            key: "cta",
+            sectionKey: `${pageKey}.cta`,
+            title: "Call to Action Banner",
+            subtitle: "#cta",
+            description: "Closing banner message and button at the bottom of the page.",
+            type: "rich_text",
+            richTextConfig: {
+              headingLabel: "CTA Headline",
+              paragraph1Label: "CTA Description",
+              allowCtaButton: true,
+              allowImage: true,
+            },
+          },
+        ];
+
+  return {
+    pageKey,
+    slug: pageSlug || pageKey,
+    title: pageTitle,
+    breadcrumbLabel: pageTitle,
+    defaultHero: {
+      kicker: pageTitle,
+      title: pageTitle,
+      description: `Welcome to ${pageTitle}.`,
+      image: "",
+    },
+    sections: dynamicSections,
+  };
 }

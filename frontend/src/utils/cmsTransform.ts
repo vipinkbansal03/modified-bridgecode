@@ -29,24 +29,46 @@ export function transformStats(section: CmsSection) {
 
 // ── Certifications ─────────────────────────────────────────────────────────────
 export function transformCertifications(section: CmsSection) {
-  return section.blocks.map((b) => ({
+  if (!section.blocks || section.blocks.length === 0) return [];
+  const activeBlocks = section.blocks.filter((b) => b.status !== "INACTIVE");
+  return activeBlocks.map((b) => ({
     title: b.title ?? "",
     description: b.description ?? "",
-    icon: b.icon ?? "",
-    href: b.linkUrl ?? "",
+    icon: b.icon ?? "ShieldCheck",
+    image: b.image || "",
+    href: b.linkUrl || "/quality-certifications",
+    linkLabel: b.linkLabel || "View certificate »",
   }));
 }
 
 // ── About intro ────────────────────────────────────────────────────────────────
 export function transformAboutIntro(section: CmsSection) {
-  const first = section.blocks[0];
-  if (!first) return null;
+  if (!section.blocks || section.blocks.length === 0) return null;
+  const activeBlocks = section.blocks.filter((b) => b.status !== "INACTIVE");
+  if (activeBlocks.length === 0) return null;
   return {
-    title: first.title ?? section.title ?? "",
-    description: first.description ?? "",
-    ctaLabel: first.linkLabel ?? "Know more",
-    ctaHref: first.linkUrl ?? "/about",
+    cards: activeBlocks.map((b) => ({
+      title: b.title ?? "",
+      image: b.image || "",
+      description: b.description ?? "",
+      linkText: b.linkLabel || "Read more »",
+      linkHref: b.linkUrl || "/about",
+    })),
   };
+}
+
+// ── Capabilities ───────────────────────────────────────────────────────────────
+export function transformCapabilities(section: CmsSection) {
+  if (!section.blocks || section.blocks.length === 0) return null;
+  const activeBlocks = section.blocks.filter((b) => b.status !== "INACTIVE");
+  if (activeBlocks.length === 0) return null;
+  return activeBlocks.map((b) => ({
+    title: b.title ?? "",
+    image: b.image || "",
+    description: b.description ?? "",
+    linkHref: b.linkUrl || "/",
+    linkText: b.linkLabel || "Read more »",
+  }));
 }
 
 // ── Contact CTA ────────────────────────────────────────────────────────────────

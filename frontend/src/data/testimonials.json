@@ -1,7 +1,37 @@
 [
-  { "name": "Dr. Mathew P. Sunny", "quote": "Their MBT Sapphire bracket system is at par with the best — excellent tip, torque and in-out expression." },
-  { "name": "Dr. Neil David Andrade", "quote": "Working with them for over 10 years — orders are always perfect and delivery is always on time." },
-  { "name": "Dr. Shiv Priya Aher", "quote": "The finish on the occlusion with correct placement is why I keep choosing them." },
-  { "name": "Dr. Aby Augustine", "quote": "Reasonable prices, fast service, and the Sapphire Plus metal bracket kit is genuinely excellent." },
-  { "name": "Rohit Jain", "quote": "Eight years in and still going strong — a wide product range and reasonable rates." }
+  {
+    "name": "Dr. Harish Koshik",
+    "image": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?fm=jpg&q=80&w=200&auto=format&fit=crop",
+    "quote": "Modern Orthodontics is one of the best orthodontic products companies in India. Highly reliable bracket systems with exceptional clinical precision."
+  },
+  {
+    "name": "Floyd Fernandes",
+    "image": "",
+    "quote": "Their service is prompt and polite. They are transparent when dealing with doctors and are very supportive throughout the procurement process."
+  },
+  {
+    "name": "Dr. Mathew P Sunny",
+    "image": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?fm=jpg&q=80&w=200&auto=format&fit=crop",
+    "quote": "I have been using Modern Orthodontics products for the past 7 years now. Their MBT Sapphire Bracket system is at par with the best with excellent tip torque and in-out expressions providing excellent results. The customer service is also excellent with immediate response to all queries and order placements. I highly recommend them."
+  },
+  {
+    "name": "Vishal Parashar",
+    "image": "",
+    "quote": "The material provided by Modern Orthodontics is very good and effective. The team has always been updating me for the requirements and provided me the material on time as when required."
+  },
+  {
+    "name": "Dr. Neil David Andrade",
+    "image": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?fm=jpg&q=80&w=200&auto=format&fit=crop",
+    "quote": "I have been working with Modern Orthodontics for over 10 years now, I can testify that I am very happy with their service. The staff is kind and courteous in all conversations. The orders are always perfect and delivery is always on time. I highly recommend their services."
+  },
+  {
+    "name": "Dr. Shiv Priya Aher",
+    "image": "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?fm=jpg&q=80&w=200&auto=format&fit=crop",
+    "quote": "The finish on the occlusion with correct placement is why I keep choosing them. Exceptional quality control and great precision in their brackets and wire series."
+  },
+  {
+    "name": "Dr. Aby Augustine",
+    "image": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?fm=jpg&q=80&w=200&auto=format&fit=crop",
+    "quote": "Reasonable prices, fast service, and the Sapphire Plus metal bracket kit is genuinely excellent. Highly dependable partner for our clinical needs."
+  }
 ]

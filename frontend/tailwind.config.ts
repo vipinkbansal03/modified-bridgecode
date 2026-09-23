@@ -25,7 +25,7 @@ const config: Config = {
         poppins: ["var(--font-poppins)", "'Poppins'", "sans-serif"],
       },
       maxWidth: {
-        wrap: "1320px",
+        wrap: "1480px",
       },
       borderRadius: {
         pill: "999px",

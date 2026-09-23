@@ -87,8 +87,8 @@ export function BlogCategoriesTab() {
     setForm((prev) => ({ ...prev, slug: slugify(e.target.value) }));
   };
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const save = async (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
     if (!form.name.trim()) {
       showToast("Category name is required.", "error");
       return;
@@ -192,65 +192,42 @@ export function BlogCategoriesTab() {
       <Modal
         open={showModal}
         onClose={closeModal}
-        panelClassName="max-w-xl max-h-[90vh] overflow-y-auto"
+        title={form.id ? "Edit Blog Category" : "Add New Blog Category"}
+        subtitle="Changes are not applied until you save."
+        size="md"
+        onSave={() => save()}
+        saveText={form.id ? "Save Changes" : "Create Category"}
+        cancelText="Cancel"
+        isSaving={createRow.isPending || updateRow.isPending}
+        bodyClassName="p-6 space-y-4"
       >
-        <form onSubmit={save} className="flex flex-col h-full">
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#E6E6E6] bg-white px-6 py-4 shadow-xs">
-            <div>
-              <h3 className="text-[15.5px] font-bold text-ink">
-                {form.id ? "Edit Blog Category" : "Add New Blog Category"}
-              </h3>
-              <p className="text-[11.5px] text-steel-2">
-                Changes are not applied until you save.
-              </p>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#555] hover:bg-gray-50 transition-colors"
-              >
-                <ArrowLeft size={14} /> Back
-              </button>
-              <LoadingButton
-                type="submit"
-                loading={createRow.isPending || updateRow.isPending}
-                loadingText="Saving..."
-                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors"
-              >
-                <Save size={14} /> Save Changes
-              </LoadingButton>
-            </div>
-          </div>
-
-          <div className="p-6 space-y-4">
+        <form id="blog-category-form" onSubmit={save} className="space-y-4">
+          <AdminInput
+            label="Category Name *"
+            value={form.name}
+            onChange={handleNameChange}
+            placeholder="e.g. Clinical Research"
+            required
+          />
+          <div>
             <AdminInput
-              label="Category Name *"
-              value={form.name}
-              onChange={handleNameChange}
-              placeholder="e.g. Clinical Research"
+              label="Slug *"
+              value={form.slug}
+              onChange={handleSlugChange}
+              placeholder="clinical-research"
               required
             />
-            <div>
-              <AdminInput
-                label="Slug *"
-                value={form.slug}
-                onChange={handleSlugChange}
-                placeholder="clinical-research"
-                required
-              />
-              <p className="mt-1 text-[11.5px] text-gray-500">
-                Slug path: <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-700">/{form.slug || "your-slug"}</code>
-              </p>
-            </div>
-            <AdminTextarea
-              label="Description"
-              rows={3}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Brief description of articles covered in this category..."
-            />
+            <p className="mt-1 text-[11.5px] text-gray-500">
+              Slug path: <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-700">/{form.slug || "your-slug"}</code>
+            </p>
           </div>
+          <AdminTextarea
+            label="Description"
+            rows={3}
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="Brief description of articles covered in this category..."
+          />
         </form>
       </Modal>
 

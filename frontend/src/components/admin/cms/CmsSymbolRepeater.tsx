@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown, GripVertical } from "lucide-react";
 import { AdminInput, AdminTextarea } from "@/components/admin/AdminComponents";
 import { CmsIconPicker, renderCmsIcon } from "./CmsIconPicker";
 import { cn } from "@/utils/cn";
@@ -33,6 +33,9 @@ export function CmsSymbolRepeater({
   introLabel = "Introductory Text",
 }: CmsSymbolRepeaterProps) {
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [activeHandleIndex, setActiveHandleIndex] = useState<number | null>(null);
   const symbolRefs = useRef<(HTMLDivElement | null)[]>([]);
   const pendingScrollIndexRef = useRef<number | null>(null);
 
@@ -93,6 +96,43 @@ export function CmsSymbolRepeater({
     onChange({ ...values, symbols: updatedSymbols });
   };
 
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", `${index}`);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = (_e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (dragOverIndex === index) {
+      setDragOverIndex(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+      const updatedSymbols = [...values.symbols];
+      const [moved] = updatedSymbols.splice(draggedIndex, 1);
+      updatedSymbols.splice(targetIndex, 0, moved);
+      onChange({ ...values, symbols: updatedSymbols });
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -131,14 +171,44 @@ export function CmsSymbolRepeater({
                 ref={(el) => {
                   symbolRefs.current[idx] = el;
                 }}
+                draggable={activeHandleIndex === idx}
+                onDragStart={(e) => {
+                  if (activeHandleIndex !== idx) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleDragStart(e, idx);
+                }}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDragLeave={(e) => handleDragLeave(e, idx)}
+                onDrop={(e) => {
+                  setActiveHandleIndex(null);
+                  handleDrop(e, idx);
+                }}
+                onDragEnd={() => {
+                  setActiveHandleIndex(null);
+                  handleDragEnd();
+                }}
                 className={cn(
-                  "rounded-lg border border-[#E6E6E6] bg-gray-50/50 p-3.5 space-y-2.5 transition-all duration-300 hover:shadow-xs",
+                  "rounded-lg border bg-gray-50/50 p-3.5 space-y-2.5 transition-all duration-200",
+                  draggedIndex === idx && "opacity-40 border-dashed border-[#E31E24] scale-[0.99]",
+                  dragOverIndex === idx && draggedIndex !== idx && "border-[#E31E24] ring-2 ring-red-200 bg-red-50/20 shadow-sm",
+                  draggedIndex === null && dragOverIndex === null && "border-[#E6E6E6] hover:border-gray-300",
                   highlightedIndex === idx && "ring-2 ring-[#E31E24]/70 border-[#E31E24] shadow-md bg-red-50/20"
                 )}
               >
                 {/* Header with quick icon and title */}
                 <div className="flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
                   <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className="flex items-center text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-200/60 transition-colors shrink-0"
+                      title="Drag to reorder symbol"
+                      onMouseDown={() => setActiveHandleIndex(idx)}
+                      onMouseUp={() => setActiveHandleIndex(null)}
+                      onMouseLeave={() => setActiveHandleIndex(null)}
+                    >
+                      <GripVertical size={15} />
+                    </div>
                     <span className="text-[#E31E24] shrink-0">
                       {renderCmsIcon(sym.icon || "Hash", 15)}
                     </span>
@@ -152,7 +222,7 @@ export function CmsSymbolRepeater({
                       type="button"
                       disabled={idx === 0}
                       onClick={() => handleMove(idx, "up")}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200/60 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                       title="Move Up"
                     >
                       <ArrowUp size={13} />
@@ -161,7 +231,7 @@ export function CmsSymbolRepeater({
                       type="button"
                       disabled={idx === values.symbols.length - 1}
                       onClick={() => handleMove(idx, "down")}
-                      className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200/60 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                       title="Move Down"
                     >
                       <ArrowDown size={13} />
@@ -169,7 +239,7 @@ export function CmsSymbolRepeater({
                     <button
                       type="button"
                       onClick={() => handleDeleteSymbol(idx)}
-                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors ml-0.5"
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded ml-0.5 transition-colors cursor-pointer"
                       title="Delete Symbol"
                     >
                       <Trash2 size={13} />

@@ -12,9 +12,10 @@ import { CmsFaqRepeater, type CmsFaqsValues } from "./CmsFaqRepeater";
 import { AdminInput, AdminTextarea } from "@/components/admin/AdminComponents";
 import { AdminStickySaveBar } from "@/components/admin/AdminStickySaveBar";
 import { useToast } from "@/components/admin/AdminComponents";
-import { adminApi } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { useTrackingSettings } from "@/hooks/api/useTrackingSettings";
 import { getDetailPageConfig, type DetailPageConfig, type DetailPageSectionDef } from "@/config/detailPageConfigs";
+import homeContent from "@/data/home.json";
 
 type Block = {
   id: string;
@@ -26,6 +27,7 @@ type Block = {
   icon?: string | null;
   linkLabel?: string | null;
   linkUrl?: string | null;
+  status?: string;
   sortOrder: number;
   dataJson?: unknown;
 };
@@ -57,14 +59,225 @@ interface DetailPageEditorProps {
   config?: DetailPageConfig;
 }
 
+function computeDetailPageInitialState(page: Page, config?: DetailPageConfig) {
+  if (!config) {
+    return {
+      orderedKeys: [] as string[],
+      heroValues: { kicker: "", title: page.title, description: "", image: "" } as CmsHeroValues,
+      sectionStates: {} as Record<string, any>,
+    };
+  }
+
+  // Hero section
+  const heroSectionKey = `${page.pageKey}.hero`;
+  const heroSection = page.sections.find((s) => s.sectionKey === heroSectionKey || s.sectionKey.endsWith(".hero"));
+  const heroBlock = heroSection?.blocks[0];
+  const heroValues: CmsHeroValues = {
+    kicker: heroBlock?.subtitle || config.defaultHero.kicker || page.title,
+    title: heroBlock?.title || config.defaultHero.title || page.title,
+    description: heroBlock?.description || config.defaultHero.description || "",
+    image: heroBlock?.image || config.defaultHero.image || "",
+  };
+
+  // Section order
+  const validSectionKeys = new Set(config.sections.map((s) => s.sectionKey));
+  const sortedFromDb = [...page.sections]
+    .filter((s) => validSectionKeys.has(s.sectionKey) && !s.sectionKey.endsWith(".hero"))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map((s) => s.sectionKey);
+
+  const missingKeys = config.sections
+    .map((s) => s.sectionKey)
+    .filter((k) => !sortedFromDb.includes(k));
+
+  const orderedKeys = [...sortedFromDb, ...missingKeys];
+
+  // Dynamic sections state map
+  const sectionStates: Record<string, any> = {};
+  for (const secDef of config.sections) {
+    const dbSec = page.sections.find((s) => s.sectionKey === secDef.sectionKey);
+    const isEnabled = (dbSec?.status || "ACTIVE") === "ACTIVE";
+
+    switch (secDef.type) {
+      case "rich_text": {
+        const b0 = dbSec?.blocks[0];
+        const b1 = dbSec?.blocks[1];
+        sectionStates[secDef.sectionKey] = {
+          enabled: isEnabled,
+          richText: {
+            heading: b0?.title || dbSec?.title || secDef.title,
+            paragraph1: b0?.description || "",
+            paragraph2: b1?.description || "",
+            linkLabel: b0?.linkLabel || "",
+            linkUrl: b0?.linkUrl || "",
+            image: b0?.image || (secDef.sectionKey === "home.contactCta" ? homeContent.contactCta.image : ""),
+          },
+        };
+        break;
+      }
+      case "cards": {
+        const introBlock = dbSec?.blocks.find((b) => b.blockType === "intro" || b.blockType === "rich_text");
+        const cardBlocks = (dbSec?.blocks || []).filter(
+          (b) => !["intro", "rich_text", "hero", "faq", "symbol"].includes(b.blockType)
+        );
+        sectionStates[secDef.sectionKey] = {
+          enabled: isEnabled,
+          cards: {
+            heading: dbSec?.title || introBlock?.title || secDef.title,
+            introText: introBlock?.description || "",
+            cards: cardBlocks.map((b) => ({
+              id: b.id,
+              icon: b.icon || secDef.cardConfig?.defaultIcon || "BadgeCheck",
+              image: b.image || "",
+              title: b.title || "",
+              subtitle: b.subtitle || "",
+              description: b.description || "",
+              linkLabel: b.linkLabel || secDef.cardConfig?.linkLabelDefault || "",
+              linkUrl: b.linkUrl || "",
+              status: (b.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+            })),
+          },
+        };
+        break;
+      }
+      case "symbols": {
+        const introBlock = dbSec?.blocks.find((b) => b.blockType === "intro");
+        const symbolBlocks = (dbSec?.blocks || []).filter((b) => b.blockType === "symbol");
+        sectionStates[secDef.sectionKey] = {
+          enabled: isEnabled,
+          symbols: {
+            heading: introBlock?.title || dbSec?.title || secDef.title,
+            introText:
+              introBlock?.description ||
+              "A quick reference for the most common symbols you'll find on Modern Orthodontics product labels and packaging.",
+            symbols: symbolBlocks.map((b) => ({
+              id: b.id,
+              icon: b.icon || "Hash",
+              title: b.title || "",
+              description: b.description || "",
+            })),
+          },
+        };
+        break;
+      }
+      case "faqs": {
+        const faqBlocks = (dbSec?.blocks || []).filter((b) => b.blockType === "faq");
+        sectionStates[secDef.sectionKey] = {
+          enabled: isEnabled,
+          faqs: {
+            heading: dbSec?.title || "FAQs",
+            items: faqBlocks.map((b) => ({
+              id: b.id,
+              question: b.title || "",
+              answer: b.description || "",
+            })),
+          },
+        };
+        break;
+      }
+      case "rich_text_callout": {
+        const b0 = dbSec?.blocks[0];
+        const b1 = dbSec?.blocks[1];
+        const settings = (dbSec?.settingsJson as Record<string, any>) || {};
+        sectionStates[secDef.sectionKey] = {
+          enabled: isEnabled,
+          richText: {
+            heading: b0?.title || dbSec?.title || secDef.title,
+            paragraph1: b0?.description || "",
+            paragraph2: b1?.description || "",
+          },
+          callout: settings?.calloutText || secDef.calloutDefault || "",
+        };
+        break;
+      }
+    }
+  }
+
+  return {
+    orderedKeys,
+    heroValues,
+    sectionStates,
+  };
+}
+
+function normalizeEditorState(state: {
+  orderedKeys: string[];
+  heroValues: CmsHeroValues;
+  sectionStates: Record<string, any>;
+}) {
+  return JSON.stringify({
+    orderedKeys: state.orderedKeys,
+    heroValues: {
+      kicker: (state.heroValues.kicker || "").trim(),
+      title: (state.heroValues.title || "").trim(),
+      description: (state.heroValues.description || "").trim(),
+      image: (state.heroValues.image || "").trim(),
+    },
+    sectionStates: Object.keys(state.sectionStates).sort().reduce((acc, key) => {
+      const sec = state.sectionStates[key];
+      acc[key] = {
+        enabled: Boolean(sec?.enabled),
+        callout: sec?.callout ? sec.callout.trim() : "",
+        richText: sec?.richText
+          ? {
+              heading: (sec.richText.heading || "").trim(),
+              paragraph1: (sec.richText.paragraph1 || "").trim(),
+              paragraph2: (sec.richText.paragraph2 || "").trim(),
+              linkLabel: (sec.richText.linkLabel || "").trim(),
+              linkUrl: (sec.richText.linkUrl || "").trim(),
+              image: (sec.richText.image || "").trim(),
+            }
+          : undefined,
+        cards: sec?.cards
+          ? {
+              heading: (sec.cards.heading || "").trim(),
+              introText: (sec.cards.introText || "").trim(),
+              cards: (sec.cards.cards || []).map((c: any) => ({
+                icon: (c.icon || "").trim(),
+                image: (c.image || "").trim(),
+                title: (c.title || "").trim(),
+                subtitle: (c.subtitle || "").trim(),
+                description: (c.description || "").trim(),
+                linkLabel: (c.linkLabel || "").trim(),
+                linkUrl: (c.linkUrl || "").trim(),
+                status: c.status || "ACTIVE",
+              })),
+            }
+          : undefined,
+        symbols: sec?.symbols
+          ? {
+              heading: (sec.symbols.heading || "").trim(),
+              introText: (sec.symbols.introText || "").trim(),
+              symbols: (sec.symbols.symbols || []).map((s: any) => ({
+                icon: (s.icon || "").trim(),
+                title: (s.title || "").trim(),
+                description: (s.description || "").trim(),
+              })),
+            }
+          : undefined,
+        faqs: sec?.faqs
+          ? {
+              heading: (sec.faqs.heading || "").trim(),
+              items: (sec.faqs.items || []).map((f: any) => ({
+                question: (f.question || "").trim(),
+                answer: (f.answer || "").trim(),
+              })),
+            }
+          : undefined,
+      };
+      return acc;
+    }, {} as Record<string, any>),
+  });
+}
+
 export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPageEditorProps) {
   const { showToast } = useToast();
   const { data: trackingSettings } = useTrackingSettings();
   const [isSaving, setIsSaving] = useState(false);
 
   const config = useMemo(() => {
-    return propConfig || getDetailPageConfig(page.pageKey);
-  }, [propConfig, page.pageKey]);
+    return propConfig || getDetailPageConfig(page.pageKey, page.title, page.slug, page.sections);
+  }, [propConfig, page.pageKey, page.title, page.slug, page.sections]);
 
   // Drag & drop state for sections
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
@@ -72,39 +285,14 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
 
   // Hero section
   const heroSectionKey = `${page.pageKey}.hero`;
-  const heroSection = page.sections.find((s) => s.sectionKey === heroSectionKey || s.sectionKey.endsWith(".hero"));
 
-  // Ordered content section keys based strictly on database sortOrder
-  const initialOrder = useMemo(() => {
-    if (!config) return [];
-    const validSectionKeys = new Set(config.sections.map((s) => s.sectionKey));
-    const sortedFromDb = [...page.sections]
-      .filter((s) => validSectionKeys.has(s.sectionKey) && !s.sectionKey.endsWith(".hero"))
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      .map((s) => s.sectionKey);
+  // Initial computed state
+  const initialCalculatedState = useMemo(() => {
+    return computeDetailPageInitialState(page, config);
+  }, [page, config]);
 
-    // Append any config sections not yet in DB
-    const missingKeys = config.sections
-      .map((s) => s.sectionKey)
-      .filter((k) => !sortedFromDb.includes(k));
-
-    return [...sortedFromDb, ...missingKeys];
-  }, [config, page.sections]);
-
-  const [orderedKeys, setOrderedKeys] = useState<string[]>(initialOrder);
-
-  // ── Hero State ──────────────────────────────────────────────────────────
-  const [heroValues, setHeroValues] = useState<CmsHeroValues>(() => {
-    const heroBlock = heroSection?.blocks[0];
-    return {
-      kicker: heroBlock?.subtitle || config?.defaultHero.kicker || page.title,
-      title: heroBlock?.title || config?.defaultHero.title || page.title,
-      description: heroBlock?.description || config?.defaultHero.description || "",
-      image: heroBlock?.image || config?.defaultHero.image || "",
-    };
-  });
-
-  // ── Dynamic Sections State Map ──────────────────────────────────────────
+  const [orderedKeys, setOrderedKeys] = useState<string[]>(() => initialCalculatedState.orderedKeys);
+  const [heroValues, setHeroValues] = useState<CmsHeroValues>(() => initialCalculatedState.heroValues);
   const [sectionStates, setSectionStates] = useState<
     Record<
       string,
@@ -117,225 +305,25 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
         callout?: string;
       }
     >
-  >(() => {
-    const states: Record<string, any> = {};
-    if (!config) return states;
+  >(() => initialCalculatedState.sectionStates);
 
-    for (const secDef of config.sections) {
-      const dbSec = page.sections.find((s) => s.sectionKey === secDef.sectionKey);
-      const isEnabled = (dbSec?.status || "ACTIVE") === "ACTIVE";
+  const [initialSnapshot, setInitialSnapshot] = useState<string>(() => normalizeEditorState(initialCalculatedState));
 
-      switch (secDef.type) {
-        case "rich_text": {
-          const b0 = dbSec?.blocks[0];
-          const b1 = dbSec?.blocks[1];
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            richText: {
-              heading: b0?.title || dbSec?.title || secDef.title,
-              paragraph1: b0?.description || "",
-              paragraph2: b1?.description || "",
-              linkLabel: b0?.linkLabel || "",
-              linkUrl: b0?.linkUrl || "",
-              image: b0?.image || "",
-            },
-          };
-          break;
-        }
-        case "cards": {
-          const introBlock = dbSec?.blocks.find((b) => b.blockType === "intro" || b.blockType === "rich_text");
-          const cardBlocks = (dbSec?.blocks || []).filter(
-            (b) => !["intro", "rich_text", "hero", "faq", "symbol"].includes(b.blockType)
-          );
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            cards: {
-              heading: dbSec?.title || introBlock?.title || secDef.title,
-              introText: introBlock?.description || "",
-              cards: cardBlocks.map((b) => ({
-                id: b.id,
-                icon: b.icon || secDef.cardConfig?.defaultIcon || "BadgeCheck",
-                title: b.title || "",
-                subtitle: b.subtitle || "",
-                description: b.description || "",
-                linkLabel: b.linkLabel || secDef.cardConfig?.linkLabelDefault || "",
-                linkUrl: b.linkUrl || "",
-              })),
-            },
-          };
-          break;
-        }
-        case "symbols": {
-          const introBlock = dbSec?.blocks.find((b) => b.blockType === "intro");
-          const symbolBlocks = (dbSec?.blocks || []).filter((b) => b.blockType === "symbol");
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            symbols: {
-              heading: introBlock?.title || dbSec?.title || secDef.title,
-              introText:
-                introBlock?.description ||
-                "A quick reference for the most common symbols you'll find on Modern Orthodontics product labels and packaging.",
-              symbols: symbolBlocks.map((b) => ({
-                id: b.id,
-                icon: b.icon || "Hash",
-                title: b.title || "",
-                description: b.description || "",
-              })),
-            },
-          };
-          break;
-        }
-        case "faqs": {
-          const faqBlocks = (dbSec?.blocks || []).filter((b) => b.blockType === "faq");
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            faqs: {
-              heading: dbSec?.title || "FAQs",
-              items: faqBlocks.map((b) => ({
-                id: b.id,
-                question: b.title || "",
-                answer: b.description || "",
-              })),
-            },
-          };
-          break;
-        }
-        case "rich_text_callout": {
-          const b0 = dbSec?.blocks[0];
-          const b1 = dbSec?.blocks[1];
-          const settings = (dbSec?.settingsJson as Record<string, any>) || {};
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            richText: {
-              heading: b0?.title || dbSec?.title || secDef.title,
-              paragraph1: b0?.description || "",
-              paragraph2: b1?.description || "",
-            },
-            callout: settings?.calloutText || secDef.calloutDefault || "",
-          };
-          break;
-        }
-      }
-    }
-    return states;
-  });
-
-  // Re-sync when page prop updates
+  // Re-sync when page or config prop updates
   const resetToLoaded = () => {
-    setOrderedKeys(initialOrder);
-
-    const hBlock = heroSection?.blocks[0];
-    setHeroValues({
-      kicker: hBlock?.subtitle || config?.defaultHero.kicker || page.title,
-      title: hBlock?.title || config?.defaultHero.title || page.title,
-      description: hBlock?.description || config?.defaultHero.description || "",
-      image: hBlock?.image || config?.defaultHero.image || "",
-    });
-
-    if (!config) return;
-    const states: Record<string, any> = {};
-    for (const secDef of config.sections) {
-      const dbSec = page.sections.find((s) => s.sectionKey === secDef.sectionKey);
-      const isEnabled = (dbSec?.status || "ACTIVE") === "ACTIVE";
-
-      switch (secDef.type) {
-        case "rich_text": {
-          const b0 = dbSec?.blocks[0];
-          const b1 = dbSec?.blocks[1];
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            richText: {
-              heading: b0?.title || dbSec?.title || secDef.title,
-              paragraph1: b0?.description || "",
-              paragraph2: b1?.description || "",
-              linkLabel: b0?.linkLabel || "",
-              linkUrl: b0?.linkUrl || "",
-              image: b0?.image || "",
-            },
-          };
-          break;
-        }
-        case "cards": {
-          const introBlock = dbSec?.blocks.find((b) => b.blockType === "intro" || b.blockType === "rich_text");
-          const cardBlocks = (dbSec?.blocks || []).filter(
-            (b) => !["intro", "rich_text", "hero", "faq", "symbol"].includes(b.blockType)
-          );
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            cards: {
-              heading: dbSec?.title || introBlock?.title || secDef.title,
-              introText: introBlock?.description || "",
-              cards: cardBlocks.map((b) => ({
-                id: b.id,
-                icon: b.icon || secDef.cardConfig?.defaultIcon || "BadgeCheck",
-                title: b.title || "",
-                subtitle: b.subtitle || "",
-                description: b.description || "",
-                linkLabel: b.linkLabel || secDef.cardConfig?.linkLabelDefault || "",
-                linkUrl: b.linkUrl || "",
-              })),
-            },
-          };
-          break;
-        }
-        case "symbols": {
-          const introBlock = dbSec?.blocks.find((b) => b.blockType === "intro");
-          const symbolBlocks = (dbSec?.blocks || []).filter((b) => b.blockType === "symbol");
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            symbols: {
-              heading: introBlock?.title || dbSec?.title || secDef.title,
-              introText:
-                introBlock?.description ||
-                "A quick reference for the most common symbols you'll find on Modern Orthodontics product labels and packaging.",
-              symbols: symbolBlocks.map((b) => ({
-                id: b.id,
-                icon: b.icon || "Hash",
-                title: b.title || "",
-                description: b.description || "",
-              })),
-            },
-          };
-          break;
-        }
-        case "faqs": {
-          const faqBlocks = (dbSec?.blocks || []).filter((b) => b.blockType === "faq");
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            faqs: {
-              heading: dbSec?.title || "FAQs",
-              items: faqBlocks.map((b) => ({
-                id: b.id,
-                question: b.title || "",
-                answer: b.description || "",
-              })),
-            },
-          };
-          break;
-        }
-        case "rich_text_callout": {
-          const b0 = dbSec?.blocks[0];
-          const b1 = dbSec?.blocks[1];
-          const settings = (dbSec?.settingsJson as Record<string, any>) || {};
-          states[secDef.sectionKey] = {
-            enabled: isEnabled,
-            richText: {
-              heading: b0?.title || dbSec?.title || secDef.title,
-              paragraph1: b0?.description || "",
-              paragraph2: b1?.description || "",
-            },
-            callout: settings?.calloutText || secDef.calloutDefault || "",
-          };
-          break;
-        }
-      }
-    }
-    setSectionStates(states);
+    const loaded = computeDetailPageInitialState(page, config);
+    setOrderedKeys(loaded.orderedKeys);
+    setHeroValues(loaded.heroValues);
+    setSectionStates(loaded.sectionStates);
+    setInitialSnapshot(normalizeEditorState(loaded));
   };
 
   useEffect(() => {
-    resetToLoaded();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const loaded = computeDetailPageInitialState(page, config);
+    setOrderedKeys(loaded.orderedKeys);
+    setHeroValues(loaded.heroValues);
+    setSectionStates(loaded.sectionStates);
+    setInitialSnapshot(normalizeEditorState(loaded));
   }, [page, config]);
 
   // Section reordering helpers
@@ -386,20 +374,37 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
       linkLabel?: string | null;
       linkUrl?: string | null;
       sortOrder: number;
+      status?: string;
       dataJson?: object;
     }>
   ) => {
-    const existingMap = new Map(existingBlocks.map((b) => [b.id, b]));
+    // 1. Fetch live blocks from DB for this section to prevent stale ID mismatches
+    let dbBlocks = existingBlocks || [];
+    try {
+      const res = await adminApi.get(`/cms/sections/${sectionId}/blocks`);
+      const list = res.data?.data || res.data;
+      if (Array.isArray(list)) {
+        dbBlocks = list;
+      }
+    } catch {
+      // fallback to existingBlocks
+    }
+
+    const existingMap = new Map(dbBlocks.map((b) => [b.id, b]));
     const targetIds = new Set(targetBlocks.map((b) => b.id).filter(Boolean));
 
-    // 1. Delete removed blocks
-    for (const eb of existingBlocks) {
+    // 2. Delete removed blocks
+    for (const eb of dbBlocks) {
       if (!targetIds.has(eb.id)) {
-        await adminApi.delete(`/cms/blocks/${eb.id}`);
+        try {
+          await adminApi.delete(`/cms/blocks/${eb.id}`);
+        } catch {
+          // ignore if already deleted
+        }
       }
     }
 
-    // 2. Update or create blocks
+    // 3. Update or create blocks
     for (const tb of targetBlocks) {
       const payload = {
         blockType: tb.blockType,
@@ -411,12 +416,16 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
         linkLabel: tb.linkLabel ?? undefined,
         linkUrl: tb.linkUrl ?? undefined,
         sortOrder: tb.sortOrder,
-        status: "ACTIVE",
+        status: tb.status || "ACTIVE",
         dataJson: tb.dataJson ?? undefined,
       };
 
       if (tb.id && existingMap.has(tb.id)) {
-        await adminApi.put(`/cms/blocks/${tb.id}`, payload);
+        try {
+          await adminApi.put(`/cms/blocks/${tb.id}`, payload);
+        } catch {
+          await adminApi.post(`/cms/sections/${sectionId}/blocks`, payload);
+        }
       } else {
         await adminApi.post(`/cms/sections/${sectionId}/blocks`, payload);
       }
@@ -424,16 +433,27 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
   };
 
   // Helper to get or create section in DB
-  const ensureSection = async (sectionKey: string, defaultTitle: string, sortOrder: number) => {
-    let sec = page.sections.find((s) => s.sectionKey === sectionKey);
+  const ensureSection = async (
+    sectionKey: string,
+    defaultTitle: string,
+    sortOrder: number,
+    freshSections: Section[]
+  ) => {
+    let sec = freshSections.find((s) => s.sectionKey === sectionKey) || page.sections.find((s) => s.sectionKey === sectionKey);
     if (!sec) {
-      const res = await adminApi.post(`/cms/pages/${page.id}/sections`, {
-        sectionKey,
-        title: defaultTitle,
-        sortOrder,
-        status: "ACTIVE",
-      });
-      sec = res.data?.data || res.data;
+      try {
+        const res = await adminApi.post(`/cms/pages/${page.id}/sections`, {
+          sectionKey,
+          title: defaultTitle,
+          sortOrder,
+          status: "ACTIVE",
+        });
+        sec = res.data?.data || res.data;
+      } catch {
+        const refetch = await adminApi.get(`/cms/pages/${page.id}`);
+        const refetchSections: Section[] = refetch.data?.data?.sections || [];
+        sec = refetchSections.find((s) => s.sectionKey === sectionKey);
+      }
     }
     return sec as Section;
   };
@@ -442,6 +462,18 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
     if (!config) return;
     try {
       setIsSaving(true);
+
+      // Fetch fresh sections list from server to avoid stale IDs
+      let freshSections: Section[] = page.sections || [];
+      try {
+        const pageRes = await adminApi.get(`/cms/pages/${page.id}`);
+        const fresh = pageRes.data?.data?.sections || pageRes.data?.sections;
+        if (Array.isArray(fresh)) {
+          freshSections = fresh;
+        }
+      } catch {
+        // fallback
+      }
 
       // Section order map: Hero is 0, others follow orderedKeys
       const sectionOrderMap: Record<string, number> = {
@@ -452,7 +484,7 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
       });
 
       // ── 1. Hero Section ────────────────────────────────────────────────
-      const activeHeroSec = await ensureSection(heroSectionKey, `${config.title} Hero`, 0);
+      const activeHeroSec = await ensureSection(heroSectionKey, `${config.title} Hero`, 0, freshSections);
       if (activeHeroSec) {
         await adminApi.put(`/cms/sections/${activeHeroSec.id}`, {
           title: `${config.title} Hero`,
@@ -470,6 +502,21 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
             sortOrder: 0,
           },
         ]);
+
+        if (page.pageKey === "about" && heroValues.image) {
+          try {
+            const bannersRes = await adminApi.get("/banners?placement=ABOUT_HERO");
+            const bannersList = bannersRes.data?.data || bannersRes.data || [];
+            if (Array.isArray(bannersList) && bannersList.length > 0) {
+              await adminApi.put(`/banners/${bannersList[0].id}`, {
+                ...bannersList[0],
+                image: heroValues.image,
+              });
+            }
+          } catch {
+            // non-blocking
+          }
+        }
       }
 
       // ── 2. Content Sections ────────────────────────────────────────────
@@ -480,7 +527,8 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
         const dbSec = await ensureSection(
           secDef.sectionKey,
           secDef.title,
-          sectionOrderMap[secDef.sectionKey] ?? 1
+          sectionOrderMap[secDef.sectionKey] ?? 1,
+          freshSections
         );
 
         if (!dbSec) continue;
@@ -564,11 +612,13 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
                 id: c.id,
                 blockType,
                 icon: c.icon,
+                image: c.image?.trim() || null,
                 title: c.title,
                 subtitle: c.subtitle?.trim() || null,
                 description: c.description,
                 linkLabel: c.linkLabel?.trim() || null,
                 linkUrl: c.linkUrl?.trim() || null,
+                status: c.status || "ACTIVE",
                 sortOrder: currentOrder++,
               });
             });
@@ -670,11 +720,11 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
 
       // ── 3. Reorder All Sections ────────────────────────────────────────
       const allUpdatedSections = await adminApi.get(`/cms/pages/${page.id}`);
-      const freshSections: Section[] = allUpdatedSections.data?.data?.sections || [];
-      const heroSecObj = freshSections.find((s) => s.sectionKey === heroSectionKey || s.sectionKey.endsWith(".hero"));
+      const latestSections: Section[] = allUpdatedSections.data?.data?.sections || [];
+      const heroSecObj = latestSections.find((s) => s.sectionKey === heroSectionKey || s.sectionKey.endsWith(".hero"));
       const orderedObjects = [
         heroSecObj,
-        ...orderedKeys.map((k) => freshSections.find((s) => s.sectionKey === k)),
+        ...orderedKeys.map((k) => latestSections.find((s) => s.sectionKey === k)),
       ].filter(Boolean);
 
       const orderedIds = orderedObjects.map((s) => s!.id);
@@ -683,30 +733,30 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
       }
 
       showToast(`${config.title} page updated and published successfully!`, "success");
+      setInitialSnapshot(
+        normalizeEditorState({
+          orderedKeys,
+          heroValues,
+          sectionStates,
+        })
+      );
       onSaved();
     } catch (err) {
       console.error(`Failed to save ${config.title} CMS content:`, err);
-      showToast("Failed to save changes. Please try again.", "error");
+      showToast(getAdminErrorMessage(err, "Failed to save changes. Please try again."), "error");
     } finally {
       setIsSaving(false);
     }
   };
 
   // Compute dirty state
-  const currentStateJson = JSON.stringify({
+  const currentStateJson = normalizeEditorState({
     orderedKeys,
     heroValues,
     sectionStates,
   });
 
-  const [initialStateJson, setInitialStateJson] = useState(currentStateJson);
-
-  useEffect(() => {
-    setInitialStateJson(currentStateJson);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
-
-  const isDirty = currentStateJson !== initialStateJson;
+  const isDirty = currentStateJson !== initialSnapshot;
 
   if (!config) {
     return (
@@ -762,16 +812,39 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
         }}
       >
         {secDef.type === "rich_text" && secState.richText && (
-          <CmsRichTextSectionForm
-            values={secState.richText}
-            onChange={(next) =>
-              setSectionStates((prev) => ({
-                ...prev,
-                [key]: { ...prev[key], richText: next },
-              }))
-            }
-            config={secDef.richTextConfig}
-          />
+          <div className="space-y-4">
+            {page.pageKey === "home" && secDef.key === "blog" && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/80 p-4 text-[13px] text-blue-900 leading-relaxed">
+                <div className="flex items-start gap-2.5">
+                  <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-[13.5px] text-blue-950">
+                      Articles & Categories are managed in the Blog module
+                    </p>
+                    <p className="text-[12px] text-blue-800/90 mt-0.5">
+                      Articles published in <strong>Admin → Blog</strong> automatically appear in this homepage carousel. You can reorder, toggle, or customize the section heading and description below.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/admin/blogs"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-2xs shrink-0 self-start sm:self-auto"
+                >
+                  <span>Open Blog Module →</span>
+                </Link>
+              </div>
+            )}
+            <CmsRichTextSectionForm
+              values={secState.richText}
+              onChange={(next) =>
+                setSectionStates((prev) => ({
+                  ...prev,
+                  [key]: { ...prev[key], richText: next },
+                }))
+              }
+              config={secDef.richTextConfig}
+            />
+          </div>
         )}
 
         {secDef.type === "cards" && secState.cards && (
@@ -891,7 +964,7 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
   };
 
   return (
-    <div className="space-y-5 pb-16">
+    <div className="space-y-5 pb-36">
       {/* Sticky Save Bar */}
       <AdminStickySaveBar
         title={page.title || config.title}
@@ -990,31 +1063,12 @@ export function DetailPageEditor({ page, onSaved, config: propConfig }: DetailPa
               <CmsHeroForm
                 values={heroValues}
                 onChange={setHeroValues}
-                allowImage={false}
+                allowImage={true}
                 kickerLabel="Kicker / Subtitle"
                 titleLabel="Hero Headline (H1)"
                 descriptionLabel="Introduction Narrative"
+                imageLabel="Hero Banner Visual"
               />
-              <div className="space-y-1.5 pt-2 border-t border-gray-100">
-                <label className="block text-[13px] font-medium text-[#1A1A1A]">Hero Banner Visual</label>
-                <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50/80 p-4 text-[13px] text-blue-900 leading-relaxed">
-                  <Info size={20} className="text-blue-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold text-[14px] text-blue-950">About Us Hero Banner is managed in the Banners module</p>
-                    <p>
-                      Hero promotional imagery and visual media for the About Us page are dynamically served by the <strong>Banners Module</strong> (Placement: <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[12px]">ABOUT_HERO</code>).
-                    </p>
-                    <div className="pt-2">
-                      <Link
-                        href="/admin/banners"
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-2 text-xs font-semibold text-white hover:bg-[#B5151B] transition-colors shadow-xs"
-                      >
-                        <span>Open Banners Module →</span>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           ) : (
             <CmsHeroForm

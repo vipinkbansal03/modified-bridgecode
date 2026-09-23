@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X, Image as ImageIcon, Globe, Calendar, ExternalLink, Sparkles, CheckCircle2, Info } from "lucide-react";
+import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X, Image as ImageIcon, Globe, Calendar, ExternalLink, Sparkles, CheckCircle2, Info, Play, Video } from "lucide-react";
 import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -9,6 +9,14 @@ import { Modal } from "@/components/ui/Modal";
 import MediaSelectorModal from "@/components/admin/media/MediaSelectorModal";
 import { useAdminBanners, useAdminCountries, useBulkBanners, useCreateBanner, useDeleteBanner, useReorderBanners, useUpdateBanner } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+
+function isVideoUrl(url?: string | null): boolean {
+  if (!url) return false;
+  return Boolean(
+    url.toLowerCase().match(/\.(mp4|webm|ogg|mov|m4v)($|\?)/) ||
+    url.toLowerCase().includes("/video/")
+  );
+}
 
 
 type Banner = {
@@ -269,7 +277,26 @@ export default function BannersPage() {
         label: "Preview",
         width: "80px",
         render: (row: Banner) => (
-          <img src={row.image} alt="" className="h-10 w-16 rounded border border-[#E6E6E6] object-cover bg-[#F2F2F2]" />
+          <div className="relative h-10 w-16 overflow-hidden rounded border border-[#E6E6E6] bg-neutral-900">
+            {isVideoUrl(row.image) ? (
+              <>
+                <video
+                  src={`${row.image}#t=0.001`}
+                  preload="metadata"
+                  muted
+                  playsInline
+                  className="h-full w-full object-cover pointer-events-none"
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/25 pointer-events-none">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white shadow-xs">
+                    <Play size={10} className="fill-white ml-0.5" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <img src={row.image} alt="" className="h-full w-full object-cover bg-[#F2F2F2]" />
+            )}
+          </div>
         ),
       },
       {
@@ -641,12 +668,23 @@ export default function BannersPage() {
             {/* Desktop Image Preview */}
             <div className="space-y-1.5">
               <span className="text-[12px] font-semibold text-gray-700">Desktop Banner Preview</span>
-              <div className="relative aspect-[21/9] w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                <img
-                  src={singleSlotBanner.image}
-                  alt={singleSlotBanner.title}
-                  className="h-full w-full object-cover"
-                />
+              <div className="relative aspect-[21/9] w-full overflow-hidden rounded-lg border border-gray-200 bg-neutral-900">
+                {isVideoUrl(singleSlotBanner.image) ? (
+                  <video
+                    src={singleSlotBanner.image}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={singleSlotBanner.image}
+                    alt={singleSlotBanner.title}
+                    className="h-full w-full object-cover"
+                  />
+                )}
               </div>
             </div>
 
@@ -655,12 +693,23 @@ export default function BannersPage() {
               <div className="space-y-1.5">
                 <span className="text-[12px] font-semibold text-gray-700">Mobile Banner Override</span>
                 {singleSlotBanner.mobileImage ? (
-                  <div className="relative aspect-[16/9] w-full max-w-[240px] overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-                    <img
-                      src={singleSlotBanner.mobileImage}
-                      alt="Mobile Preview"
-                      className="h-full w-full object-cover"
-                    />
+                  <div className="relative aspect-[16/9] w-full max-w-[240px] overflow-hidden rounded-lg border border-gray-200 bg-neutral-900">
+                    {isVideoUrl(singleSlotBanner.mobileImage) ? (
+                      <video
+                        src={singleSlotBanner.mobileImage}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={singleSlotBanner.mobileImage}
+                        alt="Mobile Preview"
+                        className="h-full w-full object-cover"
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="flex h-[90px] items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50/50 text-[12px] text-gray-400">
@@ -860,8 +909,8 @@ export default function BannersPage() {
               <div className="flex flex-col rounded-xl border border-gray-200 bg-gray-50/70 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[13px] font-bold text-gray-900">Desktop Image *</span>
-                    <p className="text-[11px] text-gray-500">Recommended: 1920 × 480px (PNG, WebP, JPG)</p>
+                    <span className="text-[13px] font-bold text-gray-900">Desktop Media (Image or Video) *</span>
+                    <p className="text-[11px] text-gray-500">Recommended: 1920 × 480px (PNG, WebP, JPG, MP4, WebM)</p>
                   </div>
                   {previewUrls.image || form.image ? (
                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 border border-emerald-200">
@@ -877,18 +926,29 @@ export default function BannersPage() {
                 <div className="relative flex aspect-[16/7] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-neutral-900 shadow-inner">
                   {previewUrls.image || form.image ? (
                     <>
-                      <img
-                        src={previewUrls.image || form.image}
-                        alt="Desktop Banner Preview"
-                        className="h-full w-full object-cover"
-                      />
+                      {String(previewUrls.image || form.image).toLowerCase().match(/\.(mp4|webm|ogg|mov|m4v)($|\?)/) || String(previewUrls.image || form.image).includes("/video/") ? (
+                        <video
+                          src={previewUrls.image || form.image}
+                          autoPlay
+                          muted
+                          loop
+                          playsInline
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={previewUrls.image || form.image}
+                          alt="Desktop Banner Preview"
+                          className="h-full w-full object-cover"
+                        />
+                      )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         <button
                           type="button"
                           onClick={() => setMediaSelector({ open: true, field: "image" })}
                           className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-900 shadow-sm hover:bg-gray-100 transition-colors cursor-pointer"
                         >
-                          Change Image
+                          Change Media
                         </button>
                       </div>
                     </>
@@ -897,7 +957,7 @@ export default function BannersPage() {
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
                         <ImageIcon size={20} />
                       </div>
-                      <p className="text-[12px] text-gray-400">No desktop image selected</p>
+                      <p className="text-[12px] text-gray-400">No desktop image or video selected</p>
                     </div>
                   )}
                 </div>
@@ -913,13 +973,13 @@ export default function BannersPage() {
                 </div>
 
                 <AdminInput
-                  label="Direct Image Key / URL"
+                  label="Direct Media Key / URL"
                   value={String(form.image ?? "")}
                   onChange={(event) => {
                     set("image", event.target.value);
                     setPreviewUrls((prev) => ({ ...prev, image: event.target.value }));
                   }}
-                  placeholder="banners/... or https://..."
+                  placeholder="banners/... or https://... (Image or MP4/WebM Video)"
                 />
               </div>
 
@@ -928,7 +988,7 @@ export default function BannersPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[13px] font-bold text-gray-900">Mobile Override (Optional)</span>
-                    <p className="text-[11px] text-gray-500">Recommended: 768 × 600px</p>
+                    <p className="text-[11px] text-gray-500">Recommended: 768 × 600px (Image or Video)</p>
                   </div>
                   {previewUrls.mobileImage || form.mobileImage ? (
                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700 border border-emerald-200">
@@ -944,18 +1004,29 @@ export default function BannersPage() {
                 <div className="relative flex aspect-[16/7] w-full items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-neutral-900 shadow-inner">
                   {previewUrls.mobileImage || form.mobileImage ? (
                     <>
-                      <img
-                        src={previewUrls.mobileImage || form.mobileImage}
-                        alt="Mobile Banner Preview"
-                        className="h-full w-full object-cover"
-                      />
+                      {String(previewUrls.mobileImage || form.mobileImage).toLowerCase().match(/\.(mp4|webm|ogg|mov|m4v)($|\?)/) || String(previewUrls.mobileImage || form.mobileImage).includes("/video/") ? (
+                        <video
+                          src={previewUrls.mobileImage || form.mobileImage}
+                          autoPlay
+                          muted
+                          loop
+                          playsInline
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={previewUrls.mobileImage || form.mobileImage}
+                          alt="Mobile Banner Preview"
+                          className="h-full w-full object-cover"
+                        />
+                      )}
                       <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                         <button
                           type="button"
                           onClick={() => setMediaSelector({ open: true, field: "mobileImage" })}
                           className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-900 shadow-sm hover:bg-gray-100 transition-colors cursor-pointer"
                         >
-                          Change Image
+                          Change Media
                         </button>
                       </div>
                     </>
@@ -964,7 +1035,7 @@ export default function BannersPage() {
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
                         <ImageIcon size={20} />
                       </div>
-                      <p className="text-[12px] text-gray-400">Uses desktop image if empty</p>
+                      <p className="text-[12px] text-gray-400">Uses desktop media if empty</p>
                     </div>
                   )}
                 </div>
@@ -1130,12 +1201,12 @@ export default function BannersPage() {
       <MediaSelectorModal
         open={mediaSelector.open}
         onClose={() => setMediaSelector((prev) => ({ ...prev, open: false }))}
-        initialType="image"
+        initialType="all"
         onSelect={(media) => {
           const field = mediaSelector.field;
           set(field, media.url);
           setPreviewUrls((prev) => ({ ...prev, [field]: media.url }));
-          showToast("Banner image selected.");
+          showToast("Banner media selected.");
         }}
       />
 

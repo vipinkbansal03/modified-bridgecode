@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Container } from "@/components/ui/Container";
+import { BackButton } from "@/components/ui/BackButton";
 
 interface PageHeroProps {
   kicker: string;
@@ -14,7 +15,10 @@ export function PageHero({ kicker, title, lede, heroImage, breadcrumb }: PageHer
   return (
     <section className="pt-6 lg:pt-[34px]">
       <Container>
-        <nav className="text-[13px] text-steel-2">
+        <div className="mb-2.5">
+          <BackButton />
+        </div>
+        <nav aria-label="Breadcrumb" className="text-[13px] text-steel-2">
           {breadcrumb.map((b, i) => (
             <span key={b.label}>
               {b.href ? (

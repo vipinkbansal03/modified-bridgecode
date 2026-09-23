@@ -32,7 +32,7 @@ function buildHero(page: CmsPage, fallback: DetailPageContent, breadcrumbLabel: 
 
 function buildFaqs(section: CmsSection, fallback: DetailPageContent) {
   const items = section.blocks
-    .filter((block) => block.blockType === "faq")
+    .filter((block) => block.status !== "INACTIVE" && block.blockType === "faq")
     .map((block) => ({
       question: block.title || "",
       answer: block.description || "",
@@ -45,11 +45,12 @@ function buildFaqs(section: CmsSection, fallback: DetailPageContent) {
 function buildDetailSection(section: CmsSection, fallback: DetailPageContent) {
   const anchor = sectionAnchor(section);
   const fallbackSection = fallback.sections.find((item) => item.id === anchor);
-  const textBlocks = section.blocks.filter(
+  const activeBlocks = section.blocks.filter((block) => block.status !== "INACTIVE");
+  const textBlocks = activeBlocks.filter(
     (block) => block.blockType === "rich_text" || block.blockType === "intro"
   );
-  const symbolBlocks = section.blocks.filter((block) => block.blockType === "symbol");
-  const gridBlocks = section.blocks.filter(
+  const symbolBlocks = activeBlocks.filter((block) => block.blockType === "symbol");
+  const gridBlocks = activeBlocks.filter(
     (block) => !["hero", "faq", "rich_text", "intro", "form", "office", "cta"].includes(block.blockType)
   );
 
@@ -61,6 +62,7 @@ function buildDetailSection(section: CmsSection, fallback: DetailPageContent) {
     : gridBlocks.length > 0
       ? gridBlocks.map((block) => ({
           icon: block.icon || "Circle",
+          image: block.image || undefined,
           title: block.title || "",
           description: block.description || "",
           linkLabel: block.linkLabel || undefined,
@@ -108,15 +110,30 @@ function buildDetailSection(section: CmsSection, fallback: DetailPageContent) {
 
 interface CmsDetailPageRendererProps {
   page: CmsPage | null;
-  fallbackContent: DetailPageContent;
+  fallbackContent?: DetailPageContent;
   breadcrumbLabel: string;
   heroImageOverride?: string;
   fallbackRender?: ReactNode;
 }
 
+const emptyFallbackContent: DetailPageContent = {
+  slug: "",
+  title: "",
+  kicker: "",
+  lede: "",
+  heroImage: "",
+  subnav: [],
+  sections: [],
+  faqs: [],
+  seo: {
+    title: "",
+    description: "",
+  },
+};
+
 export function CmsDetailPageRenderer({
   page,
-  fallbackContent,
+  fallbackContent = emptyFallbackContent,
   breadcrumbLabel,
   heroImageOverride,
   fallbackRender,

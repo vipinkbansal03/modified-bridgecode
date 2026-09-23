@@ -13,7 +13,7 @@ export type MediaSelectorModalProps = {
   multiple?: boolean;
   onSelectMultiple?: (mediaList: MediaItem[]) => void;
   title?: string;
-  initialType?: "all" | "image" | "document";
+  initialType?: "all" | "image" | "document" | "video";
   acceptTypes?: string[];
 };
 
@@ -26,17 +26,19 @@ export function MediaSelectorModal({
   multiple = false,
   onSelectMultiple,
   title = "Media Library",
-  initialType = "image",
+  initialType = "all",
   acceptTypes,
 }: MediaSelectorModalProps) {
   const isModalOpen = Boolean(open ?? isOpen);
 
-  const resolvedInitialType: "all" | "image" | "document" = acceptTypes
-    ? acceptTypes.includes("DOCUMENT") && !acceptTypes.includes("IMAGE")
+  const resolvedInitialType: "all" | "image" | "document" | "video" = acceptTypes
+    ? acceptTypes.includes("DOCUMENT") && !acceptTypes.includes("IMAGE") && !acceptTypes.includes("VIDEO")
       ? "document"
-      : acceptTypes.includes("IMAGE") && !acceptTypes.includes("DOCUMENT")
-        ? "image"
-        : initialType
+      : acceptTypes.includes("VIDEO") && !acceptTypes.includes("IMAGE") && !acceptTypes.includes("DOCUMENT")
+        ? "video"
+        : acceptTypes.includes("IMAGE") && !acceptTypes.includes("DOCUMENT") && !acceptTypes.includes("VIDEO")
+          ? "image"
+          : initialType
     : initialType;
 
   const handleSelect = (media: MediaItem) => {

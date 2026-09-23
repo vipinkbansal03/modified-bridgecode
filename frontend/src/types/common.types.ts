@@ -36,8 +36,10 @@ export interface StatItem {
 export interface CertificationItem {
   title: string;
   description: string;
-  icon: string;
+  icon?: string;
+  image?: string;
   href?: string;
+  linkLabel?: string;
 }
 
 export interface LocationPin {
@@ -55,7 +57,8 @@ export interface FaqItem {
 }
 
 export interface CapabilityBox {
-  icon: string;
+  icon?: string;
+  image?: string;
   title: string;
   description: string;
   linkLabel?: string;

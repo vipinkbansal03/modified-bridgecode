@@ -9,21 +9,11 @@ import homeContent from "@/data/home.json";
 import type { DetailPageContent } from "@/types/common.types";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const cmsPage = await fetchCmsPageByKey("custom-packaging");
-  if (!cmsPage) {
-    return {
-      title: "Page Not Found | Modern Orthodontics",
-      robots: { index: false, follow: false },
-    };
-  }
   return buildCmsMetadata("custom-packaging", content.seo, "/custom-packaging");
 }
 
 export default async function CustomPackagingPage() {
   const cmsPage = await fetchCmsPageByKey("custom-packaging");
-  if (!cmsPage) {
-    notFound();
-  }
 
   return (
     <>

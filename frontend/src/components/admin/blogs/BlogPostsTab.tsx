@@ -431,53 +431,29 @@ export function BlogPostsTab() {
       <Modal
         open={showModal}
         onClose={closeModal}
-        panelClassName="max-w-4xl max-h-[92vh] overflow-y-auto"
+        title={form.id ? "Edit Blog Post" : "New Blog Post"}
+        subtitle="Changes are not applied until you save."
+        size="4xl"
+        onSave={() => save()}
+        saveText={form.id ? "Save Changes" : "Create Post"}
+        cancelText="Cancel"
+        isSaving={createBlog.isPending || updateBlog.isPending}
+        bodyClassName="p-6 md:p-7"
       >
         <form
+          id="blog-post-form"
           onSubmit={(e) => {
             e.preventDefault();
             save();
           }}
-          className="flex flex-col h-full"
         >
-          {/* Sticky Header matching other Admin Modals */}
-          <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#E6E6E6] bg-white px-6 py-4 shadow-xs">
-            <div>
-              <h3 className="text-[15.5px] font-bold text-ink">
-                {form.id ? "Edit Blog Post" : "New Blog Post"}
-              </h3>
-              <p className="text-[11.5px] text-steel-2">
-                Changes are not applied until you save.
-              </p>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 text-[13px] font-semibold text-[#555] hover:bg-gray-50 transition-colors"
-              >
-                <ArrowLeft size={14} /> Back
-              </button>
-              <LoadingButton
-                type="submit"
-                loading={createBlog.isPending || updateBlog.isPending}
-                loadingText="Saving..."
-                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#E31E24] px-5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors"
-              >
-                <Save size={14} /> Save Changes
-              </LoadingButton>
-            </div>
-          </div>
-
-          {/* Modal Form Body */}
-          <div className="p-6">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-              {/* Main Content Area */}
-              <div className="space-y-4">
-                <AdminInput
-                  label="Title *"
-                  value={form.title}
-                  onChange={(event) => {
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            {/* Main Content Area */}
+            <div className="space-y-4">
+              <AdminInput
+                label="Title *"
+                value={form.title}
+                onChange={(event) => {
                     setField("title", event.target.value);
                     if (!slugEdited) setField("slug", slugify(event.target.value));
                   }}
@@ -676,7 +652,6 @@ export function BlogPostsTab() {
                 </div>
               </div>
             </div>
-          </div>
         </form>
       </Modal>
 

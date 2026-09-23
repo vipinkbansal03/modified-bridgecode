@@ -310,23 +310,13 @@ export function Header() {
                   {t("ui.nav.home")}
                 </Link>
               </li>
-              <li
-                className="relative shrink-0"
-                onMouseEnter={() => {
-                  if (productsMegaNav.length > 0) setMegaOpen(true);
-                }}
-                onMouseLeave={() => setMegaOpen(false)}
-              >
+              <li className="shrink-0">
                 <Link
                   href="/products"
-                  className="flex items-center gap-1.5 whitespace-nowrap py-4 text-ink hover:text-[#E31E24] transition-colors"
+                  className="block whitespace-nowrap py-4 text-ink hover:text-[#E31E24] transition-colors"
                 >
                   {t("ui.nav.products")}
-                  {productsMegaNav.length > 0 && <ChevronDown size={11} className="opacity-60" />}
                 </Link>
-                {productsMegaNav.length > 0 && (
-                  <MegaMenu open={megaOpen} groups={productsMegaNav} />
-                )}
               </li>
               {capabilitiesNav.length > 0 && (
                 <li

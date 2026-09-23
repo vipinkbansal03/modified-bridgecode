@@ -164,11 +164,31 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
 
   const [showFilters, setShowFilters] = useState(true);
   const [sort, setSort] = useState<"newest" | "name_asc" | "name_desc">("newest");
-  const [filters, setFilters] = useState<ProductFilterState>({
+  const [filters, setFilters] = useState<ProductFilterState>(() => ({
     featuredOnly: false,
-    categorySlugs: [],
+    categorySlugs: categorySlug ? [categorySlug] : [],
     attributeValues: [],
-  });
+  }));
+
+  useEffect(() => {
+    if (categorySlug) {
+      setFilters((prev) => {
+        if (prev.categorySlugs.length !== 1 || prev.categorySlugs[0] !== categorySlug) {
+          return { ...prev, categorySlugs: [categorySlug] };
+        }
+        return prev;
+      });
+    }
+  }, [categorySlug]);
+
+  const handleFilterChange = (nextFilters: ProductFilterState) => {
+    setFilters(nextFilters);
+    if (nextFilters.categorySlugs.length === 1 && nextFilters.categorySlugs[0] !== categorySlug) {
+      router.replace(`/products?category=${nextFilters.categorySlugs[0]}`, { scroll: false });
+    } else if (nextFilters.categorySlugs.length === 0 && categorySlug) {
+      router.replace(`/products`, { scroll: false });
+    }
+  };
 
   const isMultiCategory = filters.categorySlugs.length > 1;
   const effectiveCategory =
@@ -425,80 +445,82 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
 
       <div className="mx-auto w-full max-w-[1720px] px-4 sm:px-8 xl:px-10 flex flex-col lg:flex-row items-start gap-8 pt-6 lg:pt-[34px]">
         {/* Sidebar matching reference image */}
-        <aside className="w-full lg:w-[280px] xl:w-[300px] shrink-0 sticky top-20 xl:top-[155px] self-start h-fit pr-3">
-          {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-line">
-            <h2 className="text-[16px] font-bold text-ink tracking-tight">All products</h2>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-steel">
-              {filteredSidebarProducts.length}
-            </span>
-          </div>
+        <aside className="w-full lg:w-[280px] xl:w-[300px] shrink-0 lg:sticky lg:top-[135px] xl:top-[145px] lg:self-start lg:max-h-[calc(100vh-160px)] flex flex-col pr-2">
+          {/* Pinned Static Header & Search - Never scrolls away */}
+          <div className="shrink-0 bg-white pb-1">
+            <div className="flex items-center justify-between pb-2.5 border-b border-line">
+              <h2 className="text-[16px] font-bold text-ink tracking-tight">All products</h2>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-steel">
+                {filteredSidebarProducts.length}
+              </span>
+            </div>
 
-          {/* Quick Search */}
-          <div className="relative my-2.5">
-            <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
-            <input
-              type="text"
-              value={sidebarSearch}
-              onChange={(e) => {
-                setSidebarSearch(e.target.value);
-                setVisibleSidebarCount(30);
-              }}
-              placeholder="Search products..."
-              className="w-full rounded-md border border-line bg-slate-50/70 py-1.5 pl-8 pr-7 text-[12.5px] text-ink placeholder:text-steel outline-none focus:border-ink focus:bg-white transition-colors"
-            />
-            {sidebarSearch && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSidebarSearch("");
+            {/* Quick Search */}
+            <div className="relative my-2.5">
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+              <input
+                type="text"
+                value={sidebarSearch}
+                onChange={(e) => {
+                  setSidebarSearch(e.target.value);
                   setVisibleSidebarCount(30);
                 }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-steel hover:text-ink cursor-pointer"
-                title="Clear search"
-              >
-                <X size={13} />
-              </button>
-            )}
+                placeholder="Search products..."
+                className="w-full rounded-md border border-line bg-slate-50/70 py-1.5 pl-8 pr-7 text-[12.5px] text-ink placeholder:text-steel outline-none focus:border-ink focus:bg-white transition-colors"
+              />
+              {sidebarSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarSearch("");
+                    setVisibleSidebarCount(30);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-steel hover:text-ink cursor-pointer"
+                  title="Clear search"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Product Names List with Controlled Height & Scroll Pagination */}
-          <div
-            onScroll={handleSidebarScroll}
-            className="max-h-[290px] overflow-y-auto overscroll-contain pr-1 divide-y divide-line [scrollbar-width:thin]"
-          >
-            {displayedSidebarProducts.length === 0 ? (
-              <div className="py-6 text-center text-[12.5px] text-steel">
-                No products found matching &ldquo;{sidebarSearch}&rdquo;
-              </div>
-            ) : (
-              displayedSidebarProducts.map((p) => (
-                <div key={p.slug || p.id} className="py-2.5">
-                  <Link
-                    href={`/products/${p.slug}`}
-                    title={p.title}
-                    className="block border-l-2 border-[#E31E24] pl-3 text-[13.5px] font-semibold text-ink hover:text-[#E31E24] transition-colors leading-snug cursor-pointer"
-                  >
-                    {p.title}
-                  </Link>
+          {/* Scrollable Body: Product Directory & Filters */}
+          <div className="flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] pb-6">
+            {/* Product Names List */}
+            <div className="divide-y divide-line">
+              {displayedSidebarProducts.length === 0 ? (
+                <div className="py-6 text-center text-[12.5px] text-steel">
+                  No products found matching &ldquo;{sidebarSearch}&rdquo;
                 </div>
-              ))
-            )}
-            {visibleSidebarCount < filteredSidebarProducts.length && (
-              <div className="py-2 text-center text-[11px] font-medium text-steel">
-                Showing {displayedSidebarProducts.length} of {filteredSidebarProducts.length} (scroll for more)
-              </div>
-            )}
-          </div>
+              ) : (
+                displayedSidebarProducts.map((p) => (
+                  <div key={p.slug || p.id} className="py-2">
+                    <Link
+                      href={`/products/${p.slug}`}
+                      title={p.title}
+                      className="block border-l-2 border-[#E31E24] pl-3 text-[13px] font-semibold text-ink hover:text-[#E31E24] transition-colors leading-snug cursor-pointer"
+                    >
+                      {p.title}
+                    </Link>
+                  </div>
+                ))
+              )}
+              {visibleSidebarCount < filteredSidebarProducts.length && (
+                <div className="py-2 text-center text-[11px] font-medium text-steel">
+                  Showing {displayedSidebarProducts.length} of {filteredSidebarProducts.length}
+                </div>
+              )}
+            </div>
 
-          {/* Filters section */}
-          <div className="pt-5 border-t border-line mt-2">
-            <ProductFilters
-              value={filters}
-              onChange={setFilters}
-              availableAttributeValues={availableAttributeValues}
-              filterConfig={filterConfig ?? null}
-            />
+            {/* Filters section */}
+            <div className="pt-4 border-t border-line mt-3">
+              <ProductFilters
+                value={filters}
+                onChange={handleFilterChange}
+                availableAttributeValues={availableAttributeValues}
+                filterConfig={filterConfig ?? null}
+              />
+            </div>
           </div>
         </aside>
 

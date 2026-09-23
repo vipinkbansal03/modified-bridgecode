@@ -32,10 +32,29 @@
     ]
   },
   "about": {
-    "heading": "Engineering precision orthodontic hardware, since 1994.",
-    "lede": "Our mission is to provide high-quality orthodontic products throughout the world — on time, competitively priced, and backed by support our customers can rely on.",
-    "ctaLabel": "Know more",
-    "ctaHref": "/about"
+    "cards": [
+      {
+        "title": "About Us",
+        "image": "/images/home/about-us.png",
+        "description": "Modern Orthodontics is a leading manufacturer of high quality, competitively priced orthodontic products. Founded in 1994, we have been doing OEM for many orthodontic companies. We are one of the very few companies in the orthodontic industry having in-house manufacturing of complete range of products...",
+        "linkText": "Read more »",
+        "linkHref": "/about"
+      },
+      {
+        "title": "Our Mission",
+        "image": "/images/home/mission.png",
+        "description": "Our mission is to provide high quality orthodontic products throughout the world, on time, competitively priced and with unparalleled customer support. In doing so, we will continue to forge new relationships within our growing customer base and distribution network, while spreading our reputation as a trusted source of quality...",
+        "linkText": "Read more »",
+        "linkHref": "/about"
+      },
+      {
+        "title": "Quality",
+        "image": "/images/home/quality.png",
+        "description": "Our dedicated team of professionals are trained to maintain and continually improve the effectiveness of our quality management system while ensuring compliance with applicable standards, regulatory requirements and customer requirements....",
+        "linkText": "Read more »",
+        "linkHref": "/quality-certifications"
+      }
+    ]
   },
   "featuredProductSlugs": ["sapphire-true-twin", "niti-super-elastic", "curio-mono-crystalline-ceramic"],
   "featuredCaptions": {

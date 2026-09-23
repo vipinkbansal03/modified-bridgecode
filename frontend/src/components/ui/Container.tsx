@@ -7,7 +7,7 @@ interface ContainerProps {
   className?: string;
 }
 
-/** Centered max-width wrapper matching the original `.wrap` (1320px, 40px gutters). */
+/** Centered max-width wrapper (1480px max for balanced margins on wide screens). */
 export function Container({ as: Tag = "div", children, className }: ContainerProps) {
-  return <Tag className={cn("mx-auto max-w-wrap px-4 sm:px-10", className)}>{children}</Tag>;
+  return <Tag className={cn("mx-auto w-full max-w-[1480px] px-4 sm:px-6 md:px-8 lg:px-10", className)}>{children}</Tag>;
 }

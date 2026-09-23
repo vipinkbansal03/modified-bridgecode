@@ -2,39 +2,15 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, CalendarDays, Search, X, AlertCircle, RefreshCw, Newspaper } from "lucide-react";
+import { Search, X, AlertCircle, RefreshCw, Newspaper } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { SkeletonGrid } from "@/components/ui/Skeleton";
 import { useBlogs } from "@/hooks/api/useBlogs";
+import { useCmsPage, type CmsSection } from "@/hooks/api/useCmsContent";
 import { BlogSearchModal } from "@/components/blog/BlogSearchModal";
-
-function BlogImageContainer({ src, alt, priority = false, sizes, className = "" }: { src?: string; alt: string; priority?: boolean; sizes?: string; className?: string }) {
-  const [imageError, setImageError] = useState(false);
-  const hasImage = Boolean(src && src.trim() && !imageError);
-
-  if (!hasImage) {
-    return (
-      <div className={`flex flex-col items-center justify-center gap-2 bg-grey text-steel-2 p-6 text-center ${className}`}>
-        <Newspaper size={36} className="text-[#E31E24]/60" />
-        <span className="text-[11px] font-semibold tracking-wider uppercase">Modern Orthodontics</span>
-      </div>
-    );
-  }
-
-  return (
-    <Image
-      src={src!}
-      alt={alt}
-      fill
-      className={`object-cover ${className}`}
-      sizes={sizes}
-      priority={priority}
-      onError={() => setImageError(true)}
-    />
-  );
-}
+import { BlogCard } from "@/components/ui/BlogCard";
+import { BackButton } from "@/components/ui/BackButton";
 
 function BlogContent() {
   const router = useRouter();
@@ -53,8 +29,19 @@ function BlogContent() {
   }, [search]);
 
   const { data: blogs = [], isLoading, isError, refetch } = useBlogs({ search: debouncedSearch });
-  const featuredBlog = blogs[0];
-  const otherBlogs = blogs.slice(1);
+  const { data: cmsPage } = useCmsPage("blog");
+
+  const heroBlock = cmsPage?.sections?.find((s: CmsSection) => s.sectionKey === "blog.hero" || s.sectionKey.endsWith(".hero"))?.blocks?.[0];
+  const articlesBlock = cmsPage?.sections?.find((s: CmsSection) => s.sectionKey === "blog.articles" || s.sectionKey.includes("article"))?.blocks?.[0];
+
+  const heroKicker = heroBlock?.subtitle || "Resources";
+  const heroTitle = heroBlock?.title || cmsPage?.title || "Orthodontic insights, product updates and industry notes.";
+  const heroDescription =
+    heroBlock?.description ||
+    "Explore practical articles from Modern Orthodontics around products, clinical trends, manufacturing, and better buying decisions for dental professionals.";
+
+  const sectionTitle = articlesBlock?.title || "From the blog";
+  const sectionSubtitle = articlesBlock?.description || "Latest articles";
 
   useEffect(() => {
     setSearch(initialQuery);
@@ -76,41 +63,58 @@ function BlogContent() {
 
   return (
     <main className="bg-white">
+      {/* Hero Section */}
       <section className="border-b border-line bg-white">
         <Container className="py-6 lg:py-[34px]">
-          <span className="mb-4 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
-            Resources
-          </span>
+          <div className="max-w-[760px]">
+            {/* Standard Back Button */}
+            <div className="mb-2.5">
+              <BackButton />
+            </div>
 
-          <h1 className="max-w-[720px] text-[clamp(30px,4vw,44px)] font-light leading-tight text-ink">
-            Orthodontic insights, product updates and industry notes.
-          </h1>
+            {/* Breadcrumb Navigation */}
+            <nav className="mb-4 text-[13px] text-steel-2">
+              <Link href="/" className="hover:text-brand">Home</Link> /{" "}
+              <span className="font-semibold text-[#111827]">Blog</span>
+            </nav>
 
-          <p className="mt-4 max-w-[640px] text-[15.5px] leading-relaxed text-steel">
-            Explore practical articles from Modern Orthodontics around products,
-            clinical trends, manufacturing, and better buying decisions for
-            dental professionals.
-          </p>
+            <span className="mb-3 block text-[12.5px] font-semibold uppercase tracking-wide text-brand">
+              {heroKicker}
+            </span>
+
+            <h1 className="max-w-[720px] text-[clamp(28px,3.8vw,42px)] font-light leading-tight text-ink">
+              {heroTitle}
+            </h1>
+
+            {heroDescription && (
+              <p className="mt-3.5 max-w-[640px] text-[15px] sm:text-[15.5px] leading-relaxed text-steel">
+                {heroDescription}
+              </p>
+            )}
+          </div>
         </Container>
       </section>
 
-      <section className="py-14">
+      {/* Articles Grid Section */}
+      <section className="py-10 sm:py-14">
         <Container>
           <div className="mb-8 flex flex-col gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-[#E31E24]">
-                Latest articles
-              </p>
-              <h2 className="mt-2 text-[28px] font-semibold text-ink">
-                From the blog
+              {sectionSubtitle && (
+                <p className="text-[12.5px] font-semibold uppercase tracking-[0.16em] text-[#E31E24]">
+                  {sectionSubtitle}
+                </p>
+              )}
+              <h2 className="mt-1 text-[24px] sm:text-[28px] font-bold text-ink">
+                {sectionTitle}
               </h2>
             </div>
 
-            {/* Interactive Search Bar Trigger button opening Modal */}
+            {/* Interactive Search Bar Trigger */}
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="flex h-11 w-full items-center justify-between gap-3 rounded-full border border-line bg-white px-4 text-steel transition-all hover:border-[#E31E24] hover:shadow-sm sm:w-[320px]"
+              className="flex h-11 w-full items-center justify-between gap-3 rounded-full border border-line bg-white px-4 text-steel transition-all hover:border-[#E31E24] hover:shadow-sm sm:w-[320px] cursor-pointer"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <Search size={15} className="flex-none text-steel" />
@@ -159,7 +163,7 @@ function BlogContent() {
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B]"
+                className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B] cursor-pointer"
               >
                 <RefreshCw size={14} />
                 Try Again
@@ -185,92 +189,19 @@ function BlogContent() {
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B]"
+                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#B5151B] cursor-pointer"
                 >
                   Clear Search
                 </button>
               )}
             </div>
           ) : (
-            <div className="space-y-10">
-              {featuredBlog && (
-                <Link
-                  href={featuredBlog.url}
-                  className="group grid overflow-hidden rounded-3xl border border-line bg-white shadow-[0_18px_55px_rgba(0,0,0,0.06)] transition-transform duration-200 hover:-translate-y-1 lg:grid-cols-[1.08fr_0.92fr]"
-                >
-                  <div className="relative min-h-[320px] bg-grey lg:min-h-[430px]">
-                    <BlogImageContainer
-                      src={featuredBlog.image}
-                      alt={featuredBlog.title}
-                      priority
-                      sizes="(min-width: 1024px) 55vw, 100vw"
-                      className="transition-transform duration-500 group-hover:scale-105"
-                    />
-                  </div>
-                  <div className="flex flex-col justify-center p-6 sm:p-9 lg:p-12">
-                    <div className="mb-5 flex flex-wrap items-center gap-3 text-[12px] font-medium text-steel">
-                      <span className="rounded-full bg-[#E31E24]/10 px-3 py-1 text-[#E31E24]">
-                        {featuredBlog.category}
-                      </span>
-                      {featuredBlog.date && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <CalendarDays size={14} />
-                          {featuredBlog.date}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="break-words text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[40px]">
-                      {featuredBlog.title}
-                    </h3>
-                    <p className="mt-4 text-[15px] leading-7 text-steel line-clamp-4">
-                      {featuredBlog.excerpt}
-                    </p>
-                    <span className="mt-8 inline-flex items-center gap-2 self-start text-[13px] font-semibold text-[#E31E24]">
-                      Read article
-                      <ArrowRight size={15} />
-                    </span>
-                  </div>
-                </Link>
-              )}
-
-              {otherBlogs.length > 0 && (
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {otherBlogs.map((blog) => (
-                    <Link
-                      key={blog.slug}
-                      href={blog.url}
-                      className="group overflow-hidden rounded-2xl border border-line bg-white transition-shadow hover:shadow-[0_16px_40px_rgba(0,0,0,0.08)]"
-                    >
-                      <div className="relative h-[230px] bg-grey">
-                        <BlogImageContainer
-                          src={blog.image}
-                          alt={blog.title}
-                          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                          className="transition-transform duration-500 group-hover:scale-105"
-                        />
-                      </div>
-                      <div className="p-5">
-                        <div className="mb-3 flex flex-wrap items-center gap-2 text-[12px] text-steel">
-                          <span className="font-semibold text-[#E31E24]">
-                            {blog.category}
-                          </span>
-                          {blog.date && <span>&bull; {blog.date}</span>}
-                        </div>
-                        <h3 className="break-words text-[19px] font-semibold leading-snug text-ink">
-                          {blog.title}
-                        </h3>
-                        <p className="mt-3 line-clamp-3 text-[14px] leading-6 text-steel">
-                          {blog.excerpt}
-                        </p>
-                        <span className="mt-5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink transition-colors group-hover:text-[#E31E24]">
-                          Read article
-                          <ArrowRight size={14} />
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7 lg:gap-8">
+              {blogs.map((blog) => (
+                <div key={blog.slug} className="h-full">
+                  <BlogCard {...blog} />
                 </div>
-              )}
+              ))}
             </div>
           )}
         </Container>
