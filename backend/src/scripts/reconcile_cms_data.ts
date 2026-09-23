@@ -477,6 +477,46 @@ async function verifyAllPages() {
   }
 }
 
+async function reconcileHomePageAbout() {
+  console.log("🔄 Reconciling Homepage About Section (3 Cards)...");
+  const homePage = await prisma.cMSPage.findUnique({
+    where: { pageKey: "home" },
+  });
+  if (!homePage) return;
+
+  const aboutSec = await upsertSectionHelper(homePage.id, "home.about", "About Section Cards", 1);
+  await syncBlocksHelper(aboutSec.id, [
+    {
+      blockType: "card",
+      title: "About Us",
+      description: "Modern Orthodontics is a leading manufacturer of high quality, competitively priced orthodontic products. Founded in 1994, we have been doing OEM for many orthodontic companies. We are one of the very few companies in the orthodontic industry having in-house manufacturing of complete range of products...",
+      image: "/images/home/about-us.png",
+      linkUrl: "/about",
+      linkLabel: "Read more »",
+      sortOrder: 0,
+    },
+    {
+      blockType: "card",
+      title: "Our Mission",
+      description: "Our mission is to provide high quality orthodontic products throughout the world, on time, competitively priced and with unparalleled customer support. In doing so, we will continue to forge new relationships within our growing customer base and distribution network, while spreading our reputation as a trusted source of quality...",
+      image: "/images/home/mission.png",
+      linkUrl: "/about",
+      linkLabel: "Read more »",
+      sortOrder: 1,
+    },
+    {
+      blockType: "card",
+      title: "Quality",
+      description: "Our dedicated team of professionals are trained to maintain and continually improve the effectiveness of our quality management system while ensuring compliance with applicable standards, regulatory requirements and customer requirements....",
+      image: "/images/home/quality.png",
+      linkUrl: "/quality-certifications",
+      linkLabel: "Read more »",
+      sortOrder: 2,
+    },
+  ]);
+  console.log("  ✅ Homepage About section (3 cards) reconciled.");
+}
+
 async function reconcileHomePageCapabilities() {
   console.log("🔄 Reconciling Homepage Capabilities CMS section...");
   const homePage = await prisma.cMSPage.findUnique({
@@ -706,6 +746,7 @@ async function reconcileBlogPage() {
 }
 
 async function main() {
+  await reconcileHomePageAbout();
   await reconcileHomePageCapabilities();
   await reconcileQualityCertifications();
   await reconcileManufacturingServices();

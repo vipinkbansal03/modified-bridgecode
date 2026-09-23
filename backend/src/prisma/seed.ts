@@ -997,9 +997,11 @@ async function main() {
     { blockType: "slide", title: "Certified. Not just claimed.", dataJson: { image: "https://images.unsplash.com/photo-1758873263563-5ba4aa330799?fm=jpg&q=80&w=1920&auto=format&fit=crop", kicker: "ISO 13485:2016", ctaLabel: "View certifications", ctaHref: "/quality-certifications" } },
   ]);
 
-  const aboutSection = await upsertSection(homePage.id, { sectionKey: "home.about", title: "About Intro", sortOrder: 1 });
+  const aboutSection = await upsertSection(homePage.id, { sectionKey: "home.about", title: "About Section Cards", sortOrder: 1 });
   await clearAndAddBlocks(aboutSection.id, [
-    { blockType: "intro", title: "Engineering precision orthodontic hardware, since 1994.", description: "Our mission is to provide high-quality orthodontic products throughout the world — on time, competitively priced, and backed by support our customers can rely on.", linkLabel: "Know more", linkUrl: "/about" },
+    { blockType: "card", title: "About Us", description: "Modern Orthodontics is a leading manufacturer of high quality, competitively priced orthodontic products. Founded in 1994, we have been doing OEM for many orthodontic companies. We are one of the very few companies in the orthodontic industry having in-house manufacturing of complete range of products...", image: "/images/home/about-us.png", linkLabel: "Read more »", linkUrl: "/about" },
+    { blockType: "card", title: "Our Mission", description: "Our mission is to provide high quality orthodontic products throughout the world, on time, competitively priced and with unparalleled customer support. In doing so, we will continue to forge new relationships within our growing customer base and distribution network, while spreading our reputation as a trusted source of quality...", image: "/images/home/mission.png", linkLabel: "Read more »", linkUrl: "/about" },
+    { blockType: "card", title: "Quality", description: "Our dedicated team of professionals are trained to maintain and continually improve the effectiveness of our quality management system while ensuring compliance with applicable standards, regulatory requirements and customer requirements....", image: "/images/home/quality.png", linkLabel: "Read more »", linkUrl: "/quality-certifications" },
   ]);
 
   const statsSection = await upsertSection(homePage.id, { sectionKey: "home.stats", title: "Stats", sortOrder: 2 });
