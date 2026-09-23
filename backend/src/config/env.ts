@@ -14,9 +14,21 @@ function getAppEnv(): AppEnv {
 
 function resolveEnvFile(appEnv: AppEnv) {
   if (process.env.DOTENV_CONFIG_PATH) return process.env.DOTENV_CONFIG_PATH;
-  if (appEnv === "production") return ".env.production";
-  if (appEnv === "staging") return ".env.staging";
-  if (appEnv === "test") return ".env.test";
+  if (appEnv === "production") {
+    if (fs.existsSync(path.resolve(process.cwd(), ".env.production"))) return ".env.production";
+    if (fs.existsSync(path.resolve(process.cwd(), ".env"))) return ".env";
+    return ".env.production";
+  }
+  if (appEnv === "staging") {
+    if (fs.existsSync(path.resolve(process.cwd(), ".env.staging"))) return ".env.staging";
+    if (fs.existsSync(path.resolve(process.cwd(), ".env"))) return ".env";
+    return ".env.staging";
+  }
+  if (appEnv === "test") {
+    if (fs.existsSync(path.resolve(process.cwd(), ".env.test"))) return ".env.test";
+    if (fs.existsSync(path.resolve(process.cwd(), ".env"))) return ".env";
+    return ".env.test";
+  }
   return ".env";
 }
 
