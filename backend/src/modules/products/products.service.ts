@@ -2071,6 +2071,45 @@ export async function deleteProductMedia(mediaId: string) {
   return remaining;
 }
 
+export async function deleteBulkProductMedia(productId: string, mediaIds: string[]) {
+  if (!mediaIds || !mediaIds.length) return [];
+  const mediaList = await prisma.productMedia.findMany({
+    where: { id: { in: mediaIds }, productId },
+  });
+  if (!mediaList.length) return [];
+
+  for (const media of mediaList) {
+    try {
+      await deleteFile(media.publicId || media.url, media.storageProvider);
+    } catch (err) {
+      console.error("Failed to delete file from storage", err);
+    }
+  }
+
+  const urls = mediaList.map((m) => m.url);
+  await prisma.media.deleteMany({ where: { url: { in: urls } } });
+  await prisma.productMedia.deleteMany({ where: { id: { in: mediaIds }, productId } });
+
+  // Re-index remaining media to ensure clean sequential sortOrder (0, 1, 2...)
+  const remaining = await prisma.productMedia.findMany({
+    where: { productId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  if (remaining.length > 0) {
+    await prisma.$transaction(
+      remaining.map((m, index) =>
+        prisma.productMedia.update({
+          where: { id: m.id },
+          data: { sortOrder: index },
+        })
+      )
+    );
+  }
+
+  return remaining;
+}
+
 // ─── Assign attributes to product ────────────────────────
 
 export async function assignAttributes(

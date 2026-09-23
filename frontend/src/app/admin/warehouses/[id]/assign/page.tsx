@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useLayoutEffect, useEffect } from "react";
+import { useState, useLayoutEffect, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, PackageOpen, Search, ArrowLeft } from "lucide-react";
@@ -252,7 +252,7 @@ const ProductRow = ({ warehouseId, p, selectedProductIds, setSelectedProductIds,
   )
 }
 
-export default function AssignProductsPage() {
+function AssignProductsPageContent() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
   const params = useParams();
@@ -445,5 +445,19 @@ export default function AssignProductsPage() {
       </div>
       {ToastComponent}
     </AdminLayout>
+  );
+}
+
+export default function AssignProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center text-[14px] text-[#6B7280]">
+          Loading warehouse assignment...
+        </div>
+      }
+    >
+      <AssignProductsPageContent />
+    </Suspense>
   );
 }

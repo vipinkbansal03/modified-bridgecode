@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useLayoutEffect, useState, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CheckCircle2, MapPin, PackageSearch, Save, XCircle, Edit2, X } from "lucide-react";
 import { AdminInput, AdminSelect, StatusBadge, useToast, LoadingButton } from "@/components/admin/AdminComponents";
@@ -73,7 +73,7 @@ function formatMoney(value: string | number, currency?: CustomerOrder["currency"
   return `${prefix}${amount.toFixed(2)}`;
 }
 
-export default function AdminCustomerDetailPage() {
+function AdminCustomerDetailPageContent() {
   const { hasPermission, isLoading: authLoading } = useAdminAuth();
   const router = useRouter();
 
@@ -619,5 +619,19 @@ export default function AdminCustomerDetailPage() {
         </form>
       </Modal>
     </AdminLayout>
+  );
+}
+
+export default function AdminCustomerDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center text-[14px] text-[#6B7280]">
+          Loading customer details...
+        </div>
+      }
+    >
+      <AdminCustomerDetailPageContent />
+    </Suspense>
   );
 }

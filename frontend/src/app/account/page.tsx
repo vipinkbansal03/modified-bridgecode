@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -134,7 +134,7 @@ function getPackagingSummary(order: CustomerOrderSummary) {
 
 type TabType = "all" | "orders" | "addresses" | "profile" | "quotes";
 
-export default function AccountPage() {
+function AccountPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
@@ -1134,5 +1134,23 @@ export default function AccountPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function AccountPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FBFBFB] py-8">
+          <Container>
+            <div className="flex h-64 items-center justify-center text-[14px] text-[#6B7280]">
+              Loading account...
+            </div>
+          </Container>
+        </div>
+      }
+    >
+      <AccountPageContent />
+    </Suspense>
   );
 }

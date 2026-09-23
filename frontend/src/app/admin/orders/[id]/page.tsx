@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Download, Truck, Package, ExternalLink, RotateCw, Eye, Pencil } from "lucide-react";
@@ -144,7 +144,7 @@ interface OrderDetail {
   isTest?: boolean;
 }
 
-export default function OrderDetailPage() {
+function OrderDetailPageContent() {
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -1003,6 +1003,20 @@ export default function OrderDetailPage() {
         </div>
       </Modal>
     </AdminLayout>
+  );
+}
+
+export default function OrderDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center text-[14px] text-[#6B7280]">
+          Loading order details...
+        </div>
+      }
+    >
+      <OrderDetailPageContent />
+    </Suspense>
   );
 }
 

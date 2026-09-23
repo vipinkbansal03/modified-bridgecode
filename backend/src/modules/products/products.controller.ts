@@ -170,6 +170,12 @@ export const removeMedia = asyncHandler(async (req: AuthRequest, res: Response) 
   return ApiResponse.success(res, "Media deleted.");
 });
 
+export const removeBulkMedia = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const mediaIds = (req.body?.mediaIds || (req.query?.mediaIds ? String(req.query.mediaIds).split(",") : [])) as string[];
+  const result = await ProductService.deleteBulkProductMedia(req.params.id as string, mediaIds);
+  return ApiResponse.success(res, "Media deleted.", result);
+});
+
 export const listAttribs = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await ProductService.listProductAttributes(req.params.id as string);
   return ApiResponse.success(res, "Product attributes fetched.", result);

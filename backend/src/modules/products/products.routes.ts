@@ -44,6 +44,7 @@ router.post("/:id/media", requirePermission("products.update"), upload.array("fi
 router.put("/:id/media/reorder", requirePermission("products.update"), C.reorderMedia);
 router.put("/:id/media/:mediaId/cover", requirePermission("products.update"), C.setCoverMedia);
 router.delete("/:id/media/:mediaId", requirePermission("products.update"), C.removeMedia);
+router.delete("/:id/media", requirePermission("products.update"), C.removeBulkMedia);
 
 router.get("/:id/attributes", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listAttribs);
 router.get("/:id/attributes/export", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.exportProductAttributes);

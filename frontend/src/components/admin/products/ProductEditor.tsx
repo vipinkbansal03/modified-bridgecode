@@ -4568,10 +4568,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         next.delete(mediaId);
         return next;
       });
-      refetch();
-    } catch {
-      showToast("Delete failed.", "error");
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Delete failed."), "error");
     } finally {
+      refetch();
       setDeletingMedia(null);
     }
   };
@@ -4579,28 +4579,46 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const handleBulkDeleteMedia = async () => {
     const idsToDelete = Array.from(selectedMediaIds);
     if (idsToDelete.length === 0) return;
+    setDeletingBulkMedia(true);
     try {
-      await Promise.all(idsToDelete.map((id) => adminApi.delete(`/products/${productId}/media/${id}`)));
+      await adminApi.delete(`/products/${productId}/media`, { data: { mediaIds: idsToDelete } });
       showToast(`${idsToDelete.length} image(s) deleted.`);
       setSelectedMediaIds(new Set());
-      refetch();
     } catch {
-      showToast("Failed to delete selected images.", "error");
+      try {
+        for (const id of idsToDelete) {
+          await adminApi.delete(`/products/${productId}/media/${id}`);
+        }
+        showToast(`${idsToDelete.length} image(s) deleted.`);
+        setSelectedMediaIds(new Set());
+      } catch (err) {
+        showToast(getAdminErrorMessage(err, "Failed to delete selected images."), "error");
+      }
     } finally {
+      refetch();
       setDeletingBulkMedia(false);
     }
   };
 
   const handleDeleteAllMedia = async (allIds: string[]) => {
     if (allIds.length === 0) return;
+    setDeletingAllMedia(true);
     try {
-      await Promise.all(allIds.map((id) => adminApi.delete(`/products/${productId}/media/${id}`)));
+      await adminApi.delete(`/products/${productId}/media`, { data: { mediaIds: allIds } });
       showToast("All product media deleted.");
       setSelectedMediaIds(new Set());
-      refetch();
     } catch {
-      showToast("Failed to delete product media.", "error");
+      try {
+        for (const id of allIds) {
+          await adminApi.delete(`/products/${productId}/media/${id}`);
+        }
+        showToast("All product media deleted.");
+        setSelectedMediaIds(new Set());
+      } catch (err) {
+        showToast(getAdminErrorMessage(err, "Failed to delete product media."), "error");
+      }
     } finally {
+      refetch();
       setDeletingAllMedia(false);
     }
   };

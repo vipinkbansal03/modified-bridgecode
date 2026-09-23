@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -65,7 +65,7 @@ function StatusBadge({ value }: { value: string }) {
   );
 }
 
-export default function CustomerOrderTrackingPage() {
+function CustomerOrderTrackingPageContent() {
   const params = useParams();
   const router = useRouter();
   const { currentCustomer, isLoading: authLoading } = useCustomerAuth();
@@ -1173,5 +1173,23 @@ export default function CustomerOrderTrackingPage() {
         </form>
       </Modal>
     </div>
+  );
+}
+
+export default function CustomerOrderTrackingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FBFBFB] py-8">
+          <Container>
+            <div className="flex h-64 items-center justify-center text-[14px] text-[#6B7280]">
+              Loading tracking details...
+            </div>
+          </Container>
+        </div>
+      }
+    >
+      <CustomerOrderTrackingPageContent />
+    </Suspense>
   );
 }

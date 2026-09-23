@@ -109,9 +109,7 @@ export function ProductCreateForm({
       try {
         const payload = {
           ...values,
-          activeCountryIds: values.activeCountryIds?.length
-            ? values.activeCountryIds
-            : countries.map((c: any) => c.id),
+          activeCountryIds: values.activeCountryIds ?? [],
         };
         const product = (await createProduct.mutateAsync(payload)) as CreateProductResponse;
         const productId = product.data?.id;
@@ -129,6 +127,16 @@ export function ProductCreateForm({
     },
     onClose: onCancel
   });
+
+  // Auto-select default active country if user has not explicitly modified activeCountryIds
+  useEffect(() => {
+    if (countries.length > 0 && form.values.activeCountryIds.length === 0 && !form.touched.activeCountryIds) {
+      const defaultCountry = countries.find((c: any) => c.isDefault) || (countries.length === 1 ? countries[0] : null);
+      if (defaultCountry) {
+        form.setFieldValue("activeCountryIds", [defaultCountry.id]);
+      }
+    }
+  }, [countries]);
 
   const categoryOptions = [{ value: "", label: "Select category..." }, ...categories.map((category: { id: string; name: string }) => ({ value: category.id, label: category.name }))];
   const countryOptions = [{ value: "", label: "Select active country..." }, ...countries.map((c: any) => ({ value: c.id, label: c.name }))];
