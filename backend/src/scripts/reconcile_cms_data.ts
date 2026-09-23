@@ -1,5 +1,4 @@
-import dotenv from "dotenv";
-dotenv.config();
+import "../config/env";
 import { prisma } from "../config/database";
 import { Prisma } from "@prisma/client";
 
@@ -11,17 +10,24 @@ async function upsertPageHelper(pageData: {
   seoDescription?: string;
   robotsTag?: string;
 }) {
-  return prisma.cMSPage.upsert({
+  const existing = await prisma.cMSPage.findFirst({
     where: { pageKey: pageData.pageKey },
-    update: {
-      title: pageData.title,
-      slug: pageData.slug,
-      seoTitle: pageData.seoTitle,
-      seoDescription: pageData.seoDescription,
-      robotsTag: pageData.robotsTag || "index,follow",
-      status: "ACTIVE",
-    },
-    create: {
+  });
+  if (existing) {
+    return prisma.cMSPage.update({
+      where: { id: existing.id },
+      data: {
+        title: pageData.title,
+        slug: pageData.slug,
+        seoTitle: pageData.seoTitle,
+        seoDescription: pageData.seoDescription,
+        robotsTag: pageData.robotsTag || "index,follow",
+        status: "ACTIVE",
+      },
+    });
+  }
+  return prisma.cMSPage.create({
+    data: {
       title: pageData.title,
       slug: pageData.slug,
       pageKey: pageData.pageKey,
