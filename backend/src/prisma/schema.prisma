@@ -183,6 +183,9 @@ model Product {
   wishlistItems          Wishlist[]
   paymentMethods         ProductPaymentMethod[]
 
+  @@index([status, deletedAt])
+  @@index([categoryId])
+  @@index([deletedAt])
   @@map("products")
 }
 
@@ -201,6 +204,7 @@ model ProductPackage {
   variants    ProductVariant[]
 
   @@unique([productId, slug])
+  @@index([productId])
   @@map("product_packages")
 }
 
@@ -216,6 +220,8 @@ model ProductMedia {
   createdAt       DateTime        @default(now())
   product         Product         @relation(fields: [productId], references: [id])
 
+  @@index([productId])
+  @@index([productId, sortOrder])
   @@map("product_media")
 }
 
@@ -275,6 +281,8 @@ model ProductAttribute {
   product       Product                          @relation(fields: [productId], references: [id])
 
   @@unique([productId, attributeId])
+  @@index([productId])
+  @@index([attributeId])
   @@map("product_attributes")
 }
 
@@ -287,6 +295,8 @@ model ProductAttributeValueSelection {
   productAttribute   ProductAttribute @relation(fields: [productAttributeId], references: [id])
 
   @@unique([productAttributeId, attributeValueId])
+  @@index([productAttributeId])
+  @@index([attributeValueId])
   @@map("product_attribute_value_selections")
 }
 
@@ -323,6 +333,11 @@ model ProductVariant {
   taxRules             TaxRule[]                      @relation("VariantTaxRules")
   paymentMethods       VariantPaymentMethod[]
 
+  @@index([productId])
+  @@index([productId, status, deletedAt])
+  @@index([variantKey])
+  @@index([packageId])
+  @@index([deletedAt])
   @@map("product_variants")
 }
 
@@ -336,6 +351,9 @@ model ProductVariantAttributeValue {
   variant          ProductVariant @relation(fields: [variantId], references: [id])
 
   @@unique([variantId, attributeId])
+  @@index([variantId])
+  @@index([attributeId])
+  @@index([attributeValueId])
   @@map("product_variant_attribute_values")
 }
 
@@ -546,6 +564,11 @@ model ProductPrice {
   variant          ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@unique([productId, variantId, countryId])
+  @@index([variantId])
+  @@index([productId, deletedAt])
+  @@index([variantId, deletedAt])
+  @@index([countryId])
+  @@index([productId, countryId])
   @@index([deletedAt])
   @@map("product_prices")
 }
@@ -569,6 +592,10 @@ model Inventory {
   warehouse         Warehouse?            @relation(fields: [warehouseId], references: [id])
 
   @@unique([variantId, warehouseId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([warehouseId])
+  @@index([countryId])
   @@map("inventory")
 }
 
@@ -1403,6 +1430,9 @@ model ProductCountry {
   country   Country  @relation(fields: [countryId], references: [id])
 
   @@unique([productId, countryId])
+  @@index([productId])
+  @@index([countryId])
+  @@index([productId, countryId, enabled])
   @@map("product_countries")
 }
 
@@ -1417,6 +1447,9 @@ model VariantCountry {
   country   Country        @relation(fields: [countryId], references: [id])
 
   @@unique([variantId, countryId])
+  @@index([variantId])
+  @@index([countryId])
+  @@index([variantId, countryId, enabled])
   @@map("variant_countries")
 }
 
@@ -1452,6 +1485,9 @@ model MoqPricing {
   country         Country         @relation(fields: [countryId], references: [id])
 
   @@unique([productId, variantId, countryId, minQuantity])
+  @@index([productId])
+  @@index([variantId])
+  @@index([countryId])
   @@index([deletedAt])
   @@map("moq_pricing")
 }
@@ -1473,6 +1509,10 @@ model TierPricing {
   country         Country         @relation(fields: [countryId], references: [id])
 
   @@unique([tierId, productId, variantId, countryId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([tierId])
+  @@index([countryId])
   @@index([deletedAt])
   @@map("tier_pricing")
 }

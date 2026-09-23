@@ -867,11 +867,13 @@ export async function getProduct(id: string) {
         orderBy: { createdAt: "asc" },
         include: {
           attribute: {
-            include: {
-              values: {
-                where: { status: "ACTIVE" },
-                orderBy: { sortOrder: "asc" },
-              },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              role: true,
+              status: true,
+              sortOrder: true,
             },
           },
           allowedValues: {
@@ -881,26 +883,110 @@ export async function getProduct(id: string) {
         },
       },
       variants: {
-        where: { status: { not: "INACTIVE" } },
+        where: { status: { not: "INACTIVE" }, deletedAt: null },
         include: {
-          package: true,
-          attributeValues: {
-            include: { attribute: true, attributeValue: true },
+          package: {
+            select: { id: true, title: true, slug: true, status: true, sortOrder: true },
           },
-          prices: { where: { deletedAt: null }, include: { country: true, currency: true } },
-          inventories: { include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
+          attributeValues: {
+            include: {
+              attribute: { select: { id: true, name: true, slug: true, role: true } },
+              attributeValue: { select: { id: true, value: true, slug: true, sortOrder: true } },
+            },
+          },
+          prices: {
+            where: { deletedAt: null },
+            include: {
+              country: { select: { id: true, name: true, code: true } },
+              currency: { select: { id: true, code: true, symbol: true, isBase: true } },
+            },
+          },
+          inventories: {
+            include: {
+              country: { select: { id: true, name: true, code: true } },
+              warehouse: {
+                select: {
+                  id: true,
+                  name: true,
+                  countryId: true,
+                  state: true,
+                  country: { select: { id: true, name: true, code: true } },
+                },
+              },
+            },
+            orderBy: [{ countryId: "asc" }],
+          },
         },
       },
-      inventories: { where: { variantId: null }, include: { country: true, warehouse: { include: { country: true } } }, orderBy: [{ countryId: "asc" }] },
+      inventories: {
+        where: { variantId: null },
+        include: {
+          country: { select: { id: true, name: true, code: true } },
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              countryId: true,
+              state: true,
+              country: { select: { id: true, name: true, code: true } },
+            },
+          },
+        },
+        orderBy: [{ countryId: "asc" }],
+      },
       prices: {
         where: { variantId: null, deletedAt: null },
-        include: { country: true, currency: true },
+        include: {
+          country: { select: { id: true, name: true, code: true } },
+          currency: { select: { id: true, code: true, symbol: true, isBase: true } },
+        },
       },
       translations: { include: { language: true } },
     },
   });
   if (!product) throw new AppError("Product not found.", 404);
   return product;
+}
+
+export async function getProductVariants(productId: string) {
+  await assertProductExists(productId);
+  return prisma.productVariant.findMany({
+    where: { productId, status: { not: "INACTIVE" }, deletedAt: null },
+    include: {
+      package: {
+        select: { id: true, title: true, slug: true, status: true, sortOrder: true },
+      },
+      attributeValues: {
+        include: {
+          attribute: { select: { id: true, name: true, slug: true, role: true } },
+          attributeValue: { select: { id: true, value: true, slug: true, sortOrder: true } },
+        },
+      },
+      prices: {
+        where: { deletedAt: null },
+        include: {
+          country: { select: { id: true, name: true, code: true } },
+          currency: { select: { id: true, code: true, symbol: true, isBase: true } },
+        },
+      },
+      inventories: {
+        include: {
+          country: { select: { id: true, name: true, code: true } },
+          warehouse: {
+            select: {
+              id: true,
+              name: true,
+              countryId: true,
+              state: true,
+              country: { select: { id: true, name: true, code: true } },
+            },
+          },
+        },
+        orderBy: [{ countryId: "asc" }],
+      },
+    },
+    orderBy: [{ createdAt: "asc" }],
+  });
 }
 
 // ─── Create ───────────────────────────────────────────────

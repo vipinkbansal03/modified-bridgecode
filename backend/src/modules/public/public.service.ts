@@ -289,11 +289,13 @@ export async function publicGetProduct(
         orderBy: { createdAt: "asc" },
         include: {
           attribute: {
-            include: {
-              values: {
-                where: { status: "ACTIVE" },
-                orderBy: { sortOrder: "asc" },
-              },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              role: true,
+              status: true,
+              sortOrder: true,
             },
           },
           allowedValues: {
@@ -1441,7 +1443,7 @@ type PublicProductDetailRecord = {
       role?: string;
       status?: string;
       sortOrder: number;
-      values: Array<{
+      values?: Array<{
         id: string;
         attributeId?: string;
         value: string;

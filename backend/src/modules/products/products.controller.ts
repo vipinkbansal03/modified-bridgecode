@@ -341,8 +341,8 @@ export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) 
 });
 
 export const getVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const product = await ProductService.getProduct(req.params.id as string);
-  return ApiResponse.success(res, "Variants fetched.", product.variants);
+  const variants = await ProductService.getProductVariants(req.params.id as string);
+  return ApiResponse.success(res, "Variants fetched.", variants);
 });
 
 export const createVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
