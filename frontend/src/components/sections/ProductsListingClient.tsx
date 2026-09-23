@@ -133,7 +133,7 @@ function CategorySection({ category, products, selectedCurrency, onCategoryClick
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 min-[1200px]:grid-cols-4 xl:grid-cols-4">
         {products.map((p) => (
           <ProductCard
             key={p.slug}
@@ -553,7 +553,7 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
           )}
 
           {isLoading ? (
-            <SkeletonGrid count={6} columns={3} />
+            <SkeletonGrid count={8} columns={4} />
           ) : products.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <p className="text-[15px] font-medium text-ink">{t("ui.products.emptyTitle")}</p>
