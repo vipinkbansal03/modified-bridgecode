@@ -29,6 +29,16 @@ export interface CardRepeaterConfig {
   subtitleLabel?: string;
 }
 
+export interface DefaultCardItem {
+  icon?: string;
+  image?: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  linkLabel?: string;
+  linkUrl?: string;
+}
+
 export interface DetailPageSectionDef {
   key: string;
   sectionKey: string;
@@ -39,6 +49,7 @@ export interface DetailPageSectionDef {
   cardConfig?: CardRepeaterConfig;
   richTextConfig?: RichTextConfig;
   calloutDefault?: string;
+  defaultCards?: DefaultCardItem[];
 }
 
 export interface DetailPageConfig {
@@ -457,6 +468,29 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
           allowParagraphs: false,
           linkLabelDefault: "Read more »",
         },
+        defaultCards: [
+          {
+            title: "About Us",
+            image: "/images/home/about-us.png",
+            description: "Modern Orthodontics is a leading manufacturer of high quality, competitively priced orthodontic products. Founded in 1994, we have been doing OEM for many orthodontic companies. We are one of the very few companies in the orthodontic industry having in-house manufacturing of complete range of products...",
+            linkUrl: "/about",
+            linkLabel: "Read more »",
+          },
+          {
+            title: "Our Mission",
+            image: "/images/home/mission.png",
+            description: "Our mission is to provide high quality orthodontic products throughout the world, on time, competitively priced and with unparalleled customer support. In doing so, we will continue to forge new relationships within our growing customer base and distribution network, while spreading our reputation as a trusted source of quality...",
+            linkUrl: "/about",
+            linkLabel: "Read more »",
+          },
+          {
+            title: "Quality",
+            image: "/images/home/quality.png",
+            description: "Our dedicated team of professionals are trained to maintain and continually improve the effectiveness of our quality management system while ensuring compliance with applicable standards, regulatory requirements and customer requirements....",
+            linkUrl: "/quality-certifications",
+            linkLabel: "Read more »",
+          },
+        ],
       },
       {
         key: "capabilities",
@@ -475,6 +509,36 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
           allowParagraphs: false,
           linkLabelDefault: "Read more »",
         },
+        defaultCards: [
+          {
+            title: "Design & Engineering",
+            description: "Modern Orthodontics has a complete in-house product design and engineering team to ensure direct supervision over the design, prototyping and continuous innovation.",
+            image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?fm=jpg&q=80&w=400&auto=format&fit=crop",
+            linkUrl: "/design-and-engineering",
+            linkLabel: "Read more »",
+          },
+          {
+            title: "Manufacturing Services",
+            description: "Having served the OEM market for many years, Modern Orthodontics is a leading manufacturer of all orthodontic parts with world-class SNC, MIM and robotic polishing.",
+            image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?fm=jpg&q=80&w=400&auto=format&fit=crop",
+            linkUrl: "/manufacturing-services",
+            linkLabel: "Read more »",
+          },
+          {
+            title: "OEM Services",
+            description: "Modern Orthodontics takes pride in its history as a preferred OEM for orthodontic industry giants over the last 20 years, ensuring complete IP protection and high precision.",
+            image: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?fm=jpg&q=80&w=400&auto=format&fit=crop",
+            linkUrl: "/oem-services",
+            linkLabel: "Read more »",
+          },
+          {
+            title: "Custom Packaging",
+            description: "Modern Orthodontics is a full service assembly facility, offering complete and partial product assembly, sterile blisters, private labelling and specialized custom kits.",
+            image: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?fm=jpg&q=80&w=400&auto=format&fit=crop",
+            linkUrl: "/custom-packaging",
+            linkLabel: "Read more »",
+          },
+        ],
       },
       {
         key: "stats",
@@ -491,6 +555,12 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
           allowSubtitle: true,
           subtitleLabel: "Metric Label (e.g. 'Since 1994' or 'Global Reach')",
         },
+        defaultCards: [
+          { title: "30+", subtitle: "Since 1994", description: "Years manufacturing" },
+          { title: "42", subtitle: "Global Reach", description: "Countries served" },
+          { title: "6", subtitle: "Direct Export", description: "Continents" },
+          { title: "500+", subtitle: "Catalog Depth", description: "SKUs" },
+        ],
       },
       {
         key: "certifications",
@@ -508,6 +578,12 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
           allowFileUpload: true,
           linkLabelDefault: "View certificate",
         },
+        defaultCards: [
+          { icon: "BadgeCheck", title: "ISO 13485:2016", description: "Quality management system certified by Underwriters Laboratories.", linkUrl: "/quality-certifications", linkLabel: "View certificate" },
+          { icon: "ShieldCheck", title: "EU CE Marked", description: "Compliant with European Medical Device Directives.", linkUrl: "/quality-certifications", linkLabel: "View certificate" },
+          { icon: "Stamp", title: "US FDA Registered", description: "Registered manufacturer under 21 CFR Parts 808, 812 and 820.", linkUrl: "/quality-certifications", linkLabel: "View certificate" },
+          { icon: "Globe", title: "MDSAP & India CDSCO", description: "Multi-jurisdiction audit program and Indian regulatory compliance.", linkUrl: "/quality-certifications", linkLabel: "View certificate" },
+        ],
       },
       {
         key: "testimonials",
@@ -525,6 +601,28 @@ export const DETAIL_PAGE_CONFIGS: Record<string, DetailPageConfig> = {
           allowSubtitle: false,
           allowParagraphs: false,
         },
+        defaultCards: [
+          {
+            title: "Dr. Mathew P Sunny",
+            description: "I have been using Modern Orthodontics products for the past 7 years now. Their MBT Sapphire Bracket system is at par with the best with excellent tip torque and in-out expressions providing excellent results. The customer service is also excellent with immediate response to all queries and order placements. I highly recommend them.",
+            image: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?fm=jpg&q=80&w=200&auto=format&fit=crop",
+          },
+          {
+            title: "Dr. Neil David Andrade",
+            description: "I have been working with Modern Orthodontics for over 10 years now, I can testify that I am very happy with their service. The staff is kind and courteous in all conversations. The orders are always perfect and delivery is always on time. I highly recommend their services.",
+            image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?fm=jpg&q=80&w=200&auto=format&fit=crop",
+          },
+          {
+            title: "Dr. Shiv Priya Aher",
+            description: "The finish on the occlusion with correct placement is why I keep choosing them. Exceptional quality control and great precision in their brackets and wire series.",
+            image: "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?fm=jpg&q=80&w=200&auto=format&fit=crop",
+          },
+          {
+            title: "Dr. Aby Augustine",
+            description: "Reasonable prices, fast service, and the Sapphire Plus metal bracket kit is genuinely excellent. Highly dependable partner for our clinical needs.",
+            image: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?fm=jpg&q=80&w=200&auto=format&fit=crop",
+          },
+        ],
       },
       {
         key: "blog",

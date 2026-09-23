@@ -120,22 +120,37 @@ function computeDetailPageInitialState(page: Page, config?: DetailPageConfig) {
         const cardBlocks = (dbSec?.blocks || []).filter(
           (b) => !["intro", "rich_text", "hero", "faq", "symbol"].includes(b.blockType)
         );
+        const resolvedCards =
+          cardBlocks.length > 0
+            ? cardBlocks.map((b) => ({
+                id: b.id,
+                icon: b.icon || secDef.cardConfig?.defaultIcon || "BadgeCheck",
+                image: b.image || "",
+                title: b.title || "",
+                subtitle: b.subtitle || "",
+                description: b.description || "",
+                linkLabel: b.linkLabel || secDef.cardConfig?.linkLabelDefault || "",
+                linkUrl: b.linkUrl || "",
+                status: (b.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+              }))
+            : (secDef.defaultCards || []).map((dc, idx) => ({
+                id: `default-${idx}`,
+                icon: dc.icon || secDef.cardConfig?.defaultIcon || "BadgeCheck",
+                image: dc.image || "",
+                title: dc.title || "",
+                subtitle: dc.subtitle || "",
+                description: dc.description || "",
+                linkLabel: dc.linkLabel || secDef.cardConfig?.linkLabelDefault || "",
+                linkUrl: dc.linkUrl || "",
+                status: "ACTIVE" as const,
+              }));
+
         sectionStates[secDef.sectionKey] = {
           enabled: isEnabled,
           cards: {
             heading: dbSec?.title || introBlock?.title || secDef.title,
             introText: introBlock?.description || "",
-            cards: cardBlocks.map((b) => ({
-              id: b.id,
-              icon: b.icon || secDef.cardConfig?.defaultIcon || "BadgeCheck",
-              image: b.image || "",
-              title: b.title || "",
-              subtitle: b.subtitle || "",
-              description: b.description || "",
-              linkLabel: b.linkLabel || secDef.cardConfig?.linkLabelDefault || "",
-              linkUrl: b.linkUrl || "",
-              status: (b.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
-            })),
+            cards: resolvedCards,
           },
         };
         break;
