@@ -38,7 +38,14 @@ interface ProductFiltersProps {
 
 export function ProductFilters({ value, onChange, availableAttributeValues = [], filterConfig }: ProductFiltersProps) {
   const { data: categories = [] } = useCategories();
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    Category: true,
+  });
+
+  const isGroupOpen = (name: string) => openGroups[name] ?? false;
+  const toggleGroup = (name: string) => {
+    setOpenGroups((prev) => ({ ...prev, [name]: !prev[name] }));
+  };
 
   // Build attribute groups from available values, but filter by config.
   // When no config is present OR the config has no attribute filters defined,
@@ -132,14 +139,14 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
         <div className="border-b border-line py-3.5">
           <button
             type="button"
-            onClick={() => setOpenGroup(openGroup === "Category" ? null : "Category")}
+            onClick={() => toggleGroup("Category")}
             className="flex w-full items-center justify-between text-left text-[14px] font-semibold text-ink cursor-pointer"
           >
             <span>Category</span>
-            <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", openGroup === "Category" && "rotate-180")} />
+            <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", isGroupOpen("Category") && "rotate-180")} />
           </button>
-          {openGroup === "Category" && (
-            <div className="mt-3 space-y-2">
+          {isGroupOpen("Category") && (
+            <div className="mt-3 space-y-2 max-h-[170px] overflow-y-auto [scrollbar-width:thin] pr-1">
               {categories.map((cat) => (
                 <label key={cat.id || cat.slug} className="flex cursor-pointer items-center justify-between text-[13.5px] text-steel hover:text-ink">
                   <span className="flex items-center gap-2.5">
@@ -159,19 +166,19 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
       )}
 
       {attributeGroups.map((group) => {
-        const open = openGroup === group.attributeName;
+        const open = isGroupOpen(group.attributeName);
         return (
           <div key={group.attributeName} className="border-b border-line py-3.5">
             <button
               type="button"
-              onClick={() => setOpenGroup(open ? null : group.attributeName)}
+              onClick={() => toggleGroup(group.attributeName)}
               className="flex w-full items-center justify-between text-left text-[14px] font-semibold text-ink cursor-pointer"
             >
               <span>{group.attributeName}</span>
               <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", open && "rotate-180")} />
             </button>
             {open && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-2 max-h-[160px] overflow-y-auto [scrollbar-width:thin] pr-1">
                 {group.options.map((option) => (
                   <label key={option.value} className="flex cursor-pointer items-center justify-between text-[13.5px] text-steel hover:text-ink">
                     <span className="flex items-center gap-2.5">
@@ -195,13 +202,13 @@ export function ProductFilters({ value, onChange, availableAttributeValues = [],
         <div className="border-b border-line py-3.5">
           <button
             type="button"
-            onClick={() => setOpenGroup(openGroup === "Availability" ? null : "Availability")}
+            onClick={() => toggleGroup("Availability")}
             className="flex w-full items-center justify-between text-left text-[14px] font-semibold text-ink cursor-pointer"
           >
             <span>Availability</span>
-            <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", openGroup === "Availability" && "rotate-180")} />
+            <ChevronDown size={14} className={cn("text-steel transition-transform duration-200", isGroupOpen("Availability") && "rotate-180")} />
           </button>
-          {openGroup === "Availability" && (
+          {isGroupOpen("Availability") && (
             <div className="mt-3 space-y-2">
               <label className="flex cursor-pointer items-center justify-between text-[13.5px] text-steel hover:text-ink">
                 <span className="flex items-center gap-2.5">

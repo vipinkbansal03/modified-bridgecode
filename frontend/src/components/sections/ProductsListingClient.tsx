@@ -445,19 +445,19 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
 
       <div className="mx-auto w-full max-w-[1720px] px-4 sm:px-8 xl:px-10 flex flex-col lg:flex-row items-start gap-8 pt-6 lg:pt-[34px]">
         {/* Sidebar matching reference image */}
-        <aside className="w-full lg:w-[280px] xl:w-[300px] shrink-0 lg:sticky lg:top-[135px] xl:top-[145px] lg:self-start lg:max-h-[calc(100vh-160px)] flex flex-col pr-2">
-          {/* Pinned Static Header & Search - Never scrolls away */}
-          <div className="shrink-0 bg-white pb-1">
-            <div className="flex items-center justify-between pb-2.5 border-b border-line">
-              <h2 className="text-[16px] font-bold text-ink tracking-tight">All products</h2>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-steel">
+        <aside className="w-full lg:w-[280px] xl:w-[300px] shrink-0 lg:sticky lg:top-[80px] xl:top-[140px] lg:self-start lg:max-h-[calc(100vh-100px)] xl:max-h-[calc(100vh-160px)] flex flex-col pr-2 overflow-y-auto [scrollbar-width:thin]">
+          {/* Section 1: All Products Quick Directory */}
+          <div className="shrink-0 bg-white">
+            <div className="flex items-center justify-between pb-2 border-b border-line">
+              <h2 className="text-[15px] font-bold text-ink tracking-tight">All products</h2>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-steel">
                 {filteredSidebarProducts.length}
               </span>
             </div>
 
             {/* Quick Search */}
-            <div className="relative my-2.5">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
+            <div className="relative my-2">
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
               <input
                 type="text"
                 value={sidebarSearch}
@@ -466,7 +466,7 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
                   setVisibleSidebarCount(30);
                 }}
                 placeholder="Search products..."
-                className="w-full rounded-md border border-line bg-slate-50/70 py-1.5 pl-8 pr-7 text-[12.5px] text-ink placeholder:text-steel outline-none focus:border-ink focus:bg-white transition-colors"
+                className="w-full rounded-md border border-line bg-slate-50/70 py-1.5 pl-8 pr-7 text-[12px] text-ink placeholder:text-steel outline-none focus:border-ink focus:bg-white transition-colors"
               />
               {sidebarSearch && (
                 <button
@@ -478,27 +478,27 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-steel hover:text-ink cursor-pointer"
                   title="Clear search"
                 >
-                  <X size={13} />
+                  <X size={12} />
                 </button>
               )}
             </div>
-          </div>
 
-          {/* Scrollable Body: Product Directory & Filters */}
-          <div className="flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] pb-6">
-            {/* Product Names List */}
-            <div className="divide-y divide-line">
+            {/* Compact Scrollable Product Names List */}
+            <div
+              onScroll={handleSidebarScroll}
+              className="max-h-[190px] overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] divide-y divide-line/60 rounded border border-line/60 bg-slate-50/30 p-1 mb-2"
+            >
               {displayedSidebarProducts.length === 0 ? (
-                <div className="py-6 text-center text-[12.5px] text-steel">
+                <div className="py-4 text-center text-[12px] text-steel">
                   No products found matching &ldquo;{sidebarSearch}&rdquo;
                 </div>
               ) : (
                 displayedSidebarProducts.map((p) => (
-                  <div key={p.slug || p.id} className="py-2">
+                  <div key={p.slug || p.id} className="py-1.5">
                     <Link
                       href={`/products/${p.slug}`}
                       title={p.title}
-                      className="block border-l-2 border-[#E31E24] pl-3 text-[13px] font-semibold text-ink hover:text-[#E31E24] transition-colors leading-snug cursor-pointer"
+                      className="block border-l-2 border-[#E31E24] pl-2.5 text-[12.5px] font-semibold text-ink hover:text-[#E31E24] transition-colors leading-snug cursor-pointer truncate"
                     >
                       {p.title}
                     </Link>
@@ -506,21 +506,21 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
                 ))
               )}
               {visibleSidebarCount < filteredSidebarProducts.length && (
-                <div className="py-2 text-center text-[11px] font-medium text-steel">
+                <div className="py-1.5 text-center text-[10.5px] font-medium text-steel">
                   Showing {displayedSidebarProducts.length} of {filteredSidebarProducts.length}
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Filters section */}
-            <div className="pt-4 border-t border-line mt-3">
-              <ProductFilters
-                value={filters}
-                onChange={handleFilterChange}
-                availableAttributeValues={availableAttributeValues}
-                filterConfig={filterConfig ?? null}
-              />
-            </div>
+          {/* Section 2: Filters (Now directly visible right below product directory) */}
+          <div className="pt-3 border-t border-line mt-1">
+            <ProductFilters
+              value={filters}
+              onChange={handleFilterChange}
+              availableAttributeValues={availableAttributeValues}
+              filterConfig={filterConfig ?? null}
+            />
           </div>
         </aside>
 
