@@ -338,6 +338,7 @@ model ProductVariant {
   @@index([variantKey])
   @@index([packageId])
   @@index([deletedAt])
+  @@index([deletedAt, createdAt])
   @@map("product_variants")
 }
 
@@ -494,6 +495,13 @@ model Customer {
   deviceTokens               DeviceToken[]
   returns                    OrderReturn[]
 
+  @@index([deletedAt, createdAt])
+  @@index([status, deletedAt])
+  @@index([approvalStatus, deletedAt])
+  @@index([customerRoleId])
+  @@index([tierId])
+  @@index([defaultCountryId])
+  @@index([email])
   @@map("customers")
 }
 
@@ -520,6 +528,8 @@ model CustomerAddress {
   customer           Customer                @relation(fields: [customerId], references: [id], onDelete: Cascade)
   country            Country                 @relation("CustomerAddressCountry", fields: [countryId], references: [id])
 
+  @@index([customerId])
+  @@index([countryId])
   @@map("customer_addresses")
 }
 
@@ -784,6 +794,14 @@ model Order {
   warehouse           Warehouse?           @relation(fields: [warehouseId], references: [id])
   returns             OrderReturn[]
 
+  @@index([deletedAt, createdAt])
+  @@index([status, deletedAt])
+  @@index([paymentStatus, deletedAt])
+  @@index([customerId, deletedAt])
+  @@index([countryId])
+  @@index([currencyId])
+  @@index([shippingZoneId])
+  @@index([warehouseId])
   @@map("orders")
 }
 
@@ -807,6 +825,10 @@ model OrderItem {
   warehouse   Warehouse?      @relation(fields: [warehouseId], references: [id])
   returnItems OrderReturnItem[]
 
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([warehouseId])
   @@map("order_items")
 }
 
@@ -1132,6 +1154,10 @@ model ActivityLog {
   createdAt  DateTime @default(now())
   user       User?    @relation(fields: [userId], references: [id])
 
+  @@index([createdAt])
+  @@index([userId])
+  @@index([entityType, createdAt])
+  @@index([action])
   @@map("activity_logs")
 }
 
@@ -2131,4 +2157,18 @@ model OrderReturnItem {
   @@index([orderItemId])
   @@map("order_return_items")
 }
+
+model WebhookEvent {
+  id          String          @id @default(cuid())
+  eventId     String          @unique
+  eventType   String
+  provider    PaymentProvider @default(STRIPE)
+  payload     Json?
+  processedAt DateTime        @default(now())
+
+  @@index([eventId])
+  @@index([provider, eventType])
+  @@map("webhook_events")
+}
+
 

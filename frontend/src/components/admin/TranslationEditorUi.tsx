@@ -96,20 +96,25 @@ export function TranslationBlurInput({
   disabled?: boolean;
 }) {
   const { showToast } = useToast();
+  const [currentVal, setCurrentVal] = useState(defaultValue);
   const cleanEnglish = stripHtml(englishReference);
+
+  useEffect(() => {
+    setCurrentVal(defaultValue);
+  }, [defaultValue]);
 
   return (
     <div className="space-y-1">
       <AdminInput
         label={label}
-        defaultValue={defaultValue}
+        value={currentVal}
         placeholder={cleanEnglish}
         disabled={disabled}
+        onChange={(e) => setCurrentVal(e.target.value)}
         onBlur={async (e) => {
-          const value = e.currentTarget.value.trim();
-          const saved = defaultValue.trim();
+          const value = (e?.currentTarget?.value ?? currentVal).trim();
+          const saved = (defaultValue || "").trim();
           if (value === saved) {
-            showToast(toastMessages.noChanges, "info");
             return;
           }
           await onSave(value);

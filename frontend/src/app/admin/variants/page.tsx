@@ -27,6 +27,7 @@ import { AdminActionButton } from "@/components/admin/AdminRowActions";
 import { ProductEditor } from "@/components/admin/products/ProductEditor";
 import {
   useAdminVariants,
+  useAdminVariantCounts,
   useDeleteVariant,
   useRestoreVariant,
   usePermanentDeleteVariant,
@@ -187,7 +188,7 @@ function VariantsList() {
         );
         showToast(`Successfully restored ${selectedIds.length} variant(s).`, "success");
         await refetch();
-        void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+        void refetchVariantCounts();
       } else if (bulkAction === "activate") {
         await Promise.all(
           selectedIds.map((id) => {
@@ -201,7 +202,7 @@ function VariantsList() {
         );
         showToast(`Successfully activated ${selectedIds.length} variant(s).`, "success");
         await refetch();
-        void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+        void refetchVariantCounts();
       } else if (bulkAction === "deactivate") {
         await Promise.all(
           selectedIds.map((id) => {
@@ -215,7 +216,7 @@ function VariantsList() {
         );
         showToast(`Successfully deactivated ${selectedIds.length} variant(s).`, "success");
         await refetch();
-        void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+        void refetchVariantCounts();
       }
       setSelectedIds([]);
       setBulkAction("");
@@ -250,21 +251,17 @@ function VariantsList() {
     sortDir,
   });
 
-  const { data: totalVariantData, isLoading: totalLoading, refetch: refetchTotal } = useAdminVariants({ limit: 1 });
-  const { data: activeVariantData, isLoading: activeLoading, refetch: refetchActive } = useAdminVariants({ status: "ACTIVE", limit: 1 });
-  const { data: draftVariantData, isLoading: draftLoading, refetch: refetchDraft } = useAdminVariants({ status: "DRAFT", limit: 1 });
-  const { data: inactiveVariantData, isLoading: inactiveLoading, refetch: refetchInactive } = useAdminVariants({ status: "INACTIVE", limit: 1 });
-  const { data: archivedVariantData, isLoading: archivedLoading, refetch: refetchArchived } = useAdminVariants({ status: "ARCHIVED", limit: 1 });
+  const { data: variantCounts, isLoading: variantCountsLoading, refetch: refetchVariantCounts } = useAdminVariantCounts();
 
   const variantStats = useMemo(() => {
     return {
-      total: totalVariantData?.pagination?.total ?? 0,
-      active: activeVariantData?.pagination?.total ?? 0,
-      draft: draftVariantData?.pagination?.total ?? 0,
-      inactive: inactiveVariantData?.pagination?.total ?? 0,
-      archived: archivedVariantData?.pagination?.total ?? 0,
+      total: variantCounts?.total ?? 0,
+      active: variantCounts?.active ?? 0,
+      draft: variantCounts?.draft ?? 0,
+      inactive: variantCounts?.inactive ?? 0,
+      archived: variantCounts?.archived ?? 0,
     };
-  }, [totalVariantData, activeVariantData, draftVariantData, inactiveVariantData, archivedVariantData]);
+  }, [variantCounts]);
 
   const updateVariant = useUpdateVariant();
   const duplicateVariant = useDuplicateVariant();
@@ -280,7 +277,7 @@ function VariantsList() {
       await duplicateVariant.mutateAsync({ productId: row.product.id, variantId: row.id });
       showToast("Variant duplicated.", "success");
       await refetch();
-      void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+      void refetchVariantCounts();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to duplicate variant."), "error");
     }
@@ -291,7 +288,7 @@ function VariantsList() {
       await restoreVariant.mutateAsync({ productId: row.product.id, variantId: row.id });
       showToast("Variant restored.", "success");
       await refetch();
-      void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+      void refetchVariantCounts();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to restore variant."), "error");
     }
@@ -307,7 +304,7 @@ function VariantsList() {
       });
       showToast(`Variant ${nextStatus === "ACTIVE" ? "activated" : "deactivated"}.`, "success");
       await refetch();
-      void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+      void refetchVariantCounts();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to update variant status."), "error");
     }
@@ -320,7 +317,7 @@ function VariantsList() {
       showToast("Variant soft-deleted.", "success");
       setDeleting(null);
       await refetch();
-      void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+      void refetchVariantCounts();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete variant."), "error");
     }
@@ -337,7 +334,7 @@ function VariantsList() {
       showToast(`Variant "${deleting.title}" permanently deleted from database.`, "success");
       setDeleting(null);
       await refetch();
-      void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+      void refetchVariantCounts();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to permanently delete variant."), "error");
     }
@@ -354,13 +351,7 @@ function VariantsList() {
       setBulkAction("");
 
       await refetch();
-      void Promise.all([
-        refetchTotal(),
-        refetchActive(),
-        refetchDraft(),
-        refetchInactive(),
-        refetchArchived(),
-      ]);
+      void refetchVariantCounts();
 
       if (result) {
         const payload = (result as any)?.data ?? result;
@@ -608,7 +599,7 @@ function VariantsList() {
               value: variantStats.total,
               subtitle: "Configured SKU combinations",
               icon: <Layers size={18} />,
-              isLoading: totalLoading,
+              isLoading: variantCountsLoading,
             },
             {
               title: "Active Variants",
@@ -616,7 +607,7 @@ function VariantsList() {
               subtitle: "Purchasable & active",
               icon: <CheckCircle2 size={18} />,
               color: "bg-green-600",
-              isLoading: activeLoading,
+              isLoading: variantCountsLoading,
             },
             {
               title: "Inactive Variants",
@@ -624,7 +615,7 @@ function VariantsList() {
               subtitle: "Disabled / hidden",
               icon: <XCircle size={18} />,
               color: "bg-gray-600",
-              isLoading: inactiveLoading,
+              isLoading: variantCountsLoading,
             },
             {
               title: "Archived Variants",
@@ -632,7 +623,7 @@ function VariantsList() {
               subtitle: "Soft-deleted combinations",
               icon: <RotateCcw size={18} />,
               color: "bg-amber-600",
-              isLoading: archivedLoading,
+              isLoading: variantCountsLoading,
             },
           ]}
         />
@@ -1089,7 +1080,7 @@ function VariantsList() {
             setBulkAction("");
             setShowBulkDeleteModal(false);
             await refetch();
-            void Promise.all([refetchTotal(), refetchActive(), refetchDraft(), refetchInactive(), refetchArchived()]);
+            void refetchVariantCounts();
           } catch (error) {
             showToast(getAdminErrorMessage(error, "Failed to complete bulk delete."), "error");
           } finally {

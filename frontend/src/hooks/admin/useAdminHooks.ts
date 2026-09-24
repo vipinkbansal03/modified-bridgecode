@@ -19,6 +19,13 @@ export const useAdminProducts = (params?: {
     placeholderData: keepPreviousData,
   });
 
+export const useAdminProductCounts = () =>
+  useQuery({
+    queryKey: ["admin-product-counts"],
+    queryFn: () => adminApi.get("/products/stats/counts").then((r) => (r.data?.data ?? r.data) as { active: number; draft: number; inactive: number; archived: number; deleted: number; total: number }),
+    staleTime: 30 * 1000,
+  });
+
 export const useAdminArchivedProducts = (params?: {
   page?: number;
   limit?: number;
@@ -291,6 +298,22 @@ export const useAdminVariants = (params?: {
     queryFn: () =>
       adminApi.get("/products/variants", { params }).then((r) => r.data),
     placeholderData: keepPreviousData,
+  });
+
+export const useAdminVariantCounts = () =>
+  useQuery({
+    queryKey: ["admin-variant-counts"],
+    queryFn: () =>
+      adminApi
+        .get("/products/variants/stats/counts")
+        .then((r) => (r.data?.data ?? r.data) as {
+          active: number;
+          draft: number;
+          inactive: number;
+          archived: number;
+          total: number;
+        }),
+    staleTime: 30 * 1000,
   });
 
 export const useAdminArchivedVariants = (params?: {
@@ -2085,6 +2108,29 @@ export const useAdminCustomers = (params?: {
     placeholderData: keepPreviousData,
   });
 
+export const useAdminCustomerCounts = () =>
+  useQuery({
+    queryKey: ["admin-customer-counts"],
+    queryFn: () =>
+      adminApi
+        .get("/customers/stats/counts")
+        .then((r) => (r.data?.data ?? r.data) as {
+          total: number;
+          active: number;
+          inactive: number;
+          pending: number;
+          approved: number;
+          rejected: number;
+          wholesale: number;
+          retail: number;
+          deleted: number;
+          byStatus: Record<string, number>;
+          byApprovalStatus: Record<string, number>;
+          byCustomerType: Record<string, number>;
+        }),
+    staleTime: 30 * 1000,
+  });
+
 export const useAdminArchivedCustomers = (params?: {
   page?: number;
   limit?: number;
@@ -2867,6 +2913,24 @@ export const useAdminOrders = (params?: {
     queryKey: ["admin-orders", params],
     queryFn: () => adminApi.get("/orders", { params }).then((r) => r.data),
     placeholderData: keepPreviousData,
+  });
+
+export const useAdminOrderCounts = () =>
+  useQuery({
+    queryKey: ["admin-order-counts"],
+    queryFn: () => adminApi.get("/orders/stats/counts").then((r) => (r.data?.data ?? r.data) as {
+      pending: number;
+      processing: number;
+      shipped: number;
+      delivered: number;
+      cancelled: number;
+      refunded: number;
+      byStatus: Record<string, number>;
+      byPaymentStatus: Record<string, number>;
+      deleted: number;
+      total: number;
+    }),
+    staleTime: 30 * 1000,
   });
 
 export const useAdminArchivedOrders = (params?: {

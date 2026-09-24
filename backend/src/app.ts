@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import path from "path";
 
+import compression from "compression";
 import { errorMiddleware } from "./middleware/error.middleware";
 import { logger } from "./config/logger";
 
@@ -72,6 +73,7 @@ app.use(cors({
   ],
   credentials: true,
 }));
+app.use(compression());
 
 // ─── Payment webhooks (raw body — must be before express.json()) ────────────
 app.use("/api/webhooks", webhookRoutes);

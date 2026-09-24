@@ -643,6 +643,77 @@ function buildVariantOrder(query: VariantListQuery): Prisma.ProductVariantOrderB
   }
 }
 
+export async function getProductCounts() {
+  const [grouped, deleted] = await Promise.all([
+    prisma.product.groupBy({
+      by: ["status"],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.product.count({ where: { deletedAt: { not: null } } }),
+  ]);
+
+  const counts: Record<string, number> = {
+    active: 0,
+    draft: 0,
+    inactive: 0,
+    archived: 0,
+    deleted,
+    total: 0,
+  };
+
+  for (const item of grouped) {
+    const key = item.status.toLowerCase();
+    counts[key] = item._count._all;
+    counts.total += item._count._all;
+  }
+
+  return counts;
+}
+
+export async function getVariantCounts() {
+  const [grouped, draft, archived, total] = await Promise.all([
+    prisma.productVariant.groupBy({
+      by: ["status"],
+      where: {
+        deletedAt: null,
+        product: { deletedAt: null },
+      },
+      _count: { _all: true },
+    }),
+    prisma.productVariant.count({
+      where: {
+        deletedAt: null,
+        product: { status: "DRAFT", deletedAt: null },
+      },
+    }),
+    prisma.productVariant.count({
+      where: { deletedAt: { not: null } },
+    }),
+    prisma.productVariant.count({
+      where: {
+        deletedAt: null,
+        product: { deletedAt: null },
+      },
+    }),
+  ]);
+
+  const counts: Record<string, number> = {
+    active: 0,
+    draft,
+    inactive: 0,
+    archived,
+    total,
+  };
+
+  for (const item of grouped) {
+    const key = item.status.toLowerCase();
+    counts[key] = item._count._all;
+  }
+
+  return counts;
+}
+
 // ─── List ─────────────────────────────────────────────────
 
 export async function listProducts(query: ProductListQuery) {
@@ -679,7 +750,19 @@ export async function listProducts(query: ProductListQuery) {
       skip,
       take: limit,
       orderBy,
-      include: {
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        sku: true,
+        productCode: true,
+        brand: true,
+        status: true,
+        isFeatured: true,
+        sortOrder: true,
+        createdAt: true,
+        updatedAt: true,
+        deletedAt: true,
         category: { select: { id: true, name: true, slug: true, status: true } },
         media: { orderBy: { sortOrder: "asc" }, take: 1, select: { id: true, url: true, altText: true } },
         countries: { where: { enabled: true }, select: { countryId: true } },
@@ -886,6 +969,7 @@ export async function listVariants(query: VariantListQuery) {
 // ─── Get one ─────────────────────────────────────────────
 
 export async function getProduct(id: string) {
+  const startTime = performance.now();
   const product = await prisma.product.findUnique({
     where: { id, deletedAt: null },
     include: {
@@ -913,7 +997,21 @@ export async function getProduct(id: string) {
       },
       variants: {
         where: { status: { not: "INACTIVE" }, deletedAt: null },
-        include: {
+        select: {
+          id: true,
+          title: true,
+          sku: true,
+          variantKey: true,
+          status: true,
+          packageId: true,
+          moq: true,
+          weight: true,
+          length: true,
+          width: true,
+          height: true,
+          shippingClass: true,
+          fragile: true,
+          hazardous: true,
           package: {
             select: { id: true, title: true, slug: true, status: true, sortOrder: true },
           },
@@ -923,29 +1021,8 @@ export async function getProduct(id: string) {
               attributeValue: { select: { id: true, value: true, slug: true, sortOrder: true } },
             },
           },
-          prices: {
-            where: { deletedAt: null },
-            include: {
-              country: { select: { id: true, name: true, code: true } },
-              currency: { select: { id: true, code: true, symbol: true, isBase: true } },
-            },
-          },
-          inventories: {
-            include: {
-              country: { select: { id: true, name: true, code: true } },
-              warehouse: {
-                select: {
-                  id: true,
-                  name: true,
-                  countryId: true,
-                  state: true,
-                  country: { select: { id: true, name: true, code: true } },
-                },
-              },
-            },
-            orderBy: [{ countryId: "asc" }],
-          },
         },
+        orderBy: [{ createdAt: "asc" }],
       },
       inventories: {
         where: { variantId: null },
@@ -974,48 +1051,97 @@ export async function getProduct(id: string) {
     },
   });
   if (!product) throw new AppError("Product not found.", 404);
+
+  const durationMs = (performance.now() - startTime).toFixed(2);
+  const variantsCount = product.variants?.length ?? 0;
+  console.log(`[PERF] getProduct(${id}) executed in ${durationMs}ms | ${variantsCount} variants`);
+
   return product;
 }
 
-export async function getProductVariants(productId: string) {
+export async function getProductVariants(
+  productId: string,
+  query?: { page?: number | string; limit?: number | string; search?: string }
+) {
+  const startTime = performance.now();
   await assertProductExists(productId);
-  return prisma.productVariant.findMany({
-    where: { productId, status: { not: "INACTIVE" }, deletedAt: null },
-    include: {
-      package: {
-        select: { id: true, title: true, slug: true, status: true, sortOrder: true },
-      },
-      attributeValues: {
-        include: {
-          attribute: { select: { id: true, name: true, slug: true, role: true } },
-          attributeValue: { select: { id: true, value: true, slug: true, sortOrder: true } },
+
+  const page = query?.page ? Math.max(1, Number(query.page)) : undefined;
+  const limit = query?.limit ? Math.max(1, Number(query.limit)) : (query?.page ? 50 : undefined);
+  const search = typeof query?.search === "string" ? query.search.trim() : undefined;
+
+  const where: Prisma.ProductVariantWhereInput = {
+    productId,
+    status: { not: "INACTIVE" },
+    deletedAt: null,
+    ...(search
+      ? {
+          OR: [
+            { title: { contains: search, mode: "insensitive" } },
+            { sku: { contains: search, mode: "insensitive" } },
+            { variantKey: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+
+  const [total, variants] = await Promise.all([
+    limit ? prisma.productVariant.count({ where }) : Promise.resolve(0),
+    prisma.productVariant.findMany({
+      where,
+      skip: page && limit ? (page - 1) * limit : undefined,
+      take: limit,
+      include: {
+        package: {
+          select: { id: true, title: true, slug: true, status: true, sortOrder: true },
         },
-      },
-      prices: {
-        where: { deletedAt: null },
-        include: {
-          country: { select: { id: true, name: true, code: true } },
-          currency: { select: { id: true, code: true, symbol: true, isBase: true } },
-        },
-      },
-      inventories: {
-        include: {
-          country: { select: { id: true, name: true, code: true } },
-          warehouse: {
-            select: {
-              id: true,
-              name: true,
-              countryId: true,
-              state: true,
-              country: { select: { id: true, name: true, code: true } },
-            },
+        attributeValues: {
+          include: {
+            attribute: { select: { id: true, name: true, slug: true, role: true } },
+            attributeValue: { select: { id: true, value: true, slug: true, sortOrder: true } },
           },
         },
-        orderBy: [{ countryId: "asc" }],
+        prices: {
+          where: { deletedAt: null },
+          include: {
+            country: { select: { id: true, name: true, code: true } },
+            currency: { select: { id: true, code: true, symbol: true, isBase: true } },
+          },
+        },
+        inventories: {
+          include: {
+            country: { select: { id: true, name: true, code: true } },
+            warehouse: {
+              select: {
+                id: true,
+                name: true,
+                countryId: true,
+                state: true,
+                country: { select: { id: true, name: true, code: true } },
+              },
+            },
+          },
+          orderBy: [{ countryId: "asc" }],
+        },
       },
-    },
-    orderBy: [{ createdAt: "asc" }],
-  });
+      orderBy: [{ createdAt: "asc" }],
+    }),
+  ]);
+
+  const durationMs = (performance.now() - startTime).toFixed(2);
+  console.log(`[PERF] getProductVariants(${productId}) executed in ${durationMs}ms | ${variants.length} variants returned`);
+
+  if (limit) {
+    return {
+      data: variants,
+      total,
+      page: page || 1,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  return variants;
 }
 
 // ─── Create ───────────────────────────────────────────────
@@ -3192,34 +3318,17 @@ export async function generateVariants(
     .filter((e) => e.existing.status === "INACTIVE" || e.existing.deletedAt !== null)
     .map((e) => e.existing.id);
 
-  if (toRestoreIds.length > 0) {
-    for (let i = 0; i < toRestoreIds.length; i += 500) {
-      await prisma.productVariant.updateMany({
-        where: { id: { in: toRestoreIds.slice(i, i + 500) } },
-        data: {
-          status: "ACTIVE",
-          deletedAt: null,
-        },
-      });
-    }
-    // Update local existing state to ACTIVE
-    for (const e of existingTargets) {
-      if (toRestoreIds.includes(e.existing.id)) {
-        e.existing.status = "ACTIVE" as const;
-        e.existing.deletedAt = null;
-      }
-    }
-  }
-
-  if (existingTargets.length > 0 && inventoryTemplates.length > 0) {
+  if (toRestoreIds.length > 0 || (existingTargets.length > 0 && inventoryTemplates.length > 0)) {
     const existingVariantIds = existingTargets.map((e) => e.existing.id);
     const existingInventories: { id: string; variantId: string | null; countryId: string | null }[] = [];
-    for (let i = 0; i < existingVariantIds.length; i += 500) {
-      const chunk = await prisma.inventory.findMany({
-        where: { variantId: { in: existingVariantIds.slice(i, i + 500) } },
-        select: { id: true, variantId: true, countryId: true },
-      });
-      existingInventories.push(...chunk);
+    if (existingVariantIds.length > 0) {
+      for (let i = 0; i < existingVariantIds.length; i += 500) {
+        const chunk = await prisma.inventory.findMany({
+          where: { variantId: { in: existingVariantIds.slice(i, i + 500) } },
+          select: { id: true, variantId: true, countryId: true },
+        });
+        existingInventories.push(...chunk);
+      }
     }
 
     const existingInvSet = new Set(
@@ -3227,25 +3336,51 @@ export async function generateVariants(
     );
 
     const invToCreate: any[] = [];
-    for (const e of existingTargets) {
-      for (const template of inventoryTemplates) {
-        const key = `${e.existing.id}:${template.countryId ?? "__base__"}`;
-        if (!existingInvSet.has(key)) {
-          invToCreate.push({
-            productId,
-            variantId: e.existing.id,
-            ...template,
-          });
+    if (inventoryTemplates.length > 0) {
+      for (const e of existingTargets) {
+        for (const template of inventoryTemplates) {
+          const key = `${e.existing.id}:${template.countryId ?? "__base__"}`;
+          if (!existingInvSet.has(key)) {
+            invToCreate.push({
+              productId,
+              variantId: e.existing.id,
+              ...template,
+            });
+          }
         }
       }
     }
 
-    if (invToCreate.length > 0) {
-      for (let i = 0; i < invToCreate.length; i += 1000) {
-        await prisma.inventory.createMany({
-          data: invToCreate.slice(i, i + 1000),
-          skipDuplicates: true,
-        });
+    if (toRestoreIds.length > 0 || invToCreate.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        if (toRestoreIds.length > 0) {
+          for (let i = 0; i < toRestoreIds.length; i += 500) {
+            await tx.productVariant.updateMany({
+              where: { id: { in: toRestoreIds.slice(i, i + 500) } },
+              data: {
+                status: "ACTIVE",
+                deletedAt: null,
+              },
+            });
+          }
+        }
+
+        if (invToCreate.length > 0) {
+          for (let i = 0; i < invToCreate.length; i += 1000) {
+            await tx.inventory.createMany({
+              data: invToCreate.slice(i, i + 1000),
+              skipDuplicates: true,
+            });
+          }
+        }
+      });
+
+      // Update local existing state to ACTIVE
+      for (const e of existingTargets) {
+        if (toRestoreIds.includes(e.existing.id)) {
+          e.existing.status = "ACTIVE" as const;
+          e.existing.deletedAt = null;
+        }
       }
     }
   }
@@ -3377,43 +3512,47 @@ export async function createVariant(
   const existing = await prisma.productVariant.findFirst({ where: { productId, variantKey, deletedAt: null } });
   if (existing) throw new AppError("A variant with this configuration already exists.", 409);
 
-  const variant = await prisma.productVariant.create({
-    data: {
-      productId,
-      packageId: data.packageId || null,
-      sku: data.sku || `${product.sku || productId}-${variantKey.slice(0, 8)}`,
-      title,
-      variantKey,
-      moq: data.moq ?? 1,
-      weight: data.weight !== undefined ? data.weight : product.packageWeight ?? null,
-      length: data.length !== undefined ? data.length : product.packageLength ?? null,
-      width: data.width !== undefined ? data.width : product.packageWidth ?? null,
-      height: data.height !== undefined ? data.height : product.packageHeight ?? null,
-      shippingClass: data.shippingClass !== undefined ? data.shippingClass || null : product.shippingClass ?? null,
-      fragile: data.fragile !== undefined ? data.fragile : product.fragile,
-      hazardous: data.hazardous !== undefined ? data.hazardous : product.hazardous,
-      status: (data.status as never) || "ACTIVE",
-    },
+  const createdVariant = await prisma.$transaction(async (tx) => {
+    const variant = await tx.productVariant.create({
+      data: {
+        productId,
+        packageId: data.packageId || null,
+        sku: data.sku || `${product.sku || productId}-${variantKey.slice(0, 8)}`,
+        title,
+        variantKey,
+        moq: data.moq ?? 1,
+        weight: data.weight !== undefined ? data.weight : product.packageWeight ?? null,
+        length: data.length !== undefined ? data.length : product.packageLength ?? null,
+        width: data.width !== undefined ? data.width : product.packageWidth ?? null,
+        height: data.height !== undefined ? data.height : product.packageHeight ?? null,
+        shippingClass: data.shippingClass !== undefined ? data.shippingClass || null : product.shippingClass ?? null,
+        fragile: data.fragile !== undefined ? data.fragile : product.fragile,
+        hazardous: data.hazardous !== undefined ? data.hazardous : product.hazardous,
+        status: (data.status as never) || "ACTIVE",
+      },
+    });
+
+    await tx.productVariantAttributeValue.createMany({
+      data: values.map((value) => ({
+        variantId: variant.id,
+        attributeId: value.attributeId,
+        attributeValueId: value.id,
+      })),
+    });
+
+    await tx.inventory.create({
+      data: { productId, variantId: variant.id, stock: 0 },
+    });
+
+    return variant;
   });
 
-  await prisma.productVariantAttributeValue.createMany({
-    data: values.map((value) => ({
-      variantId: variant.id,
-      attributeId: value.attributeId,
-      attributeValueId: value.id,
-    })),
-  });
-
-  await prisma.inventory.create({
-    data: { productId, variantId: variant.id, stock: 0 },
-  });
-
-  if (variant.status === "ACTIVE") {
-    await syncVariantStorefrontVisibility(variant.id, productId);
+  if (createdVariant.status === "ACTIVE") {
+    await syncVariantStorefrontVisibility(createdVariant.id, productId);
   }
-  await syncVariantCountriesFromProduct(productId, [variant.id]);
+  await syncVariantCountriesFromProduct(productId, [createdVariant.id]);
 
-  return getVariant(productId, variant.id);
+  return getVariant(productId, createdVariant.id);
 }
 
 export async function updateVariant(
@@ -3471,21 +3610,23 @@ export async function updateVariant(
     ...(data.hazardous !== undefined ? { hazardous: data.hazardous } : {}),
     ...(data.status !== undefined ? { status: data.status as never } : {}),
   };
-  await prisma.productVariant.update({
-    where: { id: variantId },
-    data: updateData,
-  });
-
-  if (data.attributeValueIds?.length) {
-    await prisma.productVariantAttributeValue.deleteMany({ where: { variantId } });
-    await prisma.productVariantAttributeValue.createMany({
-      data: values.map((value) => ({
-        variantId,
-        attributeId: value.attributeId,
-        attributeValueId: value.id,
-      })),
+  await prisma.$transaction(async (tx) => {
+    await tx.productVariant.update({
+      where: { id: variantId },
+      data: updateData,
     });
-  }
+
+    if (data.attributeValueIds?.length) {
+      await tx.productVariantAttributeValue.deleteMany({ where: { variantId } });
+      await tx.productVariantAttributeValue.createMany({
+        data: values.map((value) => ({
+          variantId,
+          attributeId: value.attributeId,
+          attributeValueId: value.id,
+        })),
+      });
+    }
+  });
 
   return getVariant(productId, variantId);
 }
@@ -3892,33 +4033,38 @@ export async function permanentDeleteVariant(productId: string, variantId: strin
 export async function cloneVariant(productId: string, variantId: string) {
   const source = await getVariant(productId, variantId);
   const cloneSuffix = Date.now().toString().slice(-6);
-  const clone = await prisma.productVariant.create({
-    data: {
-      productId,
-      packageId: source.packageId,
-      sku: source.sku ? `${source.sku}-C${cloneSuffix}` : `clone-${cloneSuffix}`,
-      title: `${source.title} Copy`,
-      variantKey: source.variantKey,
-      moq: source.moq,
-      weight: source.weight,
-      length: source.length,
-      width: source.width,
-      height: source.height,
-      status: source.status,
-    },
-  });
 
-  await prisma.productVariantAttributeValue.createMany({
-    data: source.attributeValues.map((value) => ({
-      variantId: clone.id,
-      attributeId: value.attributeId,
-      attributeValueId: value.attributeValueId,
-    })),
-  });
+  const clone = await prisma.$transaction(async (tx) => {
+    const createdClone = await tx.productVariant.create({
+      data: {
+        productId,
+        packageId: source.packageId,
+        sku: source.sku ? `${source.sku}-C${cloneSuffix}` : `clone-${cloneSuffix}`,
+        title: `${source.title} Copy`,
+        variantKey: source.variantKey,
+        moq: source.moq,
+        weight: source.weight,
+        length: source.length,
+        width: source.width,
+        height: source.height,
+        status: source.status,
+      },
+    });
 
-  const baseInventory = source.inventories.find((inventory) => !inventory.countryId);
-  await prisma.inventory.create({
-    data: { productId, variantId: clone.id, stock: baseInventory?.stock ?? 0, lowStockThreshold: baseInventory?.lowStockThreshold ?? 10 },
+    await tx.productVariantAttributeValue.createMany({
+      data: source.attributeValues.map((value) => ({
+        variantId: createdClone.id,
+        attributeId: value.attributeId,
+        attributeValueId: value.attributeValueId,
+      })),
+    });
+
+    const baseInventory = source.inventories.find((inventory) => !inventory.countryId);
+    await tx.inventory.create({
+      data: { productId, variantId: createdClone.id, stock: baseInventory?.stock ?? 0, lowStockThreshold: baseInventory?.lowStockThreshold ?? 10 },
+    });
+
+    return createdClone;
   });
 
   return getVariant(productId, clone.id);

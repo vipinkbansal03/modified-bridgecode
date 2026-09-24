@@ -30,6 +30,11 @@ export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
   });
 });
 
+export const getCounts = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const counts = await CustomersService.getCustomerCounts();
+  return ApiResponse.success(res, "Customer counts fetched.", counts);
+});
+
 export const getOne = asyncHandler(async (req: AuthRequest, res: Response) => {
   const customer = await CustomersService.getCustomer(req.params.id);
   return ApiResponse.success(res, "Customer fetched.", customer);

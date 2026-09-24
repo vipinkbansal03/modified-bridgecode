@@ -27,6 +27,7 @@ import {
   useAdminCollections,
   useAdminCountries,
   useAdminProducts,
+  useAdminProductCounts,
   useBulkUpdateProducts,
   useDuplicateProduct,
   useDeleteProduct,
@@ -237,19 +238,16 @@ export default function AdminProductsPage() {
     sortDir,
   });
 
-  const { data: totalStats, isLoading: totalLoading } = useAdminProducts({ limit: 1 });
-  const { data: activeStats, isLoading: activeLoading } = useAdminProducts({ status: "ACTIVE", limit: 1 });
-  const { data: draftStats, isLoading: draftLoading } = useAdminProducts({ status: "DRAFT", limit: 1 });
-  const { data: inactiveStats, isLoading: inactiveLoading } = useAdminProducts({ status: "INACTIVE", limit: 1 });
+  const { data: counts, isLoading: countsLoading } = useAdminProductCounts();
 
   const productStats = useMemo(() => {
     return {
-      total: totalStats?.pagination?.total ?? 0,
-      active: activeStats?.pagination?.total ?? 0,
-      draft: draftStats?.pagination?.total ?? 0,
-      inactive: inactiveStats?.pagination?.total ?? 0,
+      total: counts?.total ?? 0,
+      active: counts?.active ?? 0,
+      draft: counts?.draft ?? 0,
+      inactive: counts?.inactive ?? 0,
     };
-  }, [totalStats, activeStats, draftStats, inactiveStats]);
+  }, [counts]);
 
   const { data: categories = [] } = useAdminCategories();
   const { data: countries = [] } = useAdminCountries();
@@ -690,7 +688,7 @@ export default function AdminProductsPage() {
               value: productStats.total,
               subtitle: "All catalog items",
               icon: <Package size={18} />,
-              isLoading: totalLoading,
+              isLoading: countsLoading,
             },
             {
               title: "Active Products",
@@ -698,7 +696,7 @@ export default function AdminProductsPage() {
               subtitle: "Currently live on storefront",
               icon: <CheckCircle2 size={18} />,
               color: "bg-green-600",
-              isLoading: activeLoading,
+              isLoading: countsLoading,
             },
             {
               title: "Draft Products",
@@ -706,7 +704,7 @@ export default function AdminProductsPage() {
               subtitle: "Unpublished drafts",
               icon: <FileText size={18} />,
               color: "bg-amber-600",
-              isLoading: draftLoading,
+              isLoading: countsLoading,
             },
             {
               title: "Inactive Products",
@@ -714,7 +712,7 @@ export default function AdminProductsPage() {
               subtitle: "Disabled / hidden",
               icon: <XCircle size={18} />,
               color: "bg-gray-600",
-              isLoading: inactiveLoading,
+              isLoading: countsLoading,
             },
           ]}
         />

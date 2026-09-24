@@ -37,6 +37,58 @@ type CustomerListQuery = {
   deleted?: boolean | string;
 };
 
+export async function getCustomerCounts() {
+  const [statusGrouped, approvalGrouped, typeGrouped, deleted, total] = await Promise.all([
+    prisma.customer.groupBy({
+      by: ["status"],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.customer.groupBy({
+      by: ["approvalStatus"],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.customer.groupBy({
+      by: ["customerType"],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.customer.count({ where: { deletedAt: { not: null } } }),
+    prisma.customer.count({ where: { deletedAt: null } }),
+  ]);
+
+  const byStatus: Record<string, number> = { active: 0, inactive: 0 };
+  for (const item of statusGrouped) {
+    byStatus[item.status.toLowerCase()] = item._count._all;
+  }
+
+  const byApprovalStatus: Record<string, number> = { pending_approval: 0, approved: 0, rejected: 0 };
+  for (const item of approvalGrouped) {
+    byApprovalStatus[item.approvalStatus.toLowerCase()] = item._count._all;
+  }
+
+  const byCustomerType: Record<string, number> = { retail: 0, wholesale: 0 };
+  for (const item of typeGrouped) {
+    byCustomerType[item.customerType.toLowerCase()] = item._count._all;
+  }
+
+  return {
+    total,
+    active: byStatus.active ?? 0,
+    inactive: byStatus.inactive ?? 0,
+    pending: byApprovalStatus.pending_approval ?? 0,
+    approved: byApprovalStatus.approved ?? 0,
+    rejected: byApprovalStatus.rejected ?? 0,
+    wholesale: byCustomerType.wholesale ?? 0,
+    retail: byCustomerType.retail ?? 0,
+    deleted,
+    byStatus,
+    byApprovalStatus,
+    byCustomerType,
+  };
+}
+
 export async function listCustomers(query: CustomerListQuery) {
   const { page, limit, skip } = getPagination(query);
   const isDeleted = query.deleted === true || query.deleted === "true";

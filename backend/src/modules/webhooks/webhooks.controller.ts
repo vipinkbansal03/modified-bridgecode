@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import crypto from "crypto";
 import Stripe from "stripe";
+import { OrderStatus } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { logger } from "../../config/logger";
 import { reconcilePaymentSuccess, reconcilePaymentFailure } from "../payment/paymentReconciliation.service";
@@ -95,6 +96,15 @@ export async function razorpayWebhook(req: Request, res: Response): Promise<void
   }
 }
 
+// ─── Stripe Helpers ──────────────────────────────────────
+
+function resolveNextPaidOrderStatus(currentStatus: OrderStatus): OrderStatus {
+  if (currentStatus === "PENDING" || currentStatus === "CONFIRMED") {
+    return "PROCESSING";
+  }
+  return currentStatus;
+}
+
 // ─── Stripe ──────────────────────────────────────────────
 
 export async function stripeWebhook(req: Request, res: Response): Promise<void> {
@@ -134,6 +144,16 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     return;
   }
 
+  // Idempotency Check: Skip immediately if event ID already recorded
+  const existingEvent = await prisma.webhookEvent.findUnique({
+    where: { eventId: event.id },
+  });
+  if (existingEvent) {
+    logger.info(`Stripe: event ${event.id} (${event.type}) already processed. Skipping (idempotent 200).`);
+    res.json({ received: true, alreadyProcessed: true });
+    return;
+  }
+
   try {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -143,76 +163,163 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
           ? session.payment_intent
           : session.id;
 
-      if (orderId) {
-        await prisma.order.update({
-          where: { id: orderId },
+      await prisma.$transaction(async (tx) => {
+        if (orderId) {
+          const order = await tx.order.findUnique({ where: { id: orderId } });
+          if (order) {
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                paymentStatus: "PAID",
+                status: resolveNextPaidOrderStatus(order.status),
+                paymentMethod: "STRIPE",
+                paymentProvider: "STRIPE",
+                paymentId: paymentIntentId,
+              },
+            });
+            logger.info(`Stripe: checkout session completed for order ${orderId}, paymentId: ${paymentIntentId}`);
+          }
+        } else if (session.id) {
+          const orders = await tx.order.findMany({
+            where: { paymentId: session.id },
+          });
+          for (const ord of orders) {
+            await tx.order.update({
+              where: { id: ord.id },
+              data: {
+                paymentStatus: "PAID",
+                status: resolveNextPaidOrderStatus(ord.status),
+                paymentMethod: "STRIPE",
+                paymentProvider: "STRIPE",
+                paymentId: paymentIntentId,
+              },
+            });
+          }
+        }
+
+        await tx.webhookEvent.create({
           data: {
-            paymentStatus: "PAID",
-            status: "PROCESSING",
-            paymentMethod: "STRIPE",
-            paymentId: paymentIntentId,
+            eventId: event.id,
+            eventType: event.type,
+            provider: "STRIPE",
+            payload: event.data.object as any,
           },
         });
-        logger.info(`Stripe: checkout session completed for order ${orderId}, paymentId: ${paymentIntentId}`);
-      } else if (session.id) {
-        await prisma.order.updateMany({
-          where: { paymentId: session.id },
-          data: {
-            paymentStatus: "PAID",
-            status: "PROCESSING",
-            paymentMethod: "STRIPE",
-            paymentId: paymentIntentId,
-          },
-        });
-      }
+      });
     } else if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object as Stripe.PaymentIntent;
       const orderId = intent.metadata?.orderId;
-      if (orderId) {
-        await prisma.order.update({
-          where: { id: orderId },
+
+      await prisma.$transaction(async (tx) => {
+        if (orderId) {
+          const order = await tx.order.findUnique({ where: { id: orderId } });
+          if (order) {
+            await tx.order.update({
+              where: { id: order.id },
+              data: {
+                paymentStatus: "PAID",
+                status: resolveNextPaidOrderStatus(order.status),
+                paymentMethod: "STRIPE",
+                paymentProvider: "STRIPE",
+                paymentId: intent.id,
+              },
+            });
+          }
+        } else {
+          const orders = await tx.order.findMany({
+            where: { paymentId: intent.id },
+          });
+          for (const ord of orders) {
+            await tx.order.update({
+              where: { id: ord.id },
+              data: {
+                paymentStatus: "PAID",
+                status: resolveNextPaidOrderStatus(ord.status),
+                paymentMethod: "STRIPE",
+                paymentProvider: "STRIPE",
+              },
+            });
+          }
+        }
+
+        await tx.webhookEvent.create({
           data: {
-            paymentStatus: "PAID",
-            status: "PROCESSING",
-            paymentMethod: "STRIPE",
-            paymentId: intent.id,
+            eventId: event.id,
+            eventType: event.type,
+            provider: "STRIPE",
+            payload: event.data.object as any,
           },
         });
-      } else {
-        await prisma.order.updateMany({
-          where: { paymentId: intent.id },
-          data: {
-            paymentStatus: "PAID",
-            status: "PROCESSING",
-            paymentMethod: "STRIPE",
-          },
-        });
-      }
+      });
       logger.info(`Stripe: payment succeeded for intent ${intent.id}`);
     } else if (event.type === "payment_intent.payment_failed") {
       const intent = event.data.object as Stripe.PaymentIntent;
       const orderId = intent.metadata?.orderId;
-      if (orderId) {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: { paymentStatus: "FAILED" },
+
+      await prisma.$transaction(async (tx) => {
+        if (orderId) {
+          const order = await tx.order.findUnique({ where: { id: orderId } });
+          if (order) {
+            if (order.paymentStatus === "PAID") {
+              logger.info(`Stripe: payment failed event received for already PAID order ${order.id}. Preserving PAID status.`);
+            } else {
+              await tx.order.update({
+                where: { id: order.id },
+                data: { paymentStatus: "FAILED" },
+              });
+            }
+          }
+        } else {
+          await tx.order.updateMany({
+            where: {
+              paymentId: intent.id,
+              paymentStatus: { not: "PAID" },
+            },
+            data: { paymentStatus: "FAILED" },
+          });
+        }
+
+        await tx.webhookEvent.create({
+          data: {
+            eventId: event.id,
+            eventType: event.type,
+            provider: "STRIPE",
+            payload: event.data.object as any,
+          },
         });
-      } else {
-        await prisma.order.updateMany({
-          where: { paymentId: intent.id },
-          data: { paymentStatus: "FAILED" },
-        });
-      }
+      });
       logger.info(`Stripe: payment failed for intent ${intent.id}`);
     } else if (event.type === "charge.refunded") {
       const charge = event.data.object as Stripe.Charge;
-      if (charge.payment_intent) {
-        await prisma.order.updateMany({
-          where: { paymentId: charge.payment_intent as string },
-          data: { paymentStatus: "REFUNDED" },
+
+      await prisma.$transaction(async (tx) => {
+        if (charge.payment_intent) {
+          await tx.order.updateMany({
+            where: { paymentId: charge.payment_intent as string },
+            data: { paymentStatus: "REFUNDED" },
+          });
+        }
+
+        await tx.webhookEvent.create({
+          data: {
+            eventId: event.id,
+            eventType: event.type,
+            provider: "STRIPE",
+            payload: event.data.object as any,
+          },
         });
-      }
+      });
+    } else {
+      await prisma.webhookEvent.create({
+        data: {
+          eventId: event.id,
+          eventType: event.type,
+          provider: "STRIPE",
+          payload: event.data.object as any,
+        },
+      });
     }
+
     res.json({ received: true });
   } catch (err) {
     logger.error("Stripe webhook error:", err);

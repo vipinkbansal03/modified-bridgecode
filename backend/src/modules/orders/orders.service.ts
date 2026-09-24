@@ -54,6 +54,57 @@ export async function getAnalytics() {
   };
 }
 
+export async function getOrderCounts() {
+  const [statusGrouped, paymentStatusGrouped, deleted] = await Promise.all([
+    prisma.order.groupBy({
+      by: ["status"],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.order.groupBy({
+      by: ["paymentStatus"],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.order.count({ where: { deletedAt: { not: null } } }),
+  ]);
+
+  const byStatus: Record<string, number> = {
+    pending: 0,
+    processing: 0,
+    shipped: 0,
+    delivered: 0,
+    cancelled: 0,
+    refunded: 0,
+  };
+  let total = 0;
+  for (const item of statusGrouped) {
+    const key = item.status.toLowerCase();
+    byStatus[key] = item._count._all;
+    total += item._count._all;
+  }
+
+  const byPaymentStatus: Record<string, number> = {
+    pending: 0,
+    paid: 0,
+    failed: 0,
+    refunded: 0,
+    partially_refunded: 0,
+  };
+  for (const item of paymentStatusGrouped) {
+    const key = item.paymentStatus.toLowerCase();
+    byPaymentStatus[key] = item._count._all;
+  }
+
+  return {
+    ...byStatus,
+    byStatus,
+    byPaymentStatus,
+    deleted,
+    total,
+  };
+}
+
 export async function listOrders(query: {
   page?: string;
   limit?: string;
@@ -300,43 +351,47 @@ export async function createAdminOrder(input: {
   const customerEmail = customer?.email ?? input.customerEmail?.trim();
   if (!customerName || !customerEmail) throw new AppError("Customer name and email are required.", 400);
 
-  const order = await prisma.order.create({
-    data: {
-      orderNumber: generateOrderNumber(),
-      customerId: customer?.id ?? null,
-      customerName,
-      customerEmail,
-      customerPhone: customer?.phone ?? input.customerPhone ?? null,
-      companyName: input.companyName ?? null,
-      shippingAddress: (input.shippingAddress ?? {}) as Prisma.InputJsonValue,
-      countryId: country.id,
-      currencyId: country.currencyId,
-      subtotal,
-      discount,
-      shippingCharge,
-      shippingZoneId: input.shippingZoneId ?? null,
-      total,
-      status: input.isTest ? "PENDING" : "CONFIRMED",
-      paymentStatus: "PENDING",
-      isTest: Boolean(input.isTest),
-      notes: input.notes ? (input.isTest ? `[Test order] ${input.notes}` : `[Manual admin order] ${input.notes}`) : (input.isTest ? "Test order" : "Manual admin order"),
-      items: {
-        create: orderItems.map((item) => ({
-          productId: item.product.id,
-          variantId: item.variant?.id ?? null,
-          title: item.variant?.title ?? item.product.title,
-          sku: item.variant?.sku ?? item.product.sku,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total,
-          warehouseId: item.warehouseId,
-        })),
+  const order = await prisma.$transaction(async (tx) => {
+    const createdOrder = await tx.order.create({
+      data: {
+        orderNumber: generateOrderNumber(),
+        customerId: customer?.id ?? null,
+        customerName,
+        customerEmail,
+        customerPhone: customer?.phone ?? input.customerPhone ?? null,
+        companyName: input.companyName ?? null,
+        shippingAddress: (input.shippingAddress ?? {}) as Prisma.InputJsonValue,
+        countryId: country.id,
+        currencyId: country.currencyId,
+        subtotal,
+        discount,
+        shippingCharge,
+        shippingZoneId: input.shippingZoneId ?? null,
+        total,
+        status: input.isTest ? "PENDING" : "CONFIRMED",
+        paymentStatus: "PENDING",
+        isTest: Boolean(input.isTest),
+        notes: input.notes ? (input.isTest ? `[Test order] ${input.notes}` : `[Manual admin order] ${input.notes}`) : (input.isTest ? "Test order" : "Manual admin order"),
+        items: {
+          create: orderItems.map((item) => ({
+            productId: item.product.id,
+            variantId: item.variant?.id ?? null,
+            title: item.variant?.title ?? item.product.title,
+            sku: item.variant?.sku ?? item.product.sku,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total,
+            warehouseId: item.warehouseId,
+          })),
+        },
       },
-    },
-    include: { items: { include: { product: true, variant: true } }, country: true, currency: true },
-  });
+      include: { items: { include: { product: true, variant: true } }, country: true, currency: true },
+    });
 
-  await reserveOrderInventory(order.id);
+    await reserveOrderInventory(createdOrder.id, tx);
+
+    return createdOrder;
+  });
 
   import("../notifications/notifications.service").then(({ notificationsService }) => {
     notificationsService.dispatchNotification("ORDER_PLACED", {
@@ -357,13 +412,17 @@ export const updateStatus = async (id: string, status: string) => {
   const existing = await prisma.order.findUnique({ where: { id }, include: { items: true, country: true, currency: true } });
   if (!existing) throw new AppError("Order not found.", 404);
   
-  const updated = await prisma.order.update({ where: { id }, data: { status: status as never } });
-  
-  if (status === "SHIPPED" && existing.status !== "SHIPPED") {
-    await commitOrderReservation(id);
-  } else if (status === "CANCELLED" && existing.status !== "CANCELLED") {
-    await releaseOrderReservation(id);
-  }
+  const updated = await prisma.$transaction(async (tx) => {
+    const res = await tx.order.update({ where: { id }, data: { status: status as never } });
+    
+    if (status === "SHIPPED" && existing.status !== "SHIPPED") {
+      await commitOrderReservation(id, tx);
+    } else if (status === "CANCELLED" && existing.status !== "CANCELLED") {
+      await releaseOrderReservation(id, tx);
+    }
+
+    return res;
+  });
 
   if (existing.status !== status) {
     if (status === "CONFIRMED") {
@@ -454,65 +513,69 @@ export async function shipOrder(id: string, data: { shippingProvider: string; tr
     throw new AppError("Cannot ship. Payment must be PAID for online prepaid orders.", 400);
   }
 
-  await commitOrderReservation(id);
+  const updated = await prisma.$transaction(async (tx) => {
+    await commitOrderReservation(id, tx);
 
-  const updated = await prisma.order.update({
-    where: { id },
-    data: {
-      status: "SHIPPED",
-      shippingProvider: data.shippingProvider,
-      trackingNumber: data.trackingNumber,
-    },
-  });
+    const updatedOrder = await tx.order.update({
+      where: { id },
+      data: {
+        status: "SHIPPED",
+        shippingProvider: data.shippingProvider,
+        trackingNumber: data.trackingNumber,
+      },
+    });
 
-  const shipments = await prisma.shipment.findMany({
-    where: { orderId: id },
-  });
+    const shipments = await tx.shipment.findMany({
+      where: { orderId: id },
+    });
 
-  if (shipments.length > 0) {
-    for (const shipment of shipments) {
-      await prisma.shipment.update({
-        where: { id: shipment.id },
-        data: {
-          status: "LABEL_GENERATED",
-          trackingNumber: data.trackingNumber,
-          awbNumber: data.trackingNumber,
-        },
-      });
+    if (shipments.length > 0) {
+      for (const shipment of shipments) {
+        await tx.shipment.update({
+          where: { id: shipment.id },
+          data: {
+            status: "LABEL_GENERATED",
+            trackingNumber: data.trackingNumber,
+            awbNumber: data.trackingNumber,
+          },
+        });
 
-      await prisma.shipmentEvent.create({
-        data: {
-          shipmentId: shipment.id,
-          status: "LABEL_GENERATED",
-          location: "Warehouse",
-          description: `Shipment marked as shipped via ${data.shippingProvider} with tracking number ${data.trackingNumber}.`,
-        },
-      });
-    }
-  } else {
-    const provider = await prisma.shippingProvider.findFirst({
-      where: { displayName: data.shippingProvider },
-    }) || await prisma.shippingProvider.findFirst();
+        await tx.shipmentEvent.create({
+          data: {
+            shipmentId: shipment.id,
+            status: "LABEL_GENERATED",
+            location: "Warehouse",
+            description: `Shipment marked as shipped via ${data.shippingProvider} with tracking number ${data.trackingNumber}.`,
+          },
+        });
+      }
+    } else {
+      const provider = await tx.shippingProvider.findFirst({
+        where: { displayName: data.shippingProvider },
+      }) || await tx.shippingProvider.findFirst();
 
-    if (provider) {
-      await prisma.shipment.create({
-        data: {
-          orderId: id,
-          providerId: provider.id,
-          status: "LABEL_GENERATED",
-          trackingNumber: data.trackingNumber,
-          awbNumber: data.trackingNumber,
-          events: {
-            create: {
-              status: "LABEL_GENERATED",
-              location: "Warehouse",
-              description: `Shipment created and marked as shipped via ${data.shippingProvider} with tracking number ${data.trackingNumber}.`,
+      if (provider) {
+        await tx.shipment.create({
+          data: {
+            orderId: id,
+            providerId: provider.id,
+            status: "LABEL_GENERATED",
+            trackingNumber: data.trackingNumber,
+            awbNumber: data.trackingNumber,
+            events: {
+              create: {
+                status: "LABEL_GENERATED",
+                location: "Warehouse",
+                description: `Shipment created and marked as shipped via ${data.shippingProvider} with tracking number ${data.trackingNumber}.`,
+              },
             },
           },
-        },
-      });
+        });
+      }
     }
-  }
+
+    return updatedOrder;
+  });
 
   import("../notifications/notifications.service").then(({ notificationsService }) => {
     notificationsService.dispatchNotification("ORDER_SHIPPED", {
@@ -541,39 +604,43 @@ export async function deliverOrder(id: string) {
     ? "PAID"
     : undefined;
 
-  const updated = await prisma.order.update({
-    where: { id },
-    data: { 
-      status: "DELIVERED",
-      ...(nextPaymentStatus && { paymentStatus: nextPaymentStatus }),
-    },
-  });
+  const updated = await prisma.$transaction(async (tx) => {
+    const updatedOrder = await tx.order.update({
+      where: { id },
+      data: { 
+        status: "DELIVERED",
+        ...(nextPaymentStatus && { paymentStatus: nextPaymentStatus }),
+      },
+    });
 
-  const shipments = await prisma.shipment.findMany({
-    where: { orderId: id },
-  });
+    const shipments = await tx.shipment.findMany({
+      where: { orderId: id },
+    });
 
-  if (shipments.length > 0) {
-    for (const shipment of shipments) {
-      await prisma.shipment.update({
-        where: { id: shipment.id },
-        data: { status: "DELIVERED" },
-      });
+    if (shipments.length > 0) {
+      for (const shipment of shipments) {
+        await tx.shipment.update({
+          where: { id: shipment.id },
+          data: { status: "DELIVERED" },
+        });
 
-      await prisma.shipmentEvent.deleteMany({
-        where: { shipmentId: shipment.id },
-      });
+        await tx.shipmentEvent.deleteMany({
+          where: { shipmentId: shipment.id },
+        });
 
-      await prisma.shipmentEvent.create({
-        data: {
-          shipmentId: shipment.id,
-          status: "DELIVERED",
-          location: "Destination",
-          description: "Shipment delivered successfully. Signed by recipient.",
-        },
-      });
+        await tx.shipmentEvent.create({
+          data: {
+            shipmentId: shipment.id,
+            status: "DELIVERED",
+            location: "Destination",
+            description: "Shipment delivered successfully. Signed by recipient.",
+          },
+        });
+      }
     }
-  }
+
+    return updatedOrder;
+  });
 
   import("../notifications/notifications.service").then(({ notificationsService }) => {
     notificationsService.createNotification({

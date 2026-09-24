@@ -2,7 +2,7 @@
 
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { StatCard, AdminStatsGrid, DataTable, StatusBadge, Column } from "@/components/admin/AdminComponents";
-import { useAdminOrders, useAdminProducts, useAdminQuotes, useAdminInventory, useAdminInventoryDashboard, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
+import { useAdminOrders, useAdminProducts, useAdminProductCounts, useAdminQuotes, useAdminInventory, useAdminInventoryDashboard, useOrderAnalytics } from "@/hooks/admin/useAdminHooks";
 import { Package, ShoppingCart, MessageSquare, Warehouse, ArrowRight, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import {
@@ -31,7 +31,7 @@ const PIE_COLORS = ["#E31E24", "#111111", "#6B6B6B", "#B5151B", "#9A9A9A", "#D4D
 
 export default function DashboardPage() {
   const { data: orders, isLoading: ordersLoading } = useAdminOrders({ limit: 5 } as never);
-  const { data: products, isLoading: productsLoading } = useAdminProducts({ limit: 1 });
+  const { data: productCounts, isLoading: productsLoading } = useAdminProductCounts();
   const { data: quotes, isLoading: quotesLoading } = useAdminQuotes({ page: 1 });
   const { data: inventory, isLoading: inventoryLoading } = useAdminInventory({ status: "LOW_STOCK", limit: 6 } as never);
   const { data: inventorySummary, isLoading: inventorySummaryLoading } = useAdminInventoryDashboard();
@@ -42,7 +42,7 @@ export default function DashboardPage() {
       {/* Stat Cards */}
       <AdminStatsGrid
         stats={[
-          { title: "Total Products", value: products?.pagination?.total ?? "—", icon: <Package size={18} />, isLoading: productsLoading },
+          { title: "Total Products", value: productCounts?.total ?? "—", icon: <Package size={18} />, isLoading: productsLoading },
           { title: "Total Orders", value: orders?.pagination?.total ?? analytics?.totals?.totalOrders ?? "—", icon: <ShoppingCart size={18} />, isLoading: ordersLoading, color: "bg-blue-600" },
           { title: "Pending Quotes", value: quotes?.pagination?.total ?? "—", icon: <MessageSquare size={18} />, isLoading: quotesLoading, color: "bg-orange-500" },
           { title: "Low Stock Items", value: inventorySummary?.totals?.lowStockCount ?? "—", icon: <Warehouse size={18} />, isLoading: inventorySummaryLoading, color: "bg-red-500" }

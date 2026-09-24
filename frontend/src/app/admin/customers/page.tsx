@@ -40,6 +40,7 @@ import {
   useAdminCountries,
   useAdminCustomerRoles,
   useAdminCustomers,
+  useAdminCustomerCounts,
   useAdminTiers,
   useApproveCustomer,
   useRejectCustomer,
@@ -153,9 +154,7 @@ export default function AdminCustomersPage() {
   const customers = (totalResponse?.data ?? []) as CustomerRow[];
   const pagination = totalResponse?.pagination ?? { page, limit, total: 0, totalPages: 1 };
 
-  const activeCountQuery = useAdminCustomers({ page: 1, limit: 1, status: "ACTIVE" });
-  const pendingCountQuery = useAdminCustomers({ page: 1, limit: 1, approvalStatus: "PENDING_APPROVAL" });
-  const wholesaleCountQuery = useAdminCustomers({ page: 1, limit: 1, customerType: "WHOLESALE" });
+  const { data: customerCounts, isLoading: customerCountsLoading } = useAdminCustomerCounts();
 
   const { data: customerRoles = [] } = useAdminCustomerRoles();
   const { data: tiers = [] } = useAdminTiers();
@@ -164,10 +163,10 @@ export default function AdminCustomersPage() {
   const rejectCustomer = useRejectCustomer();
 
   const totals = {
-    total: Number(pagination.total ?? 0),
-    active: Number((activeCountQuery.data as CustomerListResponse | undefined)?.pagination?.total ?? 0),
-    pending: Number((pendingCountQuery.data as CustomerListResponse | undefined)?.pagination?.total ?? 0),
-    wholesale: Number((wholesaleCountQuery.data as CustomerListResponse | undefined)?.pagination?.total ?? 0),
+    total: Number(customerCounts?.total ?? pagination.total ?? 0),
+    active: Number(customerCounts?.active ?? 0),
+    pending: Number(customerCounts?.pending ?? 0),
+    wholesale: Number(customerCounts?.wholesale ?? 0),
   };
 
   useEffect(() => {
@@ -460,10 +459,10 @@ export default function AdminCustomersPage() {
 
         <AdminStatsGrid
           stats={[
-            { title: "Total Customers", value: totals.total, subtitle: "All customer records", icon: <Users size={18} />, isLoading: customerQuery.isLoading },
-            { title: "Active Accounts", value: totals.active, subtitle: "Currently enabled", icon: <Shield size={18} />, color: "bg-emerald-600", isLoading: customerQuery.isLoading },
-            { title: "Pending Approval", value: totals.pending, subtitle: "Wholesale accounts waiting", icon: <UserCog size={18} />, color: "bg-amber-600", isLoading: customerQuery.isLoading },
-            { title: "Wholesale Customers", value: totals.wholesale, subtitle: "Sales-focused accounts", icon: <Store size={18} />, color: "bg-sky-600", isLoading: customerQuery.isLoading }
+            { title: "Total Customers", value: totals.total, subtitle: "All customer records", icon: <Users size={18} />, isLoading: customerCountsLoading },
+            { title: "Active Accounts", value: totals.active, subtitle: "Currently enabled", icon: <Shield size={18} />, color: "bg-emerald-600", isLoading: customerCountsLoading },
+            { title: "Pending Approval", value: totals.pending, subtitle: "Wholesale accounts waiting", icon: <UserCog size={18} />, color: "bg-amber-600", isLoading: customerCountsLoading },
+            { title: "Wholesale Customers", value: totals.wholesale, subtitle: "Sales-focused accounts", icon: <Store size={18} />, color: "bg-sky-600", isLoading: customerCountsLoading }
           ]}
         />
 

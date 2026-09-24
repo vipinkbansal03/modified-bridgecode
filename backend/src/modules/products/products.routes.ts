@@ -7,6 +7,7 @@ const router = Router();
 router.use(protect);
 
 router.get("/", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.list);
+router.get("/stats/counts", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.getCounts);
 router.post("/", requirePermission("products.create"), C.create);
 router.put("/reorder", requirePermission("products.update", "products.manage"), C.reorder);
 router.post("/bulk", requirePermission("products.update", "products.delete", "products.manage"), C.bulkUpdate);
@@ -15,6 +16,7 @@ router.get("/export", requirePermission("products.view", "products.create", "pro
 router.get("/sample-template", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.downloadSampleTemplate);
 router.post("/import/preview", requirePermission("products.create"), upload.single("file"), C.previewImport);
 router.get("/variants", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariants);
+router.get("/variants/stats/counts", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.getVariantCounts);
 router.post("/variants/bulk/permanent", requirePermission("products.delete", "products.manage"), C.bulkPermanentDeleteVariants);
 router.get("/attribute-mappings/sample-template", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.downloadCatalogAttributeMappingsSampleTemplate);
 router.post("/attribute-mappings/preview", requirePermission("products.update", "products.create"), upload.single("file"), C.previewCatalogAttributeMappingsImport);

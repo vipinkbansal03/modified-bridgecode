@@ -7,6 +7,11 @@ import { prisma } from "../../config/database";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => { const r = await S.listOrders(req.query as never); return ApiResponse.paginated(res, "Orders.", r.data, { page: r.page, limit: r.limit, total: r.total }); });
 
+export const getCounts = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const counts = await S.getOrderCounts();
+  return ApiResponse.success(res, "Order counts fetched.", counts);
+});
+
 export const create = asyncHandler(async (req: AuthRequest, res: Response) => {
   const order = await S.createAdminOrder(req.body);
   await prisma.activityLog.create({

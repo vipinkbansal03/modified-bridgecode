@@ -15,6 +15,16 @@ export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
   });
 });
 
+export const getCounts = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const counts = await ProductService.getProductCounts();
+  return ApiResponse.success(res, "Product counts fetched.", counts);
+});
+
+export const getVariantCounts = asyncHandler(async (_req: AuthRequest, res: Response) => {
+  const counts = await ProductService.getVariantCounts();
+  return ApiResponse.success(res, "Variant counts fetched.", counts);
+});
+
 export const getOne = asyncHandler(async (req: AuthRequest, res: Response) => {
   const product = await ProductService.getProduct(req.params.id as string);
   return ApiResponse.success(res, "Product fetched.", product);
@@ -341,8 +351,15 @@ export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) 
 });
 
 export const getVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
-  const variants = await ProductService.getProductVariants(req.params.id as string);
-  return ApiResponse.success(res, "Variants fetched.", variants);
+  const result = await ProductService.getProductVariants(req.params.id as string, req.query as never);
+  if (result && typeof result === "object" && "data" in result && "total" in result) {
+    return ApiResponse.paginated(res, "Variants fetched.", (result as any).data, {
+      page: (result as any).page,
+      limit: (result as any).limit,
+      total: (result as any).total,
+    });
+  }
+  return ApiResponse.success(res, "Variants fetched.", result);
 });
 
 export const createVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
