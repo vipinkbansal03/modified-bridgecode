@@ -764,7 +764,7 @@ export async function listProducts(query: ProductListQuery) {
         updatedAt: true,
         deletedAt: true,
         category: { select: { id: true, name: true, slug: true, status: true } },
-        media: { orderBy: { sortOrder: "asc" }, take: 1, select: { id: true, url: true, altText: true } },
+        media: { where: { type: "IMAGE" }, orderBy: { sortOrder: "asc" }, take: 1, select: { id: true, url: true, altText: true } },
         countries: { where: { enabled: true }, select: { countryId: true } },
         prices: {
           where: { status: "ACTIVE", variantId: null, deletedAt: null },
@@ -828,7 +828,7 @@ export async function listVariants(query: VariantListQuery) {
             title: true,
             sku: true,
             category: { select: { id: true, name: true, slug: true } },
-            media: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true, altText: true } },
+            media: { where: { type: "IMAGE" }, orderBy: { sortOrder: "asc" }, take: 1, select: { url: true, altText: true } },
           },
         },
         package: { select: { id: true, title: true } },
@@ -1604,7 +1604,7 @@ export async function duplicateProduct(id: string) {
       where: { id: product.id },
       include: {
         category: { select: { id: true, name: true, slug: true, status: true } },
-        media: { orderBy: { sortOrder: "asc" }, take: 1 },
+        media: { where: { type: "IMAGE" }, orderBy: { sortOrder: "asc" }, take: 1 },
         countries: { where: { enabled: true }, select: { countryId: true } },
         inventories: { select: { stock: true, reservedStock: true } },
         prices: { where: { status: "ACTIVE", variantId: null, deletedAt: null }, orderBy: [{ sellingPrice: "asc" }], take: 1, include: { country: true, currency: true } },
@@ -1629,7 +1629,7 @@ export async function reorderProducts(items: { id: string; sortOrder: number }[]
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
     include: {
       category: { select: { id: true, name: true, slug: true } },
-      media: { orderBy: { sortOrder: "asc" }, take: 1 },
+      media: { where: { type: "IMAGE" }, orderBy: { sortOrder: "asc" }, take: 1 },
       _count: { select: { variants: true } },
     },
   });

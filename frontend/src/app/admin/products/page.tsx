@@ -365,6 +365,29 @@ export default function AdminProductsPage() {
     return `${price.currency.symbol}${Number(price.sellingPrice).toFixed(2)}`;
   };
 
+function ProductThumbnail({ url, title }: { url?: string | null; title: string }) {
+  const [error, setError] = useState(false);
+
+  const isDocument = !url || url.toLowerCase().endsWith(".pdf") || url.toLowerCase().endsWith(".doc") || url.toLowerCase().endsWith(".docx");
+
+  if (isDocument || error) {
+    return (
+      <div className="flex h-10 w-10 flex-none items-center justify-center rounded bg-[#F2F2F2] text-[#9A9A9A] border border-[#E6E6E6]">
+        <Package size={16} />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt={title}
+      onError={() => setError(true)}
+      className="h-10 w-10 flex-none rounded object-cover border border-[#E6E6E6]"
+    />
+  );
+}
+
   const columns: Column<ProductRow>[] = useMemo(() => {
     const cols: Column<ProductRow>[] = [];
 
@@ -375,17 +398,7 @@ export default function AdminProductsPage() {
         width: "280px",
         render: (product) => (
           <div className="flex items-center gap-3 min-w-0">
-            {product.media[0] ? (
-              <img
-                src={product.media[0].url}
-                alt={product.title}
-                className="h-10 w-10 flex-none rounded object-cover border border-[#E6E6E6]"
-              />
-            ) : (
-              <div className="flex h-10 w-10 flex-none items-center justify-center rounded bg-[#F2F2F2] text-[#9A9A9A] border border-[#E6E6E6]">
-                <Package size={16} />
-              </div>
-            )}
+            <ProductThumbnail url={product.media?.[0]?.url} title={product.title} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate text-[13.5px] font-medium text-[#1A1A1A] block">
