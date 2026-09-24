@@ -26,7 +26,7 @@ import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearcha
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { ApiShippingBox } from "@/types/api.types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAdminProducts, useAdminCountries } from "@/hooks/admin/useAdminHooks";
+import { useAdminProducts, useAdminCountries, useAdminShippingProviders, useAdminShippingZones } from "@/hooks/admin/useAdminHooks";
 import { useAdminForm } from "@/hooks/admin/useAdminForm";
 import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/utils/cn";
@@ -63,6 +63,8 @@ export default function ShippingBoxesPage() {
     queryKey: ["admin-shipping-boxes"],
     queryFn: () => adminApi.get("/shipping/boxes").then((r) => r.data.data),
   });
+  const { data: providers = [] } = useAdminShippingProviders();
+  const { data: zones = [] } = useAdminShippingZones();
 
   const upsertMutation = useMutation({
     mutationFn: async (vars: { id?: string; data: Record<string, unknown> }) =>
@@ -396,6 +398,11 @@ export default function ShippingBoxesPage() {
           >
             <Truck size={15} />
             <span>Providers</span>
+            {providers.length > 0 && (
+              <span className="ml-1 rounded-full bg-[#F0F0F0] text-[#666] px-2 py-0.5 text-[11px] font-semibold">
+                {providers.length}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin/shipping/zones"
@@ -403,6 +410,11 @@ export default function ShippingBoxesPage() {
           >
             <Globe size={15} />
             <span>Zones</span>
+            {zones.length > 0 && (
+              <span className="ml-1 rounded-full bg-[#F0F0F0] text-[#666] px-2 py-0.5 text-[11px] font-semibold">
+                {zones.length}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin/shipping/boxes"

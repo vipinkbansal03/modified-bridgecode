@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
@@ -8,6 +8,8 @@ import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { sidebarSections } from "./data/sidebarNavigation";
 import { cn } from "@/utils/cn";
+
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const SIDEBAR_SCROLL_STORAGE_KEY = "admin_sidebar_scroll_top";
 const SIDEBAR_EXPANDED_STORAGE_KEY = "admin_sidebar_expanded_menus";
@@ -20,19 +22,22 @@ function getBestActiveHref(currentPath: string): string | null {
 
   sidebarSections.forEach((section) => {
     section.items.forEach((item) => {
-      const evaluateHref = (href?: string) => {
+      const evaluateHref = (href?: string, matchHrefs?: string[]) => {
         if (!href) return;
-        const isMatch =
-          currentPath === href ||
-          (href !== "/admin/dashboard" && currentPath.startsWith(href + "/"));
-        if (isMatch && href.length > bestLength) {
+        const allHrefs = [href, ...(matchHrefs || [])];
+        const isMatch = allHrefs.some(
+          (h) =>
+            currentPath === h ||
+            (h !== "/admin/dashboard" && currentPath.startsWith(h + "/"))
+        );
+        if (isMatch && href.length >= bestLength) {
           bestHref = href;
           bestLength = href.length;
         }
       };
 
-      evaluateHref(item.href);
-      item.subItems?.forEach((sub) => evaluateHref(sub.href));
+      evaluateHref(item.href, item.matchHrefs);
+      item.subItems?.forEach((sub) => evaluateHref(sub.href, sub.matchHrefs));
     });
   });
 
@@ -57,6 +62,19 @@ function getActiveParentMenus(currentPath: string): Record<string, boolean> {
   return activeMap;
 }
 
+function getInitialExpandedMenus(pathname: string): Record<string, boolean> {
+  let stored: Record<string, boolean> = {};
+  if (typeof window !== "undefined") {
+    try {
+      const raw = sessionStorage.getItem(SIDEBAR_EXPANDED_STORAGE_KEY);
+      if (raw) stored = JSON.parse(raw);
+    } catch {}
+  }
+  const merged = { ...stored, ...inMemoryExpandedMenus, ...getActiveParentMenus(pathname) };
+  inMemoryExpandedMenus = merged;
+  return merged;
+}
+
 interface AdminSidebarProps {
   open: boolean;
   onClose: () => void;
@@ -67,21 +85,27 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   const { user, hasPermission, logout } = useAdminAuth();
   const bestActiveHref = useMemo(() => getBestActiveHref(pathname), [pathname]);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
-    return getActiveParentMenus(pathname);
+    return getInitialExpandedMenus(pathname);
   });
   const navRef = useRef<HTMLElement | null>(null);
 
-  // Auto-expand menu folders that contain the active path on route change
-  useEffect(() => {
-    setExpandedMenus(getActiveParentMenus(pathname));
+  // Auto-expand menu folders that contain the active path on route change without collapsing existing open menus
+  useIsomorphicLayoutEffect(() => {
+    const activeParents = getActiveParentMenus(pathname);
+    if (Object.keys(activeParents).length > 0) {
+      setExpandedMenus((prev) => {
+        const next = { ...prev, ...activeParents };
+        inMemoryExpandedMenus = next;
+        return next;
+      });
+    }
   }, [pathname]);
 
-  // Restore scroll position on route change or initial load
-  useEffect(() => {
+  // Restore scroll position synchronously on route change or initial load before paint
+  useIsomorphicLayoutEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
 
-    // 1. Restore previous scroll position immediately
     let targetScroll = inMemorySidebarScrollTop;
     if (!targetScroll && typeof window !== "undefined") {
       try {
@@ -93,15 +117,10 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
     if (targetScroll > 0) {
       nav.scrollTop = targetScroll;
     } else {
-      // 2. Only reveal active element if there is no saved user scroll position
-      const frameId = requestAnimationFrame(() => {
-        const activeEl = nav.querySelector<HTMLElement>('[data-sidebar-active="true"]');
-        if (!activeEl) return;
-
+      const activeEl = nav.querySelector<HTMLElement>('[data-sidebar-active="true"]');
+      if (activeEl) {
         const navRect = nav.getBoundingClientRect();
         const activeRect = activeEl.getBoundingClientRect();
-
-        // Check if active item is outside current viewport with safe padding
         const isAbove = activeRect.top < navRect.top + 10;
         const isBelow = activeRect.bottom > navRect.bottom - 10;
 
@@ -112,9 +131,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
             sessionStorage.setItem(SIDEBAR_SCROLL_STORAGE_KEY, String(nav.scrollTop));
           } catch {}
         }
-      });
-
-      return () => cancelAnimationFrame(frameId);
+      }
     }
   }, [pathname]);
 
@@ -138,10 +155,19 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   };
 
   const toggleMenu = (label: string) => {
-    setExpandedMenus((prev) => ({
-      ...prev,
-      [label]: !prev[label],
-    }));
+    setExpandedMenus((prev) => {
+      const next = {
+        ...prev,
+        [label]: !prev[label],
+      };
+      inMemoryExpandedMenus = next;
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(SIDEBAR_EXPANDED_STORAGE_KEY, JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
   };
 
   // Filter sections and items based on permissions
@@ -192,7 +218,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
               MO
             </div>
             <div>
-              <span className="text-[14px] font-bold tracking-wide text-white animate-fade-in">
+              <span className="text-[14px] font-bold tracking-wide text-white">
                 ModOrtho
               </span>
               <div className="text-[10.5px] text-white/50 mt-0.5">Admin Console</div>

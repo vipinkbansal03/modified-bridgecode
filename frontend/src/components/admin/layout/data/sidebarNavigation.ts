@@ -36,6 +36,7 @@ export interface SidebarSubItem {
   label: string;
   href: string;
   permission?: string;
+  matchHrefs?: string[];
 }
 
 export interface SidebarItem {
@@ -43,6 +44,7 @@ export interface SidebarItem {
   href?: string;
   icon: any;
   permission?: string;
+  matchHrefs?: string[];
   subItems?: SidebarSubItem[];
 }
 
@@ -94,10 +96,10 @@ export const sidebarSections: SidebarSection[] = [
   {
     title: "Customers",
     items: [
-      { label: "Users & Customers", href: "/admin/customers", icon: Users, permission: "customers.view" },
+      { label: "Users & Customers", href: "/admin/customers", matchHrefs: ["/admin/users"], icon: Users, permission: "customers.view" },
       { label: "Inquiries", href: "/admin/contact-submissions", icon: MessageSquare, permission: "contactSubmissions.view" },
       { label: "Newsletter", href: "/admin/newsletter", icon: Newspaper, permission: "contactSubmissions.view" },
-      { label: "Roles & Permissions", href: "/admin/roles", icon: Shield, permission: "roles.view" },
+      { label: "Roles & Permissions", href: "/admin/roles", matchHrefs: ["/admin/customer-roles"], icon: Shield, permission: "roles.view" },
       {
         label: "Notifications",
         icon: Bell,

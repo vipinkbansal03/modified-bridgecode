@@ -1,16 +1,20 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
-import { Loader2, Plug } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Loader2, Plug, Truck, Globe, Package, ShieldCheck, MapPin } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, useToast, LoadingButton } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, useToast, LoadingButton } from "@/components/admin/AdminComponents";
 import {
   useAdminShippingProviders,
+  useAdminShippingZones,
   useUpsertShippingProvider,
   useToggleShippingProvider,
   useTestShippingConnection,
 } from "@/hooks/admin/useAdminHooks";
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/services/adminApi";
+import { ApiShippingBox } from "@/types/api.types";
 
 interface Provider {
   id: string;
@@ -62,6 +66,12 @@ export default function ShippingPage() {
   const { showToast, ToastComponent } = useToast();
 
   const { data: providers, isLoading } = useAdminShippingProviders();
+  const { data: zones = [] } = useAdminShippingZones();
+  const { data: boxes = [] } = useQuery<ApiShippingBox[]>({
+    queryKey: ["admin-shipping-boxes"],
+    queryFn: () => adminApi.get("/shipping/boxes").then((r) => r.data.data),
+  });
+
   const upsertMutation = useUpsertShippingProvider();
   const toggleMutation = useToggleShippingProvider();
   const testConnection = useTestShippingConnection();
@@ -69,6 +79,15 @@ export default function ShippingPage() {
   const providerList: Provider[] = providers ?? [];
   const [configs, setConfigs] = useState<Record<string, ProviderConfig>>({});
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
+
+  const totals = useMemo(() => {
+    return {
+      total: providerList.length,
+      active: providerList.filter((p) => p.isEnabled).length,
+      zones: (zones as any[]).length,
+      boxes: (boxes as any[]).length,
+    };
+  }, [providerList, zones, boxes]);
 
   const getConfig = (p: Provider): ProviderConfig => {
     if (configs[p.name]) return configs[p.name];
@@ -143,17 +162,53 @@ export default function ShippingPage() {
   return (
     <AdminLayout title="Shipping Providers" breadcrumb={[{ label: "Shipping", href: "/admin/shipping" }, { label: "Providers" }]}>
       <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2 border-b border-[#E6E6E6]">
-            <span className="border-b-2 border-[#E31E24] px-4 py-2 text-[13px] font-semibold text-[#111]">Providers</span>
-            <Link href="/admin/shipping/zones" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-              Zones
-            </Link>
-            <Link href="/admin/shipping/boxes" className="px-4 py-2 text-[13px] font-medium text-[#6B6B6B] hover:text-[#111]">
-              Boxes
-            </Link>
-          </div>
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          <Link
+            href="/admin/shipping"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <Truck size={15} />
+            <span>Providers</span>
+            <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+              {totals.total}
+            </span>
+          </Link>
+          <Link
+            href="/admin/shipping/zones"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Globe size={15} />
+            <span>Zones</span>
+            {totals.zones > 0 && (
+              <span className="ml-1 rounded-full bg-[#F0F0F0] text-[#666] px-2 py-0.5 text-[11px] font-semibold">
+                {totals.zones}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin/shipping/boxes"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Package size={15} />
+            <span>Boxes</span>
+            {totals.boxes > 0 && (
+              <span className="ml-1 rounded-full bg-[#F0F0F0] text-[#666] px-2 py-0.5 text-[11px] font-semibold">
+                {totals.boxes}
+              </span>
+            )}
+          </Link>
         </div>
+
+        {/* KPI Stats Grid */}
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Providers", value: totals.total, subtitle: "Configured integrations", icon: <Truck size={18} />, isLoading },
+            { title: "Active Carriers", value: totals.active, subtitle: "Enabled for shipping", icon: <ShieldCheck size={18} />, color: "bg-emerald-600", isLoading },
+            { title: "Configured Zones", value: totals.zones, subtitle: "Shipping rate zones", icon: <Globe size={18} />, color: "bg-sky-600", isLoading },
+            { title: "Package Boxes", value: totals.boxes, subtitle: "Box dimension presets", icon: <Package size={18} />, color: "bg-amber-600", isLoading }
+          ]}
+        />
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">

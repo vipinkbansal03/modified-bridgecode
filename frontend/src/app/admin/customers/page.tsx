@@ -42,6 +42,7 @@ import {
   useAdminCustomers,
   useAdminCustomerCounts,
   useAdminTiers,
+  useAdminUsers,
   useApproveCustomer,
   useRejectCustomer,
 } from "@/hooks/admin/useAdminHooks";
@@ -155,6 +156,7 @@ export default function AdminCustomersPage() {
   const pagination = totalResponse?.pagination ?? { page, limit, total: 0, totalPages: 1 };
 
   const { data: customerCounts, isLoading: customerCountsLoading } = useAdminCustomerCounts();
+  const { data: usersList = [] } = useAdminUsers();
 
   const { data: customerRoles = [] } = useAdminCustomerRoles();
   const { data: tiers = [] } = useAdminTiers();
@@ -453,6 +455,11 @@ export default function AdminCustomersPage() {
             >
               <UserCog size={15} />
               <span>Staff (Users)</span>
+              {usersList.length > 0 && (
+                <span className="ml-1 rounded-full bg-neutral-100 text-neutral-600 px-2 py-0.5 text-[11px] font-semibold">
+                  {usersList.length}
+                </span>
+              )}
             </Link>
           )}
         </div>

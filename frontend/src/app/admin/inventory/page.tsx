@@ -203,6 +203,8 @@ export default function InventoryPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [limit, setLimit] = useState(20);
+  const [alertPage, setAlertPage] = useState(1);
+  const [alertLimit, setAlertLimit] = useState(20);
   const [warehouseFilterId, setWarehouseFilterId] = useState("");
   const [productFilterId, setProductFilterId] = useState("");
   const [variantFilterId, setVariantFilterId] = useState("");
@@ -472,6 +474,108 @@ export default function InventoryPage() {
 
     return cols;
   }, [visibleColumns, canUpdate]);
+
+  const alertItems = (alerts.data ?? []) as InventoryRow[];
+  const totalAlertItems = alertItems.length;
+  const totalAlertPages = Math.max(1, Math.ceil(totalAlertItems / alertLimit));
+  const paginatedAlerts = useMemo(() => {
+    const start = (alertPage - 1) * alertLimit;
+    return alertItems.slice(start, start + alertLimit);
+  }, [alertItems, alertPage, alertLimit]);
+
+  const alertColumns = useMemo(() => {
+    const cols: Array<{
+      key: string;
+      label: string;
+      width?: string;
+      render: (row: InventoryRow) => React.ReactNode;
+    }> = [
+      {
+        key: "product",
+        label: "Product / Variant",
+        width: "280px",
+        render: (row) => (
+          <div className="py-0.5 min-w-0">
+            <div className="font-semibold text-[#1A1A1A] leading-snug truncate">
+              {row.product?.title || "Unknown product"}
+            </div>
+            <div className="mt-0.5 text-[12px] text-[#6B6B6B] leading-snug truncate">
+              {row.variant?.title || (row.variantId ? row.product?.brand : "Main Stock")}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "sku",
+        label: "SKU",
+        width: "180px",
+        render: (row) => (
+          <div className="space-y-0.5 min-w-0">
+            <div className="font-mono text-[12.5px] text-[#444] break-all font-medium leading-snug">
+              {row.variant?.sku || row.product?.sku || "—"}
+            </div>
+            <div className="text-[11px] text-[#9A9A9A]">
+              {row.product?.brand || "Modern Orthodontics"}
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "warehouse",
+        label: "Warehouse",
+        width: "160px",
+        render: (row) => (
+          <span className="text-[12.5px] text-[#6B6B6B]">
+            {row.warehouse?.name || "Global / Unassigned"}
+          </span>
+        ),
+      },
+      {
+        key: "stock",
+        label: "Current Stock",
+        width: "120px",
+        render: (row) => (
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-[#E31E24] text-[13.5px]">{row.stock}</span>
+            <span className="text-[11px] text-[#9A9A9A]">units</span>
+          </div>
+        ),
+      },
+      {
+        key: "threshold",
+        label: "Low Stock Alert At",
+        width: "140px",
+        render: (row) => (
+          <span className="text-[12.5px] font-medium text-[#1A1A1A]">
+            &le; {row.lowStockThreshold} units
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        width: "110px",
+        render: (row) => <StatusBadge status={row.status} />,
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "100px",
+        render: (row) => (
+          <button
+            type="button"
+            onClick={() => setHistoryRow(row)}
+            className="inline-flex h-7 items-center gap-1 rounded border border-[#E6E6E6] bg-white px-2 text-[11.5px] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer"
+            title="View stock history"
+          >
+            <History size={12} />
+            History
+          </button>
+        ),
+      },
+    ];
+    return cols;
+  }, []);
 
   const exportInventory = async (selectedOnly = false) => {
     try {
@@ -972,47 +1076,37 @@ export default function InventoryPage() {
 
         {/* TAB 2: LOW STOCK ALERTS */}
         {activeTab === "alerts" && (
-          <section className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-2xs">
-            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#E6E6E6] pb-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={17} className="text-[#E31E24]" />
-                <h2 className="text-[15px] font-bold text-[#1A1A1A]">Low Stock Alerts</h2>
+          <div className="space-y-4">
+            <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden shadow-2xs">
+              <DataTable<InventoryRow>
+                title="Low Stock Alerts"
+                columns={alertColumns}
+                data={paginatedAlerts}
+                rowKey="id"
+                isLoading={alerts.isLoading}
+                emptyMessage="No low stock alerts right now. All inventory items are within safe levels."
+                totalItems={totalAlertItems}
+                currentPage={alertPage}
+                pageSize={alertLimit}
+                totalPages={totalAlertPages}
+                onPageChange={setAlertPage}
+                onPageSizeChange={(size) => {
+                  setAlertLimit(size);
+                  setAlertPage(1);
+                }}
+                pageSizeOptions={[10, 20, 50, 100]}
+              />
+
+              <div className="border-t border-[#E6E6E6] px-4 py-3 bg-white">
+                <Pagination
+                  page={alertPage}
+                  totalPages={totalAlertPages}
+                  onPageChange={setAlertPage}
+                  alwaysShow={true}
+                />
               </div>
-              <span className="text-[12.5px] font-medium text-[#6B6B6B]">
-                {alerts.isLoading ? "Loading..." : `${(alerts.data ?? []).length} item${(alerts.data ?? []).length === 1 ? "" : "s"} below threshold`}
-              </span>
             </div>
-            {alerts.isLoading ? (
-              <div className="py-8 text-center text-[13px] text-[#9A9A9A]">Loading low stock alerts...</div>
-            ) : (alerts.data ?? []).length === 0 ? (
-              <div className="py-8 text-center text-[13px] text-[#9A9A9A]">No low stock alerts right now. All inventory items are within safe levels.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead className="bg-[#F8F8F8] text-[#9A9A9A] border-b border-[#E6E6E6]">
-                    <tr>
-                      <th className="px-4 py-2.5 text-left font-semibold">Product</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">Variant</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">Stock</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">Threshold</th>
-                      <th className="px-4 py-2.5 text-left font-semibold">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E6E6E6]">
-                    {(alerts.data ?? []).map((item: InventoryRow) => (
-                      <tr key={item.id} className="hover:bg-[#FAFAFA] transition-colors">
-                        <td className="px-4 py-2.5 font-medium text-[#1A1A1A]">{item.product?.title ?? "Unknown product"}</td>
-                        <td className="px-4 py-2.5 text-[#555]">{item.variant?.title ?? "Main stock"}</td>
-                        <td className="px-4 py-2.5 font-semibold text-[#E31E24]">{item.stock}</td>
-                        <td className="px-4 py-2.5 text-[#555]">{item.lowStockThreshold}</td>
-                        <td className="px-4 py-2.5"><StatusBadge status={item.status} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          </div>
         )}
 
         {/* TAB 3: RECENT STOCK ACTIVITY */}

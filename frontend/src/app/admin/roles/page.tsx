@@ -19,7 +19,7 @@ import {
 } from "@/components/admin/AdminComponents";
 import { AdminRowActions } from "@/components/admin/AdminRowActions";
 import { Modal } from "@/components/ui/Modal";
-import { useAdminRoles } from "@/hooks/admin/useAdminHooks";
+import { useAdminRoles, useAdminCustomerRoles } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import {
   ALL_PERMISSIONS,
@@ -64,6 +64,7 @@ export default function RolesPage() {
 
   const { showToast, ToastComponent } = useToast();
   const { data: rolesData = [], isLoading, refetch, isFetching } = useAdminRoles();
+  const { data: customerRoles = [] } = useAdminCustomerRoles();
   const roles = (rolesData || []) as Role[];
 
   // Table filtering & sorting states
@@ -401,6 +402,11 @@ export default function RolesPage() {
           >
             <Users size={15} />
             <span>Customer Roles</span>
+            {customerRoles.length > 0 && (
+              <span className="ml-1 rounded-full bg-[#F0F0F0] text-[#666] px-2 py-0.5 text-[11px] font-semibold">
+                {customerRoles.length}
+              </span>
+            )}
           </Link>
         </div>
 

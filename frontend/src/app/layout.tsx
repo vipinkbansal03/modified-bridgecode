@@ -13,6 +13,7 @@ import { DeliveryAddressProvider } from "@/contexts/DeliveryAddressContext";
 import { QuoteCartUIProvider } from "@/contexts/QuoteCartUIContext";
 import { buildCmsMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
+import { ChunkErrorRecovery } from "@/components/common/ChunkErrorRecovery";
 import "react-toastify/dist/ReactToastify.css";
 import "@/styles/globals.css";
 
@@ -35,6 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${poppins.variable}`} data-scroll-behavior="smooth">
       <body className="font-sans antialiased">
+        <ChunkErrorRecovery />
         <ReactQueryProvider>
           <LanguageProvider>
             <CurrencyProvider>

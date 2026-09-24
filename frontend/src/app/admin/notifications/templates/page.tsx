@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   useNotificationTemplates,
@@ -12,9 +13,10 @@ import {
 import {
   AdminSelect,
   AdminInput,
-  AdminTextarea
+  AdminTextarea,
+  AdminStatsGrid,
 } from "@/components/admin/AdminComponents";
-import { Mail, MessageSquare, Smartphone, Bell, Save, CheckCircle, Eye, RefreshCw, Info } from "lucide-react";
+import { Mail, MessageSquare, Smartphone, Bell, Save, CheckCircle, Eye, RefreshCw, Info, Sliders, History, FileText, Layers } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 
 const CHANNELS = [
@@ -283,39 +285,61 @@ export default function TemplateManagerPage() {
 
   return (
     <AdminLayout title="Template Manager" breadcrumb={[{ label: "Notifications", href: "/admin/notifications" }, { label: "Message Templates" }]}>
-      <div className="min-h-[calc(100vh-64px)] overflow-hidden flex flex-col p-6 bg-[#FDFDFD] space-y-6">
+      <div className="space-y-5">
         
-        {/* Header Banner */}
-        <div className="bg-white border border-[#E6E6E6] rounded-lg p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
-          <div>
-            <div className="text-[11px] font-bold tracking-widest text-[#7A7A7A] uppercase">CENTRALIZED TEMPLATES</div>
-            <h1 className="text-xl font-semibold mt-1 text-[#1A1A1A]">Notification Template Manager</h1>
-            <p className="text-[13px] text-[#6B6B6B] mt-1.5 max-w-xl">Every editable system notification template lives here, so Super Admin can update wording without code changes.</p>
-          </div>
-          <div className="flex gap-4">
-            <div className="bg-[#FAFAFA] border border-[#E6E6E6] px-5 py-3 rounded text-center min-w-[100px]">
-              <div className="text-[10px] text-[#7A7A7A] font-bold uppercase tracking-wider">Total Templates</div>
-              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">{templates.length}</div>
-            </div>
-            <div className="bg-[#FAFAFA] border border-[#E6E6E6] px-5 py-3 rounded text-center min-w-[100px]">
-              <div className="text-[10px] text-[#7A7A7A] font-bold uppercase tracking-wider">Notification Types</div>
-              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">{uniqueTypes.length}</div>
-            </div>
-            <div className="bg-[#FAFAFA] border border-[#E6E6E6] px-5 py-3 rounded text-center min-w-[100px]">
-              <div className="text-[10px] text-[#7A7A7A] font-bold uppercase tracking-wider">Channels</div>
-              <div className="text-[20px] font-bold text-[#1A1A1A] mt-0.5">{CHANNELS.length}</div>
-            </div>
-          </div>
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          <Link
+            href="/admin/notifications/manager"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Sliders size={15} />
+            <span>Routing Rules</span>
+            {configs.length > 0 && (
+              <span className="ml-1 rounded-full bg-neutral-100 text-neutral-600 px-2 py-0.5 text-[11px] font-semibold">
+                {configs.length}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin/notifications"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <History size={15} />
+            <span>History Logs</span>
+          </Link>
+          <Link
+            href="/admin/notifications/templates"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <FileText size={15} />
+            <span>Template Studio</span>
+            {templates.length > 0 && (
+              <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+                {templates.length}
+              </span>
+            )}
+          </Link>
         </div>
 
+        {/* KPI Stats Grid */}
+        <AdminStatsGrid
+          stats={[
+            { title: "Total Templates", value: templates.length, subtitle: "Registered message copies", icon: <FileText size={18} />, isLoading },
+            { title: "Notification Types", value: uniqueTypes.length, subtitle: "Distinct workflow events", icon: <Sliders size={18} />, color: "bg-emerald-600", isLoading },
+            { title: "Channels", value: CHANNELS.length, subtitle: "Email, SMS, WhatsApp, Push", icon: <Smartphone size={18} />, color: "bg-sky-600", isLoading },
+            { title: "Target Roles", value: roles.length + 1, subtitle: "Global & audience overrides", icon: <Layers size={18} />, color: "bg-amber-600", isLoading },
+          ]}
+        />
+
         {/* Tab Headers */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E6E6E6] gap-3">
-          <div className="flex">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-lg shadow-2xs gap-3">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setActiveTab("templates")}
               className={`px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
                 activeTab === "templates"
-                  ? "border-[#1A1A1A] text-[#1A1A1A]"
+                  ? "border-[#E31E24] text-[#E31E24]"
                   : "border-transparent text-[#9A9A9A] hover:text-[#1A1A1A]"
               }`}
             >
@@ -325,7 +349,7 @@ export default function TemplateManagerPage() {
               onClick={() => setActiveTab("email-layouts")}
               className={`px-4 py-2.5 text-[13px] font-bold uppercase tracking-wider border-b-2 transition-colors cursor-pointer ${
                 activeTab === "email-layouts"
-                  ? "border-[#1A1A1A] text-[#1A1A1A]"
+                  ? "border-[#E31E24] text-[#E31E24]"
                   : "border-transparent text-[#9A9A9A] hover:text-[#1A1A1A]"
               }`}
             >
@@ -449,9 +473,9 @@ export default function TemplateManagerPage() {
                           key={role.key}
                           type="button"
                           onClick={() => setSelectedRole(role.key)}
-                          className={`px-3 py-1.5 text-[11px] font-bold uppercase rounded border transition-all ${
+                          className={`px-3 py-1.5 text-[11px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${
                             selectedRole === role.key
-                              ? "bg-[#1A1A1A] text-white border-transparent"
+                              ? "bg-[#E31E24] text-white border-[#E31E24] shadow-xs"
                               : "bg-white text-[#6B6B6B] border-[#E6E6E6] hover:bg-[#FAFAFA]"
                           }`}
                         >
@@ -519,7 +543,7 @@ export default function TemplateManagerPage() {
                     <div className="flex justify-end pt-3">
                       <button
                         onClick={handleSaveTemplate}
-                        className="flex items-center gap-2 px-6 py-2 bg-[#1A1A1A] hover:bg-[#333] text-[11px] font-bold uppercase tracking-wider text-white rounded transition-colors"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#E31E24] hover:bg-[#C41217] text-[12px] font-semibold text-white rounded-lg shadow-2xs transition-colors cursor-pointer"
                       >
                         <Save className="w-3.5 h-3.5" />
                         Save Template
@@ -717,7 +741,7 @@ export default function TemplateManagerPage() {
               <button
                 onClick={handleSaveEmailLayout}
                 disabled={savingLayout}
-                className="flex items-center gap-2 px-6 py-2 bg-[#1A1A1A] hover:bg-[#333] text-white text-[11px] font-bold uppercase tracking-wider rounded transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#E31E24] hover:bg-[#C41217] text-white text-[12px] font-semibold rounded-lg shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {savingLayout ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 {savingLayout ? "Saving..." : "Save Layout"}

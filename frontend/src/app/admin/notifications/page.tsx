@@ -22,12 +22,15 @@ const STATUSES = [
   { value: "FAILED", label: "Failed" },
 ];
 
+import Link from "next/link";
+import { Sliders, History, FileText } from "lucide-react";
+
 export default function AdminNotificationsPage() {
   const [search, setSearch] = useState("");
   const [channel, setChannel] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
-  const [limit] = useState(20);
+  const [limit, setLimit] = useState(20);
   const { showToast, ToastComponent } = useToast();
 
   const { data, isLoading } = useNotificationLogs({
@@ -84,12 +87,12 @@ export default function AdminNotificationsPage() {
   };
 
   const getChannelBadge = (ch: string) => {
-    const base = "inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border tracking-wider uppercase";
+    const base = "inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-semibold border tracking-wide uppercase";
     switch (ch) {
       case "email":
         return `${base} border-blue-200 bg-blue-50 text-blue-700`;
       case "whatsapp":
-        return `${base} border-[#CDEBE3] bg-[#EAF5EC] text-[#1D7A32]`;
+        return `${base} border-emerald-200 bg-emerald-50 text-emerald-700`;
       case "sms":
         return `${base} border-amber-200 bg-amber-50 text-amber-700`;
       case "push":
@@ -102,31 +105,52 @@ export default function AdminNotificationsPage() {
   };
 
   const getStatusBadge = (stat: string) => {
-    const base = "inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border tracking-wider uppercase";
+    const base = "inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-semibold border tracking-wide uppercase";
     switch (stat) {
       case "SENT":
-        return `${base} border-[#CDEBE3] bg-[#EAF5EC] text-[#1D7A32]`;
+        return `${base} border-emerald-200 bg-emerald-50 text-emerald-700`;
       case "FAILED":
-        return `${base} border-[#FBD6D6] bg-[#FEEFEF] text-[#D32F2F]`;
+        return `${base} border-red-200 bg-red-50 text-red-700`;
       case "PROCESSING":
         return `${base} border-blue-200 bg-blue-50 text-blue-700`;
       case "QUEUED":
-        return `${base} border-yellow-200 bg-yellow-50 text-yellow-700`;
+        return `${base} border-amber-200 bg-amber-50 text-amber-700`;
       default:
         return `${base} border-[#E6E6E6] bg-[#FAFAFA] text-[#6B6B6B]`;
     }
   };
 
   return (
-    <AdminLayout title="Notifications" breadcrumb={[{ label: "Notifications" }]}>
-      {ToastComponent}
-      <div className="bg-white min-h-[calc(100vh-64px)] rounded-tl-lg overflow-hidden flex flex-col p-6 bg-[#FDFDFD]">
-        
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-medium text-[#1A1A1A]">Delivery Logs</h1>
-            <p className="text-[13px] text-[#6B6B6B] mt-1">Review notification delivery logs, statuses, and recipient history.</p>
-          </div>
+    <AdminLayout title="Notifications" breadcrumb={[{ label: "Notifications", href: "/admin/notifications" }, { label: "History Logs" }]}>
+      <div className="space-y-5">
+        {/* Navigation Sub-Tabs */}
+        <div className="flex items-center gap-2 border-b border-[#E6E6E6] bg-white px-4 pt-2 rounded-t-lg shadow-2xs overflow-x-auto max-w-full scrollbar-thin">
+          <Link
+            href="/admin/notifications/manager"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <Sliders size={15} />
+            <span>Routing Rules</span>
+          </Link>
+          <Link
+            href="/admin/notifications"
+            className="flex items-center gap-2 border-b-2 border-[#E31E24] text-[#E31E24] px-3 pb-3 pt-1 text-[13.5px] font-semibold shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <History size={15} />
+            <span>History Logs</span>
+            {total > 0 && (
+              <span className="ml-1 rounded-full bg-[#E31E24]/10 text-[#E31E24] px-2 py-0.5 text-[11px] font-semibold">
+                {total}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin/notifications/templates"
+            className="flex items-center gap-2 border-b-2 border-transparent text-[#666] hover:border-[#CCC] hover:text-[#1A1A1A] px-3 pb-3 pt-1 text-[13.5px] font-medium shrink-0 whitespace-nowrap transition-colors cursor-pointer"
+          >
+            <FileText size={15} />
+            <span>Template Studio</span>
+          </Link>
         </div>
 
         {/* Toolbar & Filters */}

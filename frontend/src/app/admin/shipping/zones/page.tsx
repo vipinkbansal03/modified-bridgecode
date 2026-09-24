@@ -23,7 +23,8 @@ import {
 } from "@/components/admin/AdminComponents";
 import { AdminRowActions } from "@/components/admin/AdminRowActions";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import { useQuery } from "@tanstack/react-query";
 import {
   useAdminShippingProviders,
   useAdminShippingZones,
@@ -115,6 +116,10 @@ export default function ShippingZonesPage() {
 
   const { data: zones, isLoading: zonesLoading, refetch, isFetching } = useAdminShippingZones();
   const { data: providers = [] } = useAdminShippingProviders();
+  const { data: boxes = [] } = useQuery<any[]>({
+    queryKey: ["admin-shipping-boxes"],
+    queryFn: () => adminApi.get("/shipping/boxes").then((r) => r.data.data),
+  });
   const { data: countries = [] } = useAdminCountries();
   const createMutation = useCreateShippingZone();
   const updateMutation = useUpdateShippingZone();
@@ -392,6 +397,11 @@ export default function ShippingZonesPage() {
           >
             <Truck size={15} />
             <span>Providers</span>
+            {providers.length > 0 && (
+              <span className="ml-1 rounded-full bg-[#F0F0F0] text-[#666] px-2 py-0.5 text-[11px] font-semibold">
+                {providers.length}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin/shipping/zones"
@@ -409,6 +419,11 @@ export default function ShippingZonesPage() {
           >
             <Package size={15} />
             <span>Boxes</span>
+            {boxes.length > 0 && (
+              <span className="ml-1 rounded-full bg-[#F0F0F0] text-[#666] px-2 py-0.5 text-[11px] font-semibold">
+                {boxes.length}
+              </span>
+            )}
           </Link>
         </div>
 
