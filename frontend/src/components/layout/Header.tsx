@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { DeliveryAddressButton } from "@/components/ui/delivery/DeliveryAddressButton";
 import Link from "next/link";
-import { ChevronDown, ShoppingCart, Heart, Menu, X, MapPin } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { ChevronDown, ShoppingCart, Heart, Menu, X, MapPin, FileText, Truck, Award, PhoneCall, Clock, Mail, Download } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { MegaMenu } from "@/components/layout/MegaMenu";
 import { MobileMenu } from "@/components/layout/MobileMenu";
@@ -39,6 +40,7 @@ const navLabelKeys: Record<string, StaticMessageKey> = {
 };
 
 export function Header() {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [megaOpen, setMegaOpen] = useState(false);
   const [capsOpen, setCapsOpen] = useState(false);
@@ -167,6 +169,96 @@ export function Header() {
           "shadow-[0_1px_0_rgba(0,0,0,0.03),0_12px_28px_-8px_rgba(0,0,0,0.08)]",
       )}
     >
+      {/* Top Highlights Ribbon Bar */}
+      {trackingSettings?.highlights?.barEnabled !== false && (
+        <div className="hidden xl:block bg-[#F8F9FA] text-[#4B5563] text-[12px] font-medium border-b border-[#E5E7EB]">
+          <div className="mx-auto flex h-8 items-center justify-between px-4 sm:px-8 xl:px-10">
+            {/* Left: Contact Info & Delivery Guarantee */}
+            <div className="flex items-center gap-3.5">
+              {trackingSettings?.highlights?.contactEnabled !== false && (
+                <>
+                  <a
+                    href={`tel:${(trackingSettings?.highlights?.contactPhone || "1800 890 8022").replace(/\s+/g, "")}`}
+                    className="flex items-center gap-1.5 hover:text-[#E31E24] transition-colors"
+                  >
+                    <PhoneCall size={12.5} className="text-[#E31E24] stroke-[1.75]" />
+                    <span>{trackingSettings?.highlights?.contactPhone || "1800 890 8022"}</span>
+                  </a>
+
+                  {Boolean(trackingSettings?.highlights?.contactEmail) && (
+                    <>
+                      <span className="text-[#D1D5DB]">-</span>
+                      <a
+                        href={`mailto:${trackingSettings?.highlights?.contactEmail}`}
+                        className="flex items-center gap-1.5 hover:text-[#E31E24] transition-colors"
+                      >
+                        <Mail size={12.5} className="text-[#E31E24] stroke-[1.75]" />
+                        <span>{trackingSettings?.highlights?.contactEmail}</span>
+                      </a>
+                    </>
+                  )}
+                </>
+              )}
+
+              {trackingSettings?.highlights?.deliveryEnabled !== false && (
+                <>
+                  <span className="text-[#D1D5DB]">-</span>
+                  <div className="flex items-center gap-1.5">
+                    <Clock size={12.5} className="text-[#E31E24] stroke-[1.75]" />
+                    <span>{trackingSettings?.highlights?.deliveryDesc || "Max 8 Days, Min 4 Days"}</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Right: Free Shipping, Certifications & Catalogue */}
+            <div className="flex items-center gap-3.5">
+              {trackingSettings?.highlights?.freeShippingEnabled !== false && (
+                <Link
+                  href="/policies/shipping-policy"
+                  className="flex items-center gap-1.5 hover:text-[#E31E24] transition-colors"
+                >
+                  <Truck size={13} className="text-[#E31E24] stroke-[1.75]" />
+                  <span>
+                    {trackingSettings?.highlights?.freeShippingTitle || "Free Shipping"} {trackingSettings?.highlights?.freeShippingDesc || "Above INR 3000"}
+                  </span>
+                </Link>
+              )}
+
+              {trackingSettings?.highlights?.certificationsEnabled !== false && (
+                <>
+                  <span className="text-[#D1D5DB]">|</span>
+                  <Link
+                    href="/quality-certifications"
+                    className="flex items-center gap-1.5 hover:text-[#E31E24] transition-colors"
+                  >
+                    <Award size={13} className="text-[#E31E24] stroke-[1.75]" />
+                    <span>{trackingSettings?.highlights?.certificationsBadges || "ISO, CE, FDA"}</span>
+                  </Link>
+                </>
+              )}
+
+              {trackingSettings?.highlights?.catalogueEnabled !== false &&
+                Boolean(trackingSettings?.highlights?.cataloguePdfUrl) && (
+                  <>
+                    <span className="text-[#D1D5DB]">|</span>
+                    <a
+                      href={trackingSettings!.highlights!.cataloguePdfUrl!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download="Modern_Orthodontics_Product_Catalogue.pdf"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50/80 px-2.5 py-0.5 text-[11.5px] font-semibold text-[#E31E24] hover:bg-[#E31E24] hover:text-white transition-all shadow-2xs"
+                    >
+                      <Download size={11.5} />
+                      <span>{trackingSettings?.highlights?.catalogueTitle || "Product Catalogue"}</span>
+                    </a>
+                  </>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="border-b border-line">
         <div className="mx-auto px-4 sm:px-8 xl:px-10">
           {/* Top Header */}
@@ -299,13 +391,18 @@ export function Header() {
             </div>
           </div>
 
-          {/* Bottom Header */}
+          {/* Bottom Header Navigation */}
           <div className="hidden xl:flex items-center justify-center border-t border-line">
-            <ul className="hidden shrink-0 items-center gap-5 text-[15px] font-medium text-ink xl:flex 2xl:gap-7">
+            <ul className="flex items-center justify-center gap-7 2xl:gap-9 text-[14.5px] font-medium text-ink">
               <li className="shrink-0">
                 <Link
                   href="/"
-                  className="block whitespace-nowrap py-4 text-ink hover:text-[#E31E24] transition-colors"
+                  className={cn(
+                    "block whitespace-nowrap py-3.5 transition-colors border-b-2 hover:text-[#E31E24]",
+                    pathname === "/"
+                      ? "border-[#E31E24] font-semibold text-[#E31E24]"
+                      : "border-transparent text-ink"
+                  )}
                 >
                   {t("ui.nav.home")}
                 </Link>
@@ -313,7 +410,12 @@ export function Header() {
               <li className="shrink-0">
                 <Link
                   href="/products"
-                  className="block whitespace-nowrap py-4 text-ink hover:text-[#E31E24] transition-colors"
+                  className={cn(
+                    "block whitespace-nowrap py-3.5 transition-colors border-b-2 hover:text-[#E31E24]",
+                    pathname === "/products" || pathname?.startsWith("/products/")
+                      ? "border-[#E31E24] font-semibold text-[#E31E24]"
+                      : "border-transparent text-ink"
+                  )}
                 >
                   {t("ui.nav.products")}
                 </Link>
@@ -324,12 +426,19 @@ export function Header() {
                   onMouseEnter={() => setCapsOpen(true)}
                   onMouseLeave={() => setCapsOpen(false)}
                 >
-                  <span className="flex cursor-default items-center gap-1.5 whitespace-nowrap py-4">
+                  <span
+                    className={cn(
+                      "flex cursor-pointer items-center gap-1.5 whitespace-nowrap py-3.5 border-b-2 transition-colors",
+                      capabilitiesNav.some((link) => pathname === link.href || (link.href !== "/" && pathname?.startsWith(link.href)))
+                        ? "border-[#E31E24] font-semibold text-[#E31E24]"
+                        : "border-transparent text-ink hover:text-[#E31E24]"
+                    )}
+                  >
                     {t("ui.nav.capabilities")}
                     <ChevronDown size={11} className="opacity-60" />
                   </span>
                   {capsOpen && (
-                    <div className="absolute left-0 top-full z-50 w-[260px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full z-50 w-[260px] rounded-md border border-line bg-white p-3 shadow-[0_16px_32px_rgba(0,0,0,0.07)]">
                       {capabilitiesNav.map((link) => (
                         <Link
                           key={link.label}
@@ -343,16 +452,24 @@ export function Header() {
                   )}
                 </li>
               )}
-              {primaryNav.map((link) => (
-                <li key={link.label} className="shrink-0">
-                  <Link
-                    href={link.href}
-                    className="block whitespace-nowrap py-4 hover:text-brand"
-                  >
-                    {label(link.label)}
-                  </Link>
-                </li>
-              ))}
+              {primaryNav.map((link) => {
+                const isActive = pathname === link.href || (link.href !== "/" && pathname?.startsWith(link.href));
+                return (
+                  <li key={link.label} className="shrink-0">
+                    <Link
+                      href={link.href}
+                      className={cn(
+                        "block whitespace-nowrap py-3.5 transition-colors border-b-2 hover:text-[#E31E24]",
+                        isActive
+                          ? "border-[#E31E24] font-semibold text-[#E31E24]"
+                          : "border-transparent text-ink"
+                      )}
+                    >
+                      {label(link.label)}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

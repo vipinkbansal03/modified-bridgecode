@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Globe, Search, BarChart2, Megaphone, Share2, ShieldCheck, Code2, Cookie,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Scale, Info, ImageIcon,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Save, RefreshCw, Lock, Upload, Plus, Trash2, ArrowUp, ArrowDown, Scale, Info, ImageIcon, Sparkles, FileText, Truck, Clock, Award, PhoneCall,
 } from "lucide-react";
 import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
@@ -21,16 +21,17 @@ import { useAdminCountries, useAdminCmsPages } from "@/hooks/admin/useAdminHooks
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "general",      label: "General",          icon: Globe },
-  { id: "seo",          label: "SEO",               icon: Search },
-  { id: "analytics",    label: "Analytics",         icon: BarChart2 },
-  { id: "pixels",       label: "Pixels",            icon: Megaphone },
-  { id: "social",       label: "Social Media",      icon: Share2 },
-  { id: "verification", label: "Verification",      icon: ShieldCheck },
-  { id: "scripts",      label: "Custom Scripts",    icon: Code2 },
-  { id: "cookies",      label: "Cookie Consent",    icon: Cookie },
-  { id: "auth",         label: "Auth Pages",        icon: Lock },
-  { id: "tax",          label: "Tax & Compliance",  icon: Scale },
+  { id: "general",      label: "General",             icon: Globe },
+  { id: "highlights",   label: "Header & Highlights", icon: Sparkles },
+  { id: "seo",          label: "SEO",                  icon: Search },
+  { id: "analytics",    label: "Analytics",            icon: BarChart2 },
+  { id: "pixels",       label: "Pixels",               icon: Megaphone },
+  { id: "social",       label: "Social Media",         icon: Share2 },
+  { id: "verification", label: "Verification",         icon: ShieldCheck },
+  { id: "scripts",      label: "Custom Scripts",       icon: Code2 },
+  { id: "cookies",      label: "Cookie Consent",       icon: Cookie },
+  { id: "auth",         label: "Auth Pages",           icon: Lock },
+  { id: "tax",          label: "Tax & Compliance",     icon: Scale },
 ];
 
 type Setting = { id: string; key: string; value: string; group: string; label?: string | null; type: string; isSecret: boolean; isEnabled: boolean };
@@ -159,6 +160,24 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "general.favicon":         { group: "general",  type: "string" },
   "general.default_currency":{ group: "general",  type: "string" },
   "general.timezone":        { group: "general",  type: "string" },
+  // Header & Highlights
+  "highlights.bar_enabled":            { group: "highlights", type: "boolean" },
+  "highlights.free_shipping_enabled":  { group: "highlights", type: "boolean" },
+  "highlights.free_shipping_title":    { group: "highlights", type: "string" },
+  "highlights.free_shipping_desc":     { group: "highlights", type: "string" },
+  "highlights.delivery_enabled":       { group: "highlights", type: "boolean" },
+  "highlights.delivery_title":         { group: "highlights", type: "string" },
+  "highlights.delivery_desc":          { group: "highlights", type: "string" },
+  "highlights.catalogue_enabled":      { group: "highlights", type: "boolean" },
+  "highlights.catalogue_title":        { group: "highlights", type: "string" },
+  "highlights.catalogue_pdf_url":      { group: "highlights", type: "string" },
+  "highlights.catalogue_in_header":    { group: "highlights", type: "boolean" },
+  "highlights.certifications_enabled": { group: "highlights", type: "boolean" },
+  "highlights.certifications_title":   { group: "highlights", type: "string" },
+  "highlights.certifications_badges":  { group: "highlights", type: "string" },
+  "highlights.contact_enabled":        { group: "highlights", type: "boolean" },
+  "highlights.contact_phone":          { group: "highlights", type: "string" },
+  "highlights.contact_email":          { group: "highlights", type: "string" },
   // Tax & Compliance
   "tax.seller_name":         { group: "tax",      type: "string" },
   "tax.seller_gstin":        { group: "tax",      type: "string" },
@@ -405,7 +424,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [mediaTarget, setMediaTarget] = useState<
-    { type: "setting"; key: "general.logo" | "general.mobile_logo" | "general.favicon" } | { type: "slide"; index: number } | null
+    { type: "setting"; key: string } | { type: "slide"; index: number } | null
   >(null);
   const shouldScrollToNewSlideRef = useRef(false);
   const newestSlideRef = useRef<HTMLDivElement | null>(null);
@@ -935,6 +954,199 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* ── Header & Highlights ── */}
+            {currentTab === "highlights" && (
+              <div className="space-y-6">
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Manage homepage trust highlights, product catalogue PDF downloads, free shipping notices, delivery guarantees, quality certifications, and contact shortcuts.
+                </div>
+
+                {/* Master Bar Switch */}
+                <div className="flex items-center justify-between rounded-xl border border-[#E6E6E6] bg-[#FAFAFA] p-4 shadow-2xs">
+                  <div>
+                    <h4 className="text-[14px] font-bold text-[#1A1A1A]">Homepage Highlights Ribbon</h4>
+                    <p className="text-[12px] text-[#6B7280]">Enable or disable the entire quick-info trust bar below the homepage hero carousel.</p>
+                  </div>
+                  <Toggle
+                    value={g("highlights.bar_enabled") !== "false"}
+                    onChange={(v) => set("highlights.bar_enabled", v ? "true" : "false")}
+                  />
+                </div>
+
+                {/* Card 1: Product Catalogue & Header Button */}
+                <IntegrationCard
+                  title="Product Catalogue"
+                  subtitle="Upload catalogue PDF to enable download and display button in the header"
+                  enabled={g("highlights.catalogue_enabled") !== "false"}
+                  onToggle={(v) => set("highlights.catalogue_enabled", v ? "true" : "false")}
+                >
+                  <FieldRow label="Catalogue Button Title" hint="Text shown on the catalogue button in header">
+                    <AdminInput
+                      value={g("highlights.catalogue_title") || "Product Catalogue"}
+                      onChange={(e) => set("highlights.catalogue_title", e.target.value)}
+                      placeholder="Product Catalogue"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Catalogue PDF File" hint="Choose a PDF document from the Media Library (you can also upload new PDFs directly inside the media library)">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMediaTarget({ type: "setting", key: "highlights.catalogue_pdf_url" })}
+                          className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-[#B5151B] transition-colors"
+                        >
+                          <FileText size={14} />
+                          <span>Browse Media Library</span>
+                        </button>
+                        {g("highlights.catalogue_pdf_url") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              set("highlights.catalogue_pdf_url", "");
+                              showToast("Catalogue PDF removed. Click 'Save Settings' to apply.", "info");
+                            }}
+                            className="flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors"
+                          >
+                            <Trash2 size={13} />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {g("highlights.catalogue_pdf_url") ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5 text-xs text-emerald-800">
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                          <div className="min-w-0 flex-1 truncate">
+                            <span className="font-semibold">Selected Catalogue PDF:</span>{" "}
+                            <a
+                              href={g("highlights.catalogue_pdf_url")}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline font-mono"
+                            >
+                              {g("highlights.catalogue_pdf_url")}
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-800">
+                          ℹ️ No catalogue PDF selected. The &ldquo;Product Catalogue&rdquo; button will remain hidden on the storefront until a PDF is selected.
+                        </div>
+                      )}
+                    </div>
+                  </FieldRow>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[#F4F4F4]">
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1A1A1A]">Display in Main Header Navigation</p>
+                      <p className="text-[11.5px] text-[#8B8B8B]">Show the Product Catalogue button in the top navigation bar when a PDF is uploaded.</p>
+                    </div>
+                    <Toggle
+                      value={g("highlights.catalogue_in_header") !== "false"}
+                      onChange={(v) => set("highlights.catalogue_in_header", v ? "true" : "false")}
+                    />
+                  </div>
+                </IntegrationCard>
+
+                {/* Card 2: Free Shipping Notice */}
+                <IntegrationCard
+                  title="Free Shipping Notice"
+                  subtitle="Promote free shipping thresholds to increase average order values"
+                  enabled={g("highlights.free_shipping_enabled") !== "false"}
+                  onToggle={(v) => set("highlights.free_shipping_enabled", v ? "true" : "false")}
+                >
+                  <FieldRow label="Section Title">
+                    <AdminInput
+                      value={g("highlights.free_shipping_title") || "Free Shipping"}
+                      onChange={(e) => set("highlights.free_shipping_title", e.target.value)}
+                      placeholder="Free Shipping"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Threshold / Description" hint="e.g. Above INR 3000 across India">
+                    <AdminInput
+                      value={g("highlights.free_shipping_desc") || "Above INR 3000"}
+                      onChange={(e) => set("highlights.free_shipping_desc", e.target.value)}
+                      placeholder="Above INR 3000"
+                    />
+                  </FieldRow>
+                </IntegrationCard>
+
+                {/* Card 3: Delivery Guarantee */}
+                <IntegrationCard
+                  title="Delivery Guarantee"
+                  subtitle="Highlight order turnaround and delivery timeframes"
+                  enabled={g("highlights.delivery_enabled") !== "false"}
+                  onToggle={(v) => set("highlights.delivery_enabled", v ? "true" : "false")}
+                >
+                  <FieldRow label="Section Title">
+                    <AdminInput
+                      value={g("highlights.delivery_title") || "Fast Delivery"}
+                      onChange={(e) => set("highlights.delivery_title", e.target.value)}
+                      placeholder="Fast Delivery"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Delivery Timeframe" hint="e.g. Max 8 Days, Min 4 Days">
+                    <AdminInput
+                      value={g("highlights.delivery_desc") || "Max 8 Days, Min 4 Days"}
+                      onChange={(e) => set("highlights.delivery_desc", e.target.value)}
+                      placeholder="Max 8 Days, Min 4 Days"
+                    />
+                  </FieldRow>
+                </IntegrationCard>
+
+                {/* Card 4: Certified Quality */}
+                <IntegrationCard
+                  title="Certified Quality & Accreditations"
+                  subtitle="Showcase medical certifications and international compliance"
+                  enabled={g("highlights.certifications_enabled") !== "false"}
+                  onToggle={(v) => set("highlights.certifications_enabled", v ? "true" : "false")}
+                >
+                  <FieldRow label="Section Title">
+                    <AdminInput
+                      value={g("highlights.certifications_title") || "Certified Quality"}
+                      onChange={(e) => set("highlights.certifications_title", e.target.value)}
+                      placeholder="Certified Quality"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Accreditations & Badges" hint="Comma-separated badges or certifications (e.g. ISO, CE, FDA)">
+                    <AdminInput
+                      value={g("highlights.certifications_badges") || "ISO, CE, FDA"}
+                      onChange={(e) => set("highlights.certifications_badges", e.target.value)}
+                      placeholder="ISO, CE, FDA"
+                    />
+                  </FieldRow>
+                </IntegrationCard>
+
+                {/* Card 5: Direct Support & Orders */}
+                <IntegrationCard
+                  title="Support & Direct Orders"
+                  subtitle="Provide quick direct phone and email contact for dentists and dealers"
+                  enabled={g("highlights.contact_enabled") !== "false"}
+                  onToggle={(v) => set("highlights.contact_enabled", v ? "true" : "false")}
+                >
+                  <FieldRow label="Contact Phone / Hotline" hint="Toll-free or support telephone number">
+                    <AdminInput
+                      value={g("highlights.contact_phone") || "1800 890 8022"}
+                      onChange={(e) => set("highlights.contact_phone", e.target.value)}
+                      placeholder="1800 890 8022"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Orders Email Address" hint="Dedicated email for orders and quote inquiries">
+                    <AdminInput
+                      value={g("highlights.contact_email") || "orders.india@modortho.com"}
+                      onChange={(e) => set("highlights.contact_email", e.target.value)}
+                      placeholder="orders.india@modortho.com"
+                    />
+                  </FieldRow>
+                </IntegrationCard>
+              </div>
+            )}
+
             {/* ── SEO ── */}
             {currentTab === "seo" && (
               <div>
@@ -1459,8 +1671,8 @@ export default function SettingsPage() {
             showToast("Slide image selected.", "success");
           }
         }}
-        title="Select Media Image"
-        acceptTypes={["IMAGE"]}
+        title="Select Media File"
+        acceptTypes={["IMAGE", "DOCUMENT"]}
       />
     </AdminLayout>
   );

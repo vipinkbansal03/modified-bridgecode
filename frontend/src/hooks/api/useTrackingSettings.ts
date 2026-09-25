@@ -17,6 +17,26 @@ export type TrackingSettings = {
   cookies: { enabled: boolean; bannerTitle: string; bannerDescription: string; privacyPolicyUrl: string };
   whatsapp: { number: string | null; defaultMessage: string | null; floatingButtonEnabled: boolean };
   social: { facebook: string | null; instagram: string | null; linkedin: string | null; youtube: string | null; twitter: string | null; pinterest: string | null };
+  highlights?: {
+    barEnabled: boolean;
+    freeShippingEnabled: boolean;
+    freeShippingTitle: string;
+    freeShippingDesc: string;
+    deliveryEnabled: boolean;
+    deliveryTitle: string;
+    deliveryDesc: string;
+    catalogueEnabled: boolean;
+    catalogueTitle: string;
+    cataloguePdfUrl: string | null;
+    catalogueInHeader: boolean;
+    certificationsEnabled: boolean;
+    certificationsTitle: string;
+    certificationsBadges: string;
+    contactEnabled: boolean;
+    contactTitle?: string;
+    contactPhone: string;
+    contactEmail: string;
+  };
   general: {
     siteName: string;
     siteUrl: string | null;

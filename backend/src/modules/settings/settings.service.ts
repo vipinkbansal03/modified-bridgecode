@@ -247,9 +247,9 @@ function val(map: Map<string, { value: string; isEnabled: boolean; isSecret: boo
   return s.value;
 }
 
-function enabled(map: Map<string, { value: string; isEnabled: boolean; isSecret: boolean }>, key: string): boolean {
+function enabled(map: Map<string, { value: string; isEnabled: boolean; isSecret: boolean }>, key: string, defaultValue = false): boolean {
   const s = map.get(key);
-  if (!s) return false;
+  if (!s) return defaultValue;
   if (s.value === "true") return true;
   if (s.value === "false") return false;
   return Boolean(s.isEnabled);
@@ -284,7 +284,7 @@ export async function getPublicTrackingSettings(countryCode?: string) {
   let currentRows = await prisma.setting.findMany({
     where: {
       group: {
-        in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general"],
+        in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general", "highlights"],
       },
     },
   });
@@ -328,7 +328,7 @@ export async function getPublicTrackingSettings(countryCode?: string) {
       currentRows = await prisma.setting.findMany({
         where: {
           group: {
-            in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general"],
+            in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general", "highlights"],
           },
         },
       });
@@ -431,6 +431,26 @@ export async function getPublicTrackingSettings(countryCode?: string) {
       ogImage: str(m, "seo.og_image"),
       twitterImage: str(m, "seo.twitter_image"),
       canonicalDomain: str(m, "seo.canonical_domain"),
+    },
+    highlights: {
+      barEnabled: enabled(m, "highlights.bar_enabled", true),
+      freeShippingEnabled: enabled(m, "highlights.free_shipping_enabled", true),
+      freeShippingTitle: val(m, "highlights.free_shipping_title") || "Free Shipping",
+      freeShippingDesc: val(m, "highlights.free_shipping_desc") || "Above INR 3000",
+      deliveryEnabled: enabled(m, "highlights.delivery_enabled", true),
+      deliveryTitle: val(m, "highlights.delivery_title") || "Fast Delivery",
+      deliveryDesc: val(m, "highlights.delivery_desc") || "Max 8 Days, Min 4 Days",
+      catalogueEnabled: enabled(m, "highlights.catalogue_enabled", true),
+      catalogueTitle: val(m, "highlights.catalogue_title") || "Product Catalogue",
+      cataloguePdfUrl: str(m, "highlights.catalogue_pdf_url"),
+      catalogueInHeader: enabled(m, "highlights.catalogue_in_header", true),
+      certificationsEnabled: enabled(m, "highlights.certifications_enabled", true),
+      certificationsTitle: val(m, "highlights.certifications_title") || "Certified Quality",
+      certificationsBadges: val(m, "highlights.certifications_badges") || "ISO, CE, FDA",
+      contactEnabled: enabled(m, "highlights.contact_enabled", true),
+      contactTitle: val(m, "highlights.contact_title") || "Support & Direct Orders",
+      contactPhone: val(m, "highlights.contact_phone") || "1800 890 8022",
+      contactEmail: val(m, "highlights.contact_email") || "orders.india@modortho.com",
     },
     general: {
       siteName: val(m, "general.site_name") || "Modern Orthodontics",
