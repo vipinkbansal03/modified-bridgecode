@@ -1549,6 +1549,33 @@ function buildPublicPriceBreakdown(pr: {
   };
 }
 
+const publicTaxRuleCache = new Map<string, { rules: any[]; expiresAt: number }>();
+const TAX_CACHE_TTL_MS = 60 * 1000;
+
+export function clearPublicTaxRuleCache() {
+  publicTaxRuleCache.clear();
+}
+
+async function getCachedActiveTaxRules(countryId?: string): Promise<any[]> {
+  if (!countryId) return [];
+  const now = Date.now();
+  const cached = publicTaxRuleCache.get(countryId);
+  if (cached && cached.expiresAt > now) {
+    return cached.rules;
+  }
+  const rules = await (prisma as any).taxRule.findMany({
+    where: { countries: { some: { countryId } }, status: "ACTIVE" },
+    include: {
+      products: { select: { id: true } },
+      categories: { select: { id: true } },
+      variants: { select: { id: true } },
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  publicTaxRuleCache.set(countryId, { rules, expiresAt: now + TAX_CACHE_TTL_MS });
+  return rules;
+}
+
 async function toPublicProductDetail(
   p: PublicProductDetailRecord,
   countryId?: string,
@@ -1556,17 +1583,7 @@ async function toPublicProductDetail(
   const text = getProductText(p);
   const categoryText = getCategoryText(p.category);
 
-  const activeTaxRules = countryId
-    ? await (prisma as any).taxRule.findMany({
-        where: { countries: { some: { countryId } }, status: "ACTIVE" },
-        include: {
-          products: { select: { id: true } },
-          categories: { select: { id: true } },
-          variants: { select: { id: true } },
-        },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      })
-    : [];
+  const activeTaxRules = await getCachedActiveTaxRules(countryId);
 
   const productSpecificRules = activeTaxRules.filter((rule: any) =>
     rule.products.some((prod: any) => prod.id === p.id),
@@ -1596,10 +1613,7 @@ async function toPublicProductDetail(
   if (activeRules.length > 0) {
     resolvedTaxMode = activeRules[0].taxMode || "EXCLUSIVE";
   } else {
-    console.warn(
-      `No tax rules (product-specific or global) found for product ${p.id} in country ${countryId}. Defaulting to INCLUSIVE.`,
-    );
-    resolvedTaxMode = "INCLUSIVE";
+    resolvedTaxMode = "EXCLUSIVE";
   }
 
   const productPrices = p.prices.map((pr) => ({

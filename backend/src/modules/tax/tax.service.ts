@@ -3,6 +3,7 @@ import { AppError, getPagination } from "../../utils/apiResponse";
 import { logger } from "../../config/logger";
 import { readSpreadsheetRows, writeSpreadsheetBuffer } from "../../utils/spreadsheet";
 import { validateIdentifier, clearTaxValidationCache as clearIdentifierValidationCache } from "./taxValidation.service";
+import { clearPublicTaxRuleCache } from "../public/public.service";
 
 const TAX_RULE_TYPES = ["CGST", "SGST", "VAT", "SALES_TAX"] as const;
 const TAX_MODES = ["EXCLUSIVE", "INCLUSIVE", "EXEMPT"] as const;
@@ -409,6 +410,7 @@ export async function createTaxRule(input: TaxRuleInput) {
     },
     include: includeCountryAndProducts(),
   });
+  clearPublicTaxRuleCache();
   return formatTaxRuleResponse(created);
 }
 
@@ -460,13 +462,16 @@ export async function updateTaxRule(id: string, input: TaxRuleInput) {
   }
 
   const updated = await taxRuleClient().update({ where: { id }, data, include: includeCountryAndProducts() });
+  clearPublicTaxRuleCache();
   return formatTaxRuleResponse(updated);
 }
 
 export async function deleteTaxRule(id: string) {
   const existing = await taxRuleClient().findUnique({ where: { id } });
   if (!existing) throw new AppError("Tax rule not found.", 404);
-  return taxRuleClient().delete({ where: { id } });
+  const result = await taxRuleClient().delete({ where: { id } });
+  clearPublicTaxRuleCache();
+  return result;
 }
 
 export async function bulkUpdateTaxRules(input: TaxBulkInput) {
@@ -488,11 +493,13 @@ export async function bulkUpdateTaxRules(input: TaxBulkInput) {
 
   if (action === "DELETE") {
     await taxRuleClient().deleteMany({ where: { id: { in: ids } } });
+    clearPublicTaxRuleCache();
     return { action, affected: ids.length };
   }
 
   const status = action === "ENABLE" ? "ACTIVE" : "INACTIVE";
   await taxRuleClient().updateMany({ where: { id: { in: ids } }, data: { status } });
+  clearPublicTaxRuleCache();
   return { action, affected: ids.length, status };
 }
 
@@ -790,6 +797,8 @@ export async function importTaxSpreadsheet(filePathOrRows: string | Record<strin
       }
     }
   });
+
+  clearPublicTaxRuleCache();
 
   return {
     ...summary,
