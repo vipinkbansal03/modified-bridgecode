@@ -125,6 +125,7 @@ export interface ApiProductSummary {
   thumbnail: string | null;
   isFeatured: boolean;
   hasVariants: boolean;
+  allowQuote?: boolean;
   variantCount: number;
   prices: ApiProductPrice[];
 }

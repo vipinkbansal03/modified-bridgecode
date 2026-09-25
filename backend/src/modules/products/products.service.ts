@@ -139,6 +139,7 @@ function summarizeInventory(inventories: { stock: number; reservedStock: number 
 type ProductHighlightInput = {
   title: string;
   description: string;
+  image?: string;
 };
 
 type ProductSpecInput = {
@@ -179,6 +180,7 @@ type ProductInput = {
   shippingClass?: string | null;
   fragile?: boolean;
   hazardous?: boolean;
+  allowQuote?: boolean;
 };
 
 type ShippingInfoInput = {
@@ -1020,6 +1022,28 @@ export async function getProduct(id: string) {
               attribute: { select: { id: true, name: true, slug: true, role: true } },
               attributeValue: { select: { id: true, value: true, slug: true, sortOrder: true } },
             },
+          },
+          prices: {
+            where: { deletedAt: null },
+            include: {
+              country: { select: { id: true, name: true, code: true } },
+              currency: { select: { id: true, code: true, symbol: true, isBase: true } },
+            },
+          },
+          inventories: {
+            include: {
+              country: { select: { id: true, name: true, code: true } },
+              warehouse: {
+                select: {
+                  id: true,
+                  name: true,
+                  countryId: true,
+                  state: true,
+                  country: { select: { id: true, name: true, code: true } },
+                },
+              },
+            },
+            orderBy: [{ countryId: "asc" }],
           },
         },
         orderBy: [{ createdAt: "asc" }],

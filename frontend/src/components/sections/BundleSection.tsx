@@ -19,7 +19,7 @@ export function BundleSection({ product }: BundleSectionProps) {
   return (
     <section className="py-16 sm:py-18">
       <Container>
-        <h3 className="mb-6 text-xl font-light text-ink">Frequently purchased together</h3>
+        <h3 className="mb-6 text-xl font-bold text-[#111827]">Frequently purchased together</h3>
         <div className="grid grid-cols-1 items-center gap-6 rounded-lg border border-line bg-white p-6 sm:grid-cols-[1.3fr_0.7fr]">
           <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
             {items.map((item) => (
@@ -38,13 +38,13 @@ export function BundleSection({ product }: BundleSectionProps) {
                     <ImageOff size={20} className="text-steel-2/60" />
                   )}
                 </div>
-                <h5 className="text-[13.5px] font-medium leading-snug text-ink">{item.title}</h5>
+                <h5 className="text-[13.5px] font-medium leading-snug text-[#111827]">{item.title}</h5>
               </Link>
             ))}
           </div>
           <div className="text-left sm:text-right">
-            <p className="mb-2 text-[13.5px] text-steel">Recommended clinic starter combination</p>
-            <strong className="mb-4 block text-[22px] font-light text-ink">Build your quote faster</strong>
+            <p className="mb-2 text-[13.5px] text-[#111827]/70">Recommended clinic starter combination</p>
+            <strong className="mb-4 block text-[22px] font-bold text-[#111827]">Build your quote faster</strong>
             <Button href={`/contact?subject=${encodeURIComponent(`Bundle Quote Request - ${product.title}`)}`} variant="primary">
               Request Bundle Quote <ArrowRight size={14} className="ml-1.5 inline" />
             </Button>

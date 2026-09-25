@@ -114,6 +114,7 @@ const basicSchema = Yup.object({
   informationDescription: Yup.string().max(200).optional(),
   isFeatured: Yup.boolean().optional(),
   hasVariants: Yup.boolean().optional(),
+  allowQuote: Yup.boolean().optional(),
   seoTitle: Yup.string().max(60).optional(),
   seoDescription: Yup.string().max(160).optional(),
   seoKeywords: Yup.string().optional(),
@@ -150,6 +151,7 @@ type ProductEditorFormValues = {
   informationDescription: string;
   isFeatured: boolean;
   hasVariants: boolean;
+  allowQuote: boolean;
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string;
@@ -157,7 +159,7 @@ type ProductEditorFormValues = {
   technicalSpecs: Array<{ label: string; value: string }>;
   specImages: Array<{ url: string; title: string }>;
   warranty: string[];
-  primaryFeatures: Array<{ title: string; description: string }>;
+  primaryFeatures: Array<{ title: string; description: string; image?: string }>;
   additionalInfo: Array<{ label: string; value: string }>;
 };
 
@@ -183,20 +185,7 @@ const DEFAULT_PRODUCT_HIGHLIGHTS = [
   },
 ];
 
-const DEFAULT_PRIMARY_FEATURES = [
-  {
-    title: "Clinical Inspection & Verification",
-    description: "<p>Inspect product packaging and verify specification suitability before clinical use.</p>",
-  },
-  {
-    title: "Treatment Site Preparation",
-    description: "<p>Prepare treatment site following standard clinical orthodontic protocols.</p>",
-  },
-  {
-    title: "Placement & Engagement",
-    description: "<p>Apply product according to clinical technique and manufacturer instructions.</p>",
-  },
-];
+const DEFAULT_PRIMARY_FEATURES: Array<{ title: string; description: string; image?: string }> = [];
 
 const DEFAULT_TECHNICAL_SPECS = [
   { label: "Brand", value: "Modern Orthodontics" },
@@ -747,6 +736,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [editingDirectionIndex, setEditingDirectionIndex] = useState<number | null>(null);
   const [directionTitleState, setDirectionTitleState] = useState("");
   const [directionDescriptionState, setDirectionDescriptionState] = useState("");
+  const [directionImageState, setDirectionImageState] = useState("");
+  const [directionMediaSelectorOpen, setDirectionMediaSelectorOpen] = useState(false);
 
   const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
   const [editingWarrantyIndex, setEditingWarrantyIndex] = useState<number | null>(null);
@@ -925,17 +916,23 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setEditingDirectionIndex(index);
       setDirectionTitleState(list[index].title || "");
       setDirectionDescriptionState(list[index].description || "");
+      setDirectionImageState(list[index].image || "");
     } else {
       setEditingDirectionIndex(null);
       setDirectionTitleState("");
       setDirectionDescriptionState("");
+      setDirectionImageState("");
     }
     setDirectionModalOpen(true);
   };
 
   const handleSaveDirectionModal = () => {
     const list = [...(form.values.primaryFeatures || [])];
-    const newItem = { title: directionTitleState.trim(), description: directionDescriptionState.trim() };
+    const newItem = {
+      title: directionTitleState.trim(),
+      description: directionDescriptionState.trim(),
+      image: directionImageState.trim() || undefined,
+    };
     if (editingDirectionIndex !== null) {
       list[editingDirectionIndex] = newItem;
     } else {
@@ -1204,6 +1201,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   });
 
   const { showToast, ToastComponent } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: product, isLoading, isFetching, refetch } = useAdminProduct(productId);
   const { data: adminCurrencies = [] } = useAdminCurrencies();
@@ -1853,6 +1851,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setSelectedInvIds([]);
       setInvBulkActionType("Bulk Action");
       await refetch();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-inventory"] });
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to assign warehouses."), "error");
     } finally {
@@ -1927,6 +1927,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setInvBulkCountryId("");
       setInvBulkActionType("Bulk Action");
       await refetch();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-inventory"] });
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
     } finally {
@@ -2019,7 +2021,6 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const createMoqPricing = useCreateProductMoqPricing(productId);
   const deleteMoqPricing = useDeleteProductMoqPricing(productId);
   const updateMoqPricing = useUpdateProductMoqPricing(productId);
-  const queryClient = useQueryClient();
   const assignProductAttributes = useAssignProductAttributes(productId);
   const removeProductAttribute = useRemoveProductAttribute(productId);
   const updateProductFilterVisibility = useUpdateProductFilterVisibility(productId);
@@ -2376,7 +2377,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         countryCode: "",
         isOverride: false,
       });
-    } else if (variantRows.length === 0) {
+    } else {
       list.push({
         id: "dummy-base-product",
         variantId: null,
@@ -2835,6 +2836,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       informationDescription: product?.informationDescription || "",
       isFeatured: product?.isFeatured || false,
       hasVariants: product?.hasVariants || false,
+      allowQuote: (product as any)?.allowQuote !== false,
       seoTitle: product?.seoTitle || "",
       seoDescription: product?.seoDescription || "",
       seoKeywords: product?.seoKeywords || "",
@@ -2857,7 +2859,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       warranty: Array.isArray(product?.warranty) ? product.warranty : [],
       primaryFeatures:
         Array.isArray(product?.primaryFeatures) && product.primaryFeatures.length > 0
-          ? product.primaryFeatures
+          ? product.primaryFeatures.map((p: any) => ({
+              title: String(p?.title ?? ""),
+              description: String(p?.description ?? ""),
+              image: p?.image ? String(p.image) : "",
+            }))
           : DEFAULT_PRIMARY_FEATURES,
       additionalInfo:
         Array.isArray(product?.additionalInfo) && product.additionalInfo.length > 0
@@ -2888,8 +2894,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           ...otherValues,
           highlights: Array.isArray(values.highlights)
             ? values.highlights
-                .map((h) => ({ title: String(h?.title ?? "").trim(), description: String(h?.description ?? "").trim() }))
-                .filter((h) => hasContent(h.title) || hasContent(h.description))
+                .map((h) => ({
+                  title: String(h?.title ?? "").trim(),
+                  description: String(h?.description ?? "").trim(),
+                  image: h?.image ? String(h.image).trim() : undefined,
+                }))
+                .filter((h) => hasContent(h.title) || hasContent(h.description) || Boolean(h.image))
             : [],
           technicalSpecs: {
             specs: cleanSpecs,
@@ -2902,8 +2912,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             : [],
           primaryFeatures: Array.isArray(values.primaryFeatures)
             ? values.primaryFeatures
-                .map((p) => ({ title: String(p?.title ?? "").trim(), description: String(p?.description ?? "").trim() }))
-                .filter((p) => hasContent(p.title) || hasContent(p.description))
+                .map((p) => ({
+                  title: String(p?.title ?? "").trim(),
+                  description: String(p?.description ?? "").trim(),
+                  image: p?.image ? String(p.image).trim() : undefined,
+                }))
+                .filter((p) => hasContent(p.title) || hasContent(p.description) || Boolean(p.image))
             : [],
           additionalInfo: Array.isArray(values.additionalInfo)
             ? values.additionalInfo
@@ -3071,11 +3085,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     },
   ];
 
-  const directionCols: Column<{ title: string; description: string; index: number }>[] = [
-    { key: "title", label: "Title", render: (row) => <span className="font-semibold text-[#1A1A1A]">{row.title || "—"}</span> },
+  const directionCols: Column<{ title: string; description: string; image?: string; index: number }>[] = [
+    {
+      key: "image",
+      label: "Image",
+      render: (row) => row.image ? (
+        <div className="h-11 w-11 overflow-hidden rounded-md border border-[#E5E7EB] bg-white p-0.5 shadow-2xs">
+          <img src={row.image} alt={row.title || "Guideline image"} className="h-full w-full object-contain" />
+        </div>
+      ) : (
+        <span className="text-gray-300 text-[12px] italic">—</span>
+      ),
+    },
+    { key: "title", label: "Title / Step", render: (row) => <span className="font-semibold text-[#1A1A1A]">{row.title || "—"}</span> },
     {
       key: "description",
-      label: "Instruction / Guideline",
+      label: "Instruction / Details",
       render: (row) => <span className="line-clamp-2 text-[#4B5563] text-[13px]">{stripHtml(row.description) || "—"}</span>,
     },
     {
@@ -5453,14 +5478,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               />
               <AdminInput label="SKU" {...form.getFieldProps("sku")} />
               <AdminInput label="Brand" {...form.getFieldProps("brand")} />
-              <div className="flex items-center gap-6 pt-2">
+              <div className="flex flex-wrap items-center gap-6 pt-2">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.values.isFeatured} onChange={(e) => form.setFieldValue("isFeatured", e.target.checked)} className="rounded" />
+                  <input type="checkbox" checked={form.values.isFeatured} onChange={(e) => form.setFieldValue("isFeatured", e.target.checked)} className="rounded text-[#E31E24] focus:ring-[#E31E24]" />
                   <span className="text-[13.5px]">Featured Product</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.values.hasVariants} onChange={(e) => form.setFieldValue("hasVariants", e.target.checked)} className="rounded" />
+                  <input type="checkbox" checked={form.values.hasVariants} onChange={(e) => form.setFieldValue("hasVariants", e.target.checked)} className="rounded text-[#E31E24] focus:ring-[#E31E24]" />
                   <span className="text-[13.5px]">Has Variants</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.values.allowQuote !== false} onChange={(e) => form.setFieldValue("allowQuote", e.target.checked)} className="rounded text-[#E31E24] focus:ring-[#E31E24]" />
+                  <span className="text-[13.5px] font-semibold text-[#111827]">Allow Quotation (RFQ)</span>
                 </label>
               </div>
             </div>
@@ -5507,6 +5536,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               placeholder="Enter detailed clinical product description..."
               onChange={(value) => form.setFieldValue("description", value)}
               className="min-h-[220px]"
+            />
+
+            <AdminSectionTable
+              title="Product Data & Clinical Guidelines (Images & Instructions)"
+              description='Add demonstration images with rich descriptions (e.g. de-bonding steps, plier instruments, clinical protocols) to display side-by-side with Description on the product page.'
+              addButtonLabel="Add Product Data / Image"
+              onAdd={() => openDirectionModal()}
+              columns={directionCols}
+              data={(form.values.primaryFeatures || []).map((item: any, index: number) => ({ ...item, index }))}
+              rowKey="index"
+              onRowClick={(row) => openDirectionModal(row.index)}
+              rowTooltip="Click row or edit icon to edit product data item"
+              emptyMessage="No product data items added yet."
             />
           </div>
         )}
@@ -5620,9 +5662,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </div>
 
             <AdminSectionTable
-              title="Direction To Use"
-              description='Add clinical guidelines and instructions to display in the "Direction To Use" tab on the product page.'
-              addButtonLabel="Add instruction"
+              title="Product Data & Clinical Guidelines (Images & Instructions)"
+              description='Add demonstration images with rich descriptions (e.g. de-bonding steps, plier instruments, clinical protocols) to display in the "Direction To Use" tab on the product page.'
+              addButtonLabel="Add Guideline / Image"
               onAdd={() => openDirectionModal()}
               columns={directionCols}
               data={(form.values.primaryFeatures || []).map((item: any, index: number) => ({ ...item, index }))}
@@ -7625,7 +7667,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                   {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                 </td>
                                 <td className="px-4 py-3 font-medium text-[#1A1A1A] border-b border-[#E6E6E6]" colSpan={7}>
-                                  {group.variantTitle} {group.variantSku ? `(${group.variantSku})` : ""}
+                                  {group.variantTitle} {group.variantSku ? `(SKU: ${group.variantSku})` : ""}
                                   <span className="ml-3 text-[12px] text-[#6B6B6B] font-normal px-2 py-0.5 rounded bg-white border border-[#E6E6E6]">
                                     {group.prices.filter((p: any) => p.isOverride).length} Pricing Override{group.prices.filter((p: any) => p.isOverride).length !== 1 ? 's' : ''}
                                   </span>
@@ -8000,13 +8042,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
                           <input
                             type="checkbox"
-                            checked={paginatedVariantInventories.length > 0 && paginatedVariantInventories.every((r: any) => selectedInvIds.includes(r.id))}
+                            checked={
+                              (() => {
+                                const selectable = paginatedVariantInventories.filter((r: any) => !product?.hasVariants || r.variantId !== null);
+                                return selectable.length > 0 && selectable.every((r: any) => selectedInvIds.includes(r.id));
+                              })()
+                            }
                             onChange={(e) => {
+                              const selectable = paginatedVariantInventories.filter((r: any) => !product?.hasVariants || r.variantId !== null);
                               if (e.target.checked) {
-                                const pageIds = paginatedVariantInventories.map((r: any) => r.id);
+                                const pageIds = selectable.map((r: any) => r.id);
                                 setSelectedInvIds((prev) => Array.from(new Set([...prev, ...pageIds])));
                               } else {
-                                const pageIds = new Set(paginatedVariantInventories.map((r: any) => r.id));
+                                const pageIds = new Set(selectable.map((r: any) => r.id));
                                 setSelectedInvIds((prev) => prev.filter((id) => !pageIds.has(id)));
                               }
                             }}
@@ -8132,7 +8180,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[11.5px] text-[#9A9A9A] mt-0.5">{group.variantSku ? `(${group.variantSku})` : ""}</div>
+                                <div className="text-[11.5px] text-[#9A9A9A] mt-0.5">{group.variantSku ? `SKU: ${group.variantSku}` : ""}</div>
                               </td>
                               <td className="p-0 text-[#6B6B6B] border-b border-[#E6E6E6] align-middle">
                                 {group.inventories.map((inventory: any) => (
@@ -10950,11 +10998,47 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         saveText={editingDirectionIndex !== null ? "Save Guideline" : "Add Guideline"}
       >
         <div className="space-y-4 p-6">
+          <div>
+            <label className="block text-[13px] font-semibold text-[#1A1A1A] mb-1.5">
+              Demonstration Image / Diagram (Optional)
+            </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDirectionMediaSelectorOpen(true)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-3.5 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-white hover:border-[#E31E24] transition-colors shadow-2xs"
+              >
+                <ImageIcon size={14} className="text-[#E31E24]" />
+                <span>{directionImageState ? "Change Image" : "Browse Media Library"}</span>
+              </button>
+              {directionImageState && (
+                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white p-1 shadow-2xs">
+                  <img
+                    src={directionImageState}
+                    alt="Guideline preview"
+                    className="h-full w-full object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDirectionImageState("")}
+                    className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold shadow-xs hover:bg-red-700 cursor-pointer"
+                    title="Remove image"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="mt-1 text-[11.5px] text-[#6B6B6B]">
+              Upload a clinical demonstration photo, instrument illustration, or step diagram.
+            </p>
+          </div>
+
           <AdminInput
-            label="Instruction Title"
+            label="Instruction Title / Step"
             value={directionTitleState}
             onChange={(e) => setDirectionTitleState(e.target.value)}
-            placeholder="e.g. Clinical Inspection & Verification"
+            placeholder="e.g. De-bonding tool to be used / Grasp brackets mesio-distal"
           />
           <AdminRichTextEditor
             label="Instruction Details"
@@ -11063,6 +11147,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           setPackageImage(media.url);
           setPackageMediaSelectorOpen(false);
           showToast("Package image selected.");
+        }}
+      />
+
+      <MediaSelectorModal
+        open={directionMediaSelectorOpen}
+        title="Select Demonstration Image"
+        initialType="image"
+        onClose={() => setDirectionMediaSelectorOpen(false)}
+        onSelect={(media) => {
+          setDirectionImageState(media.url);
+          setDirectionMediaSelectorOpen(false);
+          showToast("Guideline image selected.");
         }}
       />
 

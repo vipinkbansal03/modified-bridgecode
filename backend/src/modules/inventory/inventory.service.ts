@@ -16,6 +16,10 @@ type InventoryListQuery = {
   sortBy?: string;
   sortDir?: string;
   requestingUserId?: string;
+  fromDate?: string;
+  toDate?: string;
+  startDate?: string;
+  endDate?: string;
 };
 
 type InventoryBulkUpdateInput = {
@@ -159,6 +163,15 @@ async function buildInventoryWhere(query: InventoryListQuery): Promise<Prisma.In
     } else if (ids.length === 1) {
       where.variantId = ids[0];
     }
+  }
+
+  const fromDate = query.fromDate || query.startDate;
+  const toDate = query.toDate || query.endDate;
+  if (fromDate || toDate) {
+    where.updatedAt = {
+      ...(fromDate ? { gte: new Date(fromDate) } : {}),
+      ...(toDate ? { lte: new Date(new Date(toDate).setHours(23, 59, 59, 999)) } : {}),
+    };
   }
 
   let allowedWarehouseIds: string[] | null = null;

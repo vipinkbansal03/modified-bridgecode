@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/ToastProvider";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, ShieldCheck, Zap, Lock, CheckCircle2 } from "lucide-react";
 import { useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useCart } from "@/contexts/CartContext";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
@@ -132,19 +132,30 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-6 sm:flex-row">
-        <div className="flex-1 space-y-3">
-          <label className="text-[12px] font-semibold uppercase tracking-wider text-steel-2">Availability</label>
-          <StockBadge
-            available={totalAvailableStock}
-            status={totalAvailableStock > 0 ? (apiProduct.inventory?.status ?? "IN_STOCK") : "OUT_OF_STOCK"}
-            className="mt-1"
-          />
+    <div className="flex flex-col gap-4">
+      {/* Top Controls Grid: Availability & Quantity */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-red-50/25 border border-red-100 p-3.5 sm:p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-red-100 text-[#E31E24] shadow-2xs">
+            <CheckCircle2 size={18} />
+          </div>
+          <div>
+            <span className="block text-[11px] font-bold uppercase tracking-wider text-[#111827]/70">Availability Status</span>
+            <StockBadge
+              available={totalAvailableStock}
+              status={totalAvailableStock > 0 ? (apiProduct.inventory?.status ?? "IN_STOCK") : "OUT_OF_STOCK"}
+              className="mt-0.5"
+            />
+          </div>
         </div>
-        
-        <div className="w-full sm:w-auto">
-          <label className="mb-2.5 block text-[12px] font-semibold uppercase tracking-wider text-steel-2">Quantity</label>
+
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#111827]/70">Quantity</label>
+            <span className="text-[12px] font-semibold text-[#111827]">
+              {totalAvailableStock > 0 ? `Max ${totalAvailableStock}` : "Unavailable"}
+            </span>
+          </div>
           <QuantityInput 
             value={quantity}
             onChange={setQuantity}
@@ -155,18 +166,37 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         </div>
       </div>
 
+      {/* Dynamic Subtotal & Price Summary Row */}
+      {basePrice && (
+        <div className="flex items-center justify-between rounded-xl bg-[#FAFAFA] border border-[#F3F4F6] px-4 py-2.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[12px] font-semibold text-[#111827]/70">Estimation:</span>
+            <span className="text-[13px] font-bold text-[#111827]">
+              {formatMoney(basePrice.currencySymbol, Number(basePrice.sellingPrice))} &times; {quantity}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[12px] font-bold uppercase text-[#111827]/60">Subtotal:</span>
+            <span className="text-[18px] font-extrabold text-[#E31E24]">
+              {formatMoney(basePrice.currencySymbol, Number(basePrice.sellingPrice) * quantity)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Available Discounts Box */}
       {((visibleMoqPricing && visibleMoqPricing.length > 0) || 
         (visibleTierPricing && visibleTierPricing.length > 0)) && (
-        <div className="rounded-lg border border-line bg-offwhite p-4">
-          <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wider text-steel-2">Available Discounts</h4>
+        <div className="rounded-xl border border-[#E31E24] bg-white p-4">
+          <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wider text-[#111827]">Available Volume & Tier Discounts</h4>
           <div className="space-y-3">
             {visibleTierPricing && visibleTierPricing.length > 0 && (
               <div className="space-y-1">
-                <span className="text-[11px] font-semibold text-steel block">Tier Pricing</span>
+                <span className="text-[11px] font-bold text-[#111827] block">Tier Pricing</span>
                 <div className="grid grid-cols-1 gap-1 text-[12.5px]">
                   {visibleTierPricing.map((tp) => (
-                    <div key={tp.id} className="flex justify-between border-b border-line/50 pb-1">
-                      <span className="text-steel">{tp.tier.name}</span>
+                    <div key={tp.id} className="flex justify-between border-b border-red-100 pb-1">
+                      <span className="text-[#111827] font-medium">{tp.tier.name}</span>
                       <strong className="text-[#15803D]">
                         {tp.discountPercent ? `${tp.discountPercent}% off` : formatMoney(basePrice.currencySymbol, tp.fixedPrice || 0)}
                       </strong>
@@ -177,11 +207,11 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
             )}
             {visibleMoqPricing && visibleMoqPricing.length > 0 && (
               <div className="space-y-1">
-                <span className="text-[11px] font-semibold text-steel block">Volume MOQ Pricing</span>
+                <span className="text-[11px] font-bold text-[#111827] block">Volume MOQ Pricing</span>
                 <div className="space-y-1 text-[12.5px]">
                   {visibleMoqPricing.map((mp) => (
-                    <div key={mp.id} className="flex justify-between border-b border-line/50 pb-1">
-                      <span className="text-steel">
+                    <div key={mp.id} className="flex justify-between border-b border-red-100 pb-1">
+                      <span className="text-[#111827] font-medium">
                         {mp.maxQuantity ? `${mp.minQuantity} - ${mp.maxQuantity} units` : `${mp.minQuantity}+ units`}
                       </span>
                       <strong className="text-[#15803D]">
@@ -196,30 +226,47 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2.5">
+      {/* Main Action Buttons */}
+      <div className="flex flex-wrap items-center gap-3 pt-1">
         <button
           type="button"
           onClick={() => handleAddToCart(false)}
           disabled={isOutOfStock || isAdding}
-          className="flex flex-1 min-w-[130px] h-11 items-center justify-center gap-2 whitespace-nowrap rounded-pill bg-brand px-4 text-[13.5px] font-bold text-white transition hover:bg-brand/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-sm"
+          className="flex flex-1 min-w-[150px] h-12 items-center justify-center gap-2 whitespace-nowrap rounded-pill bg-[#E31E24] px-6 text-[14px] font-bold text-white shadow-xs transition-all hover:bg-[#B5151B] hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
         >
-          <ShoppingBag size={16} />
-          {isAdding ? "Adding..." : "Add to Cart"}
+          <ShoppingBag size={17} />
+          {isAdding ? "Adding to Cart..." : "Add to Cart"}
         </button>
         <button
           type="button"
           onClick={() => handleAddToCart(true)}
           disabled={isOutOfStock || isAdding}
-          className="flex flex-1 min-w-[155px] h-11 items-center justify-center whitespace-nowrap rounded-pill border-2 border-line-deep bg-slate-50 px-4 text-[13.5px] font-bold text-ink transition hover:border-ink hover:bg-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer shadow-xs"
+          className="flex flex-1 min-w-[155px] h-12 items-center justify-center whitespace-nowrap rounded-pill border border-[#E31E24] bg-white px-5 text-[13.5px] font-bold text-[#111827] shadow-2xs transition-all hover:bg-red-50 hover:text-[#E31E24] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
         >
           Continue Shopping
         </button>
         <WishlistButton
           productId={apiProduct.id}
           showText={true}
-          className="h-11 px-4 border-2 border-line-deep bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] font-bold cursor-pointer whitespace-nowrap"
+          className="h-12 px-5 border border-[#E31E24] bg-white text-[#111827] hover:bg-red-50 hover:text-[#E31E24] shadow-2xs text-[13.5px] font-bold cursor-pointer whitespace-nowrap"
           iconSize={18}
         />
+      </div>
+
+      {/* Micro Trust Perks Row */}
+      <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-[11.5px] text-[#111827]">
+        <div className="flex items-center gap-1.5 justify-center font-medium">
+          <ShieldCheck size={14} className="text-[#E31E24] shrink-0" />
+          <span>100% Medical Grade</span>
+        </div>
+        <div className="flex items-center gap-1.5 justify-center font-medium border-x border-slate-100">
+          <Zap size={14} className="text-[#E31E24] shrink-0" />
+          <span>Direct Dispatch</span>
+        </div>
+        <div className="flex items-center gap-1.5 justify-center font-medium">
+          <Lock size={14} className="text-[#E31E24] shrink-0" />
+          <span>Secure Checkout</span>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 export interface ProductHighlight {
   title: string;
   description: string;
+  image?: string;
 }
 
 export interface ProductSpec {

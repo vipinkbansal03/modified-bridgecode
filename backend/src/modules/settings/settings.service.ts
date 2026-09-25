@@ -465,6 +465,7 @@ export async function getPublicTrackingSettings(countryCode?: string) {
       faviconUrl: str(m, "general.favicon"),
       defaultCurrency: str(m, "general.default_currency") || "INR",
       timezone: str(m, "general.timezone") || "Asia/Kolkata",
+      allowQuotes: enabled(m, "general.allow_quotes", true),
     },
   };
 }

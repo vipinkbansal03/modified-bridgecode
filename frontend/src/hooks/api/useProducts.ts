@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueries, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { apiClient, HAS_LIVE_API, unwrapPaginated, unwrapData } from "@/lib/apiClient";
 import { qk, STALE } from "@/lib/queryConfig";
 import { useLanguageContext } from "@/contexts/LanguageContext";
@@ -149,6 +149,23 @@ export function useProducts(params: ProductListParams = {}) {
   const { selectedCountryCode } = useCurrencyContext();
   const localizedParams = { ...params, lang: selectedLanguage, countryCode: selectedCountryCode };
   return useQuery({ queryKey: qk.products.list(localizedParams), queryFn: () => fetchProducts(localizedParams), staleTime: STALE.medium, placeholderData: keepPreviousData });
+}
+
+export function useInfiniteProducts(params: Omit<ProductListParams, "page"> = {}) {
+  const { selectedLanguage } = useLanguageContext();
+  const { selectedCountryCode } = useCurrencyContext();
+  const localizedParams = { ...params, lang: selectedLanguage, countryCode: selectedCountryCode };
+
+  return useInfiniteQuery({
+    queryKey: ["products", "infinite", localizedParams],
+    queryFn: ({ pageParam = 1 }) => fetchProducts({ ...localizedParams, page: Number(pageParam) }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.pagination;
+      return page < totalPages ? page + 1 : undefined;
+    },
+    staleTime: STALE.medium,
+  });
 }
 
 export function useProductsByCategory(categorySlug?: string) {

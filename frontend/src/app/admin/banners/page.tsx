@@ -845,7 +845,7 @@ export default function BannersPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <AdminInput
-                label="Banner Title *"
+                label="Banner Title"
                 value={form.title}
                 onChange={(event) => set("title", event.target.value)}
                 placeholder="e.g. Curio Brackets Promo"

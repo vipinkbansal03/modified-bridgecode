@@ -160,6 +160,7 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "general.favicon":         { group: "general",  type: "string" },
   "general.default_currency":{ group: "general",  type: "string" },
   "general.timezone":        { group: "general",  type: "string" },
+  "general.allow_quotes":    { group: "general",  type: "boolean" },
   // Header & Highlights
   "highlights.bar_enabled":            { group: "highlights", type: "boolean" },
   "highlights.free_shipping_enabled":  { group: "highlights", type: "boolean" },
@@ -949,6 +950,31 @@ export default function SettingsPage() {
 
                   <div className="rounded-lg border border-gray-100 bg-[#F9FAFB] p-3 text-[12px] text-[#6B7280]">
                     💡 Regional currencies, live exchange rates, and base currencies are managed under <Link href="/admin/currencies" className="font-medium text-[#0F6CBD] underline hover:text-[#0c4a80]">Admin → Currencies</Link>. Default storefront countries and mappings are managed under <Link href="/admin/countries" className="font-medium text-[#0F6CBD] underline hover:text-[#0c4a80]">Admin → Countries</Link>.
+                  </div>
+                </div>
+
+                {/* Card 4: Storewide Quotations & RFQ Settings */}
+                <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
+                    <div>
+                      <h3 className="text-[15px] font-bold text-[#1A1A1A]">
+                        Storewide Quotations & RFQ (Request for Quote)
+                      </h3>
+                      <p className="text-[12px] text-[#6B7280]">
+                        Control the visibility of the "Add to Quote" button across all product pages.
+                      </p>
+                    </div>
+                    <Toggle
+                      value={g("general.allow_quotes") !== "false"}
+                      onChange={(v) => set("general.allow_quotes", v ? "true" : "false")}
+                    />
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-[#F9FAFB] p-3 text-[12.5px] text-[#4B5563]">
+                    <span className="text-base">💡</span>
+                    <div>
+                      <strong className="text-[#111827]">Global & Per-Product Control:</strong> When this master switch is <strong>OFF</strong>, the "Add to Quote" button is deactivated across the entire store, and "Add to Cart" smoothly expands to full width. When <strong>ON</strong>, you can also enable or disable quotations on a per-product level inside the Product Editor.
+                    </div>
                   </div>
                 </div>
               </div>

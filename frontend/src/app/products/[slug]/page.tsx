@@ -21,7 +21,9 @@ import { ShareButton } from "@/components/product/ShareButton";
 import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
 import { DownloadCatalogueButton } from "@/components/product/DownloadCatalogueButton";
 import { ConfigureButton } from "@/components/product/ConfigureButton";
+import { PdpProductSidebar } from "@/components/product/PdpProductSidebar";
 import { buildMetadata } from "@/lib/seo";
+import { staticMessages, type StaticMessageKey } from "@/i18n/staticMessages";
 import homeContent from "@/data/home.json";
 import productsData from "@/data/products.json";
 import type { ProductDetail } from "@/types/product.types";
@@ -34,6 +36,22 @@ const API_ORIGIN =
   (process.env.NEXT_PUBLIC_API_URL
     ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api(?:\/admin)?$/, "")
     : "http://localhost:4000");
+
+const fetchStaticTranslations = cache(async (language?: string): Promise<Record<string, string>> => {
+  if (!language || language === "en") return {};
+  try {
+    const res = await fetch(`${API_ORIGIN}/api/translations/static?lang=${encodeURIComponent(language)}`, {
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return json.data || {};
+    }
+    return {};
+  } catch {
+    return {};
+  }
+});
 
 const fetchProductFromApi = cache(async (slug: string): Promise<ApiProductDetail | null> => {
   try {
@@ -177,10 +195,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const apiProduct = await fetchProductFromApi(slug);
+  const cookieStore = await cookies();
+  const language = cookieStore.get("language")?.value;
+  const [apiProduct, staticTranslations] = await Promise.all([
+    fetchProductFromApi(slug),
+    fetchStaticTranslations(language),
+  ]);
 
   if (!apiProduct) notFound();
 
+  const t = (key: StaticMessageKey): string => staticTranslations[key] || staticMessages[key] || key;
   const publicPrice = getPublicPrice(apiProduct);
   const publicDiscount = getPublicDiscount(publicPrice);
   const product = mergeProduct(apiProduct);
@@ -189,20 +213,28 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   return (
     <>
       <section className="pt-6 lg:pt-8.5 pb-4">
-        <Container>
-          {/* Top Bar: Back Navigation and Breadcrumbs */}
-          <div className="mb-4 space-y-2">
-            <div>
-              <Link
-                href="/products"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
-              >
+        <Container className="max-w-[1720px] px-4 sm:px-6 md:px-8 xl:px-10">
+          <div className="flex flex-col lg:flex-row items-start gap-8">
+            {/* Left Sidebar: Product List & Search */}
+            <aside className="w-full lg:w-[260px] xl:w-[280px] shrink-0 lg:sticky lg:top-[140px] xl:top-[180px] lg:self-start lg:h-[calc(100vh-160px)] xl:h-[calc(100vh-200px)] flex flex-col">
+              <PdpProductSidebar currentSlug={slug} />
+            </aside>
+
+            {/* Right Main Content */}
+            <div className="flex-1 min-w-0 w-full space-y-8">
+              {/* Top Bar: Back Navigation and Breadcrumbs */}
+              <div className="space-y-2">
+                <div>
+                  <Link
+                    href="/products"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
+                  >
                 <ArrowLeft size={14} className="text-[#E31E24]" />
                 <span>Back to Products</span>
               </Link>
             </div>
 
-            <nav className="text-[13px] text-steel-2">
+            <nav className="text-[13px] text-[#111827] font-medium">
               <Link href="/" className="hover:text-brand">
                 Home
               </Link>{" "}
@@ -218,7 +250,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   </Link>{" "}
                 </>
               )}
-              / <span className="font-semibold text-[#111827]">{product.title}</span>
+              / <span className="font-bold text-[#111827]">{product.title}</span>
             </nav>
           </div>
 
@@ -227,7 +259,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <ProductGallery images={product.images} title={product.title} />
 
             <div>
-              <h1 className="mb-2 text-[28px] font-normal leading-tight tracking-tight text-ink sm:text-[32px] sm:leading-tight">{product.title}</h1>
+              <div className="mb-2 flex items-start justify-between gap-4">
+                <h1 className="text-[28px] font-normal leading-tight tracking-tight text-[#111827] sm:text-[32px] sm:leading-tight">
+                  {product.title}
+                </h1>
+                <ShareButton
+                  title={product.title}
+                  image={product.images?.[0]}
+                  className="mt-0.5 shrink-0 border border-[#E5E7EB] bg-white p-2 hover:border-[#E31E24] hover:bg-red-50 text-[#111827] hover:text-[#E31E24] shadow-2xs"
+                />
+              </div>
 
               {product.informationImage || product.informationDescription ? (
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -239,23 +280,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     />
                   ) : null}
                   {product.informationDescription ? (
-                    <p className="max-w-2xl text-[13.5px] leading-relaxed text-steel sm:pt-0.5">
+                    <p className="max-w-2xl text-[13.5px] font-medium leading-relaxed text-[#111827] sm:pt-0.5">
                       {product.informationDescription}
                     </p>
                   ) : null}
                 </div>
               ) : null}
 
-              {/* Rating & Share Header */}
-              <div className="mb-4 flex items-center justify-between gap-3 border-b border-line pb-3">
-                <ProductHeaderRating slug={product.slug} />
-                <ShareButton title={product.title} image={product.images?.[0]} />
-              </div>
+              <ProductHeaderRating slug={product.slug} className="mb-4" />
 
               {publicPrice ? (
                 <div className="mb-4 space-y-1">
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-[13px] font-bold uppercase tracking-wider text-[#6B7280]">Starting at</span>
+                    <span className="text-[13px] font-bold uppercase tracking-wider text-[#111827]">Starting at</span>
                     <span className="text-[26px] font-extrabold text-[#E31E24]">
                       {formatMoney(publicPrice.currencySymbol, publicPrice.sellingPrice)}
                     </span>
@@ -267,7 +304,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   </div>
 
                   {publicDiscount ? (
-                    <p className="text-[13px] text-[#6B7280]">
+                    <p className="text-[13px] font-semibold text-[#111827]">
                       M.R.P.: <span className="line-through">{formatMoney(publicPrice.currencySymbol, publicPrice.mrp)}</span>
                     </p>
                   ) : null}
@@ -279,9 +316,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       </span>
                     </div>
                   ) : (publicPrice as any)?.taxMode === "INCLUSIVE" ? (
-                    <p className="text-[12px] text-[#6B7280]">Inclusive of all taxes</p>
+                    <p className="text-[12px] font-medium text-[#111827]">{t("ui.products.taxInclusive")}</p>
                   ) : (
-                    <p className="text-[12px] text-[#6B7280]">Taxes calculated at checkout</p>
+                    <p className="text-[12px] font-medium text-[#111827]">{t("ui.products.taxesAtCheckout")}</p>
                   )}
                 </div>
               ) : (
@@ -289,7 +326,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   <span className="inline-block w-fit rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-3.5 py-1 text-sm font-semibold text-[#E31E24]">
                     Price Upon Request
                   </span>
-                  <p className="text-[13px] text-[#6B7280]">
+                  <p className="text-[13px] font-medium text-[#111827]">
                     Pricing for this region is provided via custom quote.
                   </p>
                 </div>
@@ -297,25 +334,25 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
               {/* Primary Buy Box & Actions */}
               {hasVariants ? (
-                <div className="my-5 rounded-2xl border-2 border-red-100 bg-gradient-to-br from-red-50/50 via-white to-slate-50/60 p-4 sm:p-5 space-y-3 shadow-xs">
+                <div className="my-5 rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 space-y-3 shadow-xs">
                   <div className="flex flex-wrap items-center gap-3">
                     <ConfigureButton label="Buy Now" className="h-11 flex-1 min-w-[150px]" />
                     {apiProduct?.id && (
                       <WishlistButton
                         productId={apiProduct.id}
                         showText={true}
-                        className="h-11 px-5 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] cursor-pointer"
+                        className="h-11 px-5 border border-[#E31E24] bg-white hover:bg-red-50 hover:text-[#E31E24] text-[#111827] shadow-2xs text-[13.5px] font-bold cursor-pointer"
                         iconSize={18}
                       />
                     )}
                   </div>
-                  <p className="text-[12.5px] font-medium text-ink/80 flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-full bg-brand shrink-0 animate-pulse" />
-                    Select your preferred prescription, slot size, and package below to order.
+                  <p className="text-[13px] font-semibold text-[#111827] flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-full bg-[#E31E24] shrink-0 animate-pulse" />
+                    {t("ui.products.selectVariantsHelper")}
                   </p>
                 </div>
               ) : (apiProduct?.prices?.length ?? 0) > 0 ? (
-                <div className="my-5 rounded-2xl border-2 border-red-100 bg-gradient-to-br from-red-50/50 via-white to-slate-50/60 p-4 sm:p-5 shadow-xs">
+                <div className="my-5 rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 shadow-xs">
                   <BaseProductConfigurator apiProduct={apiProduct} />
                 </div>
               ) : (
@@ -330,7 +367,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     <WishlistButton
                       productId={apiProduct.id}
                       showText={true}
-                      className="h-11 px-5 border border-line bg-white hover:border-[#E31E24] hover:text-[#E31E24] shadow-2xs text-[13.5px] cursor-pointer"
+                      className="h-11 px-5 border border-[#E31E24] bg-white hover:bg-red-50 hover:text-[#E31E24] text-[#111827] shadow-2xs text-[13.5px] font-bold cursor-pointer"
                       iconSize={18}
                     />
                   )}
@@ -340,11 +377,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               {/* Information & Specifications */}
               <div className="space-y-3 pt-1">
                 <div>
-                  <span className="mb-1 block text-xs uppercase tracking-wide text-steel-2 font-semibold">Information</span>
-                  <p className="text-[14.5px] leading-relaxed text-steel">{product.information}</p>
+                  <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">Information</span>
+                  <p className="text-[14.5px] font-medium leading-relaxed text-[#111827]">{product.information}</p>
                 </div>
                 {product.productCode && (
-                  <span className="block text-xs uppercase tracking-wide text-steel-2 font-semibold">
+                  <span className="block text-xs uppercase tracking-wide text-[#111827] font-bold">
                     Product Code: {product.productCode}
                   </span>
                 )}
@@ -370,6 +407,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {/* Dentalkart Style Feedback Section */}
           <ProductFeedbackSection product={product} />
+            </div>
+          </div>
         </Container>
       </section>
 

@@ -102,8 +102,8 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
   );
 
   const validPrimaryFeatures = useMemo(
-    () => (product.primaryFeatures || []).filter((item: { title?: string; description?: string }) => isNonEmptyText(item.title) || isNonEmptyText(item.description)),
-    [product.primaryFeatures]
+    () => ((apiProduct?.primaryFeatures || product.primaryFeatures) || []).filter((item: { title?: string; description?: string; image?: string }) => isNonEmptyText(item.title) || isNonEmptyText(item.description) || Boolean(item.image)),
+    [apiProduct?.primaryFeatures, product.primaryFeatures]
   );
 
   const displayedPackages = useMemo(() => {
@@ -226,9 +226,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
   ] as const;
 
   return (
-    <section id="product-specifications" className="mt-8 scroll-mt-28 rounded-xl border border-[#E5E7EB] bg-white shadow-2xs overflow-hidden">
+    <section id="product-specifications" className="mt-8 scroll-mt-28 rounded-xl border border-[#E31E24] bg-white shadow-2xs overflow-hidden">
       {/* Horizontal Tabs Header Bar */}
-      <div className="border-b border-[#E5E7EB] bg-[#FAFAFA] overflow-x-auto scrollbar-none">
+      <div className="border-b border-[#E31E24]/30 bg-[#FAFAFA] overflow-x-auto scrollbar-none">
         <div className="flex min-w-max items-center px-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -238,13 +238,13 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`flex items-center gap-1.5 border-b-2 px-4 py-3 text-[13px] font-semibold transition-all ${
+                className={`flex items-center gap-1.5 border-b-2 px-4 py-3 text-[13.5px] font-bold transition-all cursor-pointer ${
                   isActive
                     ? "border-[#E31E24] bg-white text-[#E31E24] shadow-2xs"
-                    : "border-transparent text-[#6B7280] hover:border-[#D1D5DB] hover:text-[#1A1A1A]"
+                    : "border-transparent text-[#111827] hover:border-[#E31E24] hover:text-[#E31E24]"
                 }`}
               >
-                <Icon size={15} className={isActive ? "text-[#E31E24]" : "text-[#9CA3AF]"} />
+                <Icon size={15} className={isActive ? "text-[#E31E24]" : "text-[#111827]"} />
                 {tab.label}
               </button>
             );
@@ -258,21 +258,21 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {/* 1. FEATURES TAB */}
         {activeTab === "features" && (
           <div className="space-y-4">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Key Features & Advantages</h3>
+            <h3 className="text-[16px] font-bold text-[#111827]">Key Features & Advantages</h3>
             {validHighlights.length > 0 ? (
               <div className="columns-1 sm:columns-2 gap-3 space-y-3">
                 {validHighlights.map((item, idx) => (
-                  <div key={idx} className="break-inside-avoid flex items-start gap-3 rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] p-3.5">
+                  <div key={idx} className="break-inside-avoid flex items-start gap-3 rounded-lg border border-[#E31E24] bg-white p-3.5">
                     {item.image ? (
-                      <img src={item.image} alt={item.title} className="h-16 w-16 md:h-20 md:w-20 rounded-lg border border-[#E5E7EB] bg-white p-1 object-contain shrink-0 shadow-2xs" />
+                      <img src={item.image} alt={item.title} className="h-16 w-16 md:h-20 md:w-20 rounded-lg border border-[#E31E24] bg-white p-1 object-contain shrink-0 shadow-2xs" />
                     ) : (
                       <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-[#E31E24]" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <strong className="block text-[13.5px] font-bold text-[#1A1A1A]">{item.title}</strong>
+                      <strong className="block text-[13.5px] font-bold text-[#111827]">{item.title}</strong>
                       {item.description && (
                         <div
-                          className="product-rich-text font-sans mt-1 text-[12.5px] leading-relaxed text-[#6B7280] [&_*]:!font-sans [&_p]:m-0 [&_p]:my-1 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:md:max-h-52 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1.5 [&_img]:shadow-2xs [&_img]:align-middle"
+                          className="product-rich-text font-sans mt-1 text-[12.5px] leading-relaxed text-[#111827] [&_*]:!font-sans [&_p]:m-0 [&_p]:my-1 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:md:max-h-52 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1.5 [&_img]:shadow-2xs [&_img]:align-middle"
                           dangerouslySetInnerHTML={{ __html: cleanPublicHtml(item.description) }}
                         />
                       )}
@@ -281,8 +281,8 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 ))}
               </div>
             ) : apiProduct?.shortDescription ? (
-              <div className="product-rich-text font-sans rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] p-4 text-[13.5px] text-[#374151] leading-relaxed [&_*]:!font-sans">
-                <p className="font-semibold text-[#1A1A1A] mb-1">{product.title}</p>
+              <div className="product-rich-text font-sans rounded-lg border border-[#E31E24] bg-white p-4 text-[13.5px] text-[#111827] leading-relaxed [&_*]:!font-sans">
+                <p className="font-semibold text-[#111827] mb-1">{product.title}</p>
                 <div dangerouslySetInnerHTML={{ __html: cleanPublicHtml(apiProduct.shortDescription) }} />
               </div>
             ) : (
@@ -303,14 +303,63 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
 
         {/* 2. DESCRIPTION TAB */}
         {activeTab === "description" && (
-          <div className="space-y-3 max-w-4xl">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Clinical Product Description</h3>
-            <div
-              className="product-rich-text font-sans text-[14px] leading-relaxed text-[#4B5563] [&_*]:!font-sans [&_p]:mb-3.5 [&_p:last-child]:mb-0 [&_strong]:text-[#1A1A1A] [&_b]:text-[#1A1A1A] [&_img]:my-2.5 [&_img]:inline-block [&_img]:max-h-56 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1 [&_img]:shadow-xs [&_img]:align-middle"
-              dangerouslySetInnerHTML={{
-                __html: formatRichText(apiProduct?.description || product.information || "Detailed orthodontic system engineered for high clinical accuracy and patient comfort during active treatment.")
-              }}
-            />
+          <div className="space-y-4">
+            <h3 className="text-[16px] font-bold text-[#111827]">Clinical Product Description</h3>
+            {validPrimaryFeatures.length > 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* Left Column: Clinical Description Text */}
+                <div className="lg:col-span-6 space-y-3">
+                  <div
+                    className="product-rich-text font-sans text-[13.5px] leading-relaxed text-[#111827] clearfix [&_*]:!font-sans [&_p]:mb-3.5 [&_p:last-child]:mb-0 [&_strong]:text-[#111827] [&_b]:text-[#111827] [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2.5 [&_h2]:text-[17px] [&_h2]:font-bold [&_h2]:text-[#111827] [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:text-[15px] [&_h3]:font-bold [&_h3]:text-[#111827] [&_h3]:mt-2.5 [&_h3]:mb-1 [&_blockquote]:border-l-4 [&_blockquote]:border-[#E31E24] [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-gray-200 [&_th]:p-2 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-200 [&_td]:p-2 after:content-[''] after:table after:clear-both"
+                    dangerouslySetInnerHTML={{
+                      __html: formatRichText(apiProduct?.description || product.information || "Detailed orthodontic system engineered for high clinical accuracy and patient comfort during active treatment.")
+                    }}
+                  />
+                </div>
+
+                {/* Right Column: Product Data Visual Instruction Cards */}
+                <div className="lg:col-span-6 space-y-3">
+                  {validPrimaryFeatures.map((item: { title?: string; description?: string; image?: string }, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 shadow-2xs hover:border-[#E31E24]/30 hover:shadow-xs transition-all"
+                    >
+                      {item.image && (
+                        <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white p-1 flex items-center justify-center shadow-2xs">
+                          <img
+                            src={item.image}
+                            alt={item.title || `Product Data ${idx + 1}`}
+                            className="h-full w-full object-contain"
+                          />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        {item.title && (
+                          <h4 className="text-[13.5px] font-bold text-[#111827] mb-1">
+                            {item.title}
+                          </h4>
+                        )}
+                        {item.description && (
+                          <div
+                            className="product-rich-text font-sans text-[13px] leading-relaxed text-[#374151]"
+                            dangerouslySetInnerHTML={{ __html: cleanPublicHtml(item.description) }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-4xl">
+                <div
+                  className="product-rich-text font-sans text-[14px] leading-relaxed text-[#111827] clearfix [&_*]:!font-sans [&_p]:mb-3.5 [&_p:last-child]:mb-0 [&_strong]:text-[#111827] [&_b]:text-[#111827] [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2.5 [&_h2]:text-[18px] [&_h2]:font-bold [&_h2]:text-[#111827] [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-[16px] [&_h3]:font-bold [&_h3]:text-[#111827] [&_h3]:mt-3 [&_h3]:mb-1.5 [&_blockquote]:border-l-4 [&_blockquote]:border-[#E31E24] [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:border [&_th]:border-gray-200 [&_th]:p-2 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-200 [&_td]:p-2 after:content-[''] after:table after:clear-both"
+                  dangerouslySetInnerHTML={{
+                    __html: formatRichText(apiProduct?.description || product.information || "Detailed orthodontic system engineered for high clinical accuracy and patient comfort during active treatment.")
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -319,8 +368,8 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "specs" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <h3 className="text-[16px] font-bold text-[#1A1A1A]">Technical Specifications & Clinical Geometry</h3>
-              <span className="text-[12px] font-medium text-[#6B7280] bg-[#F3F4F6] px-2.5 py-1 rounded-md">
+              <h3 className="text-[16px] font-bold text-[#111827]">Technical Specifications & Clinical Geometry</h3>
+              <span className="text-[12px] font-bold text-[#111827] bg-red-50 px-2.5 py-1 rounded-md border border-red-200">
                 ISO 13485 & CE Precision Engineering
               </span>
             </div>
@@ -328,13 +377,13 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
               {/* Specs Key-Value Table (7 cols on desktop) */}
               <div className={specImages.length > 0 ? "lg:col-span-7 space-y-4" : "lg:col-span-12 space-y-4"}>
-                <div className="overflow-hidden rounded-lg border border-[#E5E7EB] bg-white shadow-2xs">
+                <div className="overflow-hidden rounded-lg border-2 border-red-200 bg-white shadow-2xs">
                   <table className="w-full text-left text-[13px]">
-                    <tbody className="divide-y divide-[#E5E7EB]">
+                    <tbody className="divide-y divide-red-100">
                       {Object.entries(specsMap).map(([key, val]) => (
-                        <tr key={key} className="even:bg-[#F9FAFB] hover:bg-[#F3F4F6]/60 transition-colors">
-                          <td className="w-2/5 px-3.5 py-3 font-semibold text-[#374151] bg-[#F3F4F6]/50 border-r border-[#E5E7EB]/50">{key}</td>
-                          <td className="px-3.5 py-3 font-medium text-[#1A1A1A]">{String(val)}</td>
+                        <tr key={key} className="even:bg-red-50/20 hover:bg-red-50/40 transition-colors">
+                          <td className="w-2/5 px-3.5 py-3 font-bold text-[#111827] bg-red-50/40 border-r border-red-100">{key}</td>
+                          <td className="px-3.5 py-3 font-semibold text-[#111827]">{String(val)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -342,7 +391,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 </div>
 
                 {/* Additional Spec Notes */}
-                <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-3 text-[12.5px] text-[#4B5563] flex items-center gap-2">
+                <div className="rounded-lg border-2 border-red-200 bg-red-50/30 p-3 text-[12.5px] text-[#111827] flex items-center gap-2">
                   <Info size={16} className="text-[#E31E24] shrink-0" />
                   <span>All bracket dimensions, slot tolerances (.018 / .022), torque, and angulation parameters adhere to international clinical standards.</span>
                 </div>
@@ -350,9 +399,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
 
               {/* Technical Specification Image Carousel (5 cols on desktop) */}
               {specImages.length > 0 && (
-                <div className="lg:col-span-5 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 shadow-2xs">
+                <div className="lg:col-span-5 rounded-xl border-2 border-red-200 bg-white p-4 shadow-2xs">
                   <div className="flex items-center justify-between mb-2.5">
-                    <span className="text-[13px] font-bold text-[#1A1A1A] flex items-center gap-1.5">
+                    <span className="text-[13px] font-bold text-[#111827] flex items-center gap-1.5">
                       <Layers size={14} className="text-[#E31E24]" />
                       Specification Diagrams
                     </span>
@@ -515,44 +564,44 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         )}
 
         {/* 5. DIRECTION TO USE TAB */}
-        {activeTab === "usage" && (
+        {activeTab === "usage" && validPrimaryFeatures.length > 0 && (
           <div className="space-y-3 max-w-4xl">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Direction To Use & Clinical Guidelines</h3>
-            {validPrimaryFeatures.length > 0 ? (
-              <ol className="space-y-2.5 text-[13.5px] text-[#374151]">
-                {validPrimaryFeatures.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2.5">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">
+            <div className="space-y-3">
+              {validPrimaryFeatures.map((item: { title?: string; description?: string; image?: string }, idx: number) => (
+                <div
+                  key={idx}
+                  className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-xl border border-[#E5E7EB] bg-white p-3.5 shadow-2xs hover:border-[#E31E24]/30 hover:shadow-xs transition-all"
+                >
+                  {item.image ? (
+                    <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] p-1 flex items-center justify-center">
+                      <img
+                        src={item.image}
+                        alt={item.title || `Instruction ${idx + 1}`}
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[12px] font-bold text-white">
                       {idx + 1}
                     </span>
-                    <div>
-                      <strong className="font-bold text-[#1A1A1A]">{item.title}</strong>
-                      {item.description && (
-                        <div
-                          className="product-rich-text font-sans mt-0.5 text-[13px] leading-relaxed text-[#6B7280] [&_*]:!font-sans [&_p]:m-0 [&_p]:my-0.5 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:max-w-full [&_img]:rounded-lg"
-                          dangerouslySetInnerHTML={{ __html: cleanPublicHtml(item.description) }}
-                        />
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <ol className="space-y-2.5 text-[13.5px] text-[#374151]">
-                <li className="flex items-start gap-2.5">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">1</span>
-                  <span>Inspect product packaging and verify specification suitability before clinical use.</span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">2</span>
-                  <span>Prepare treatment site following standard clinical orthodontic protocols.</span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E31E24] text-[11px] font-bold text-white">3</span>
-                  <span>Apply product according to clinical technique and manufacturer instructions.</span>
-                </li>
-              </ol>
-            )}
+                  )}
+                  <div className="flex-1 min-w-0">
+                    {item.title && (
+                      <h4 className="text-[14px] font-bold text-[#111827] mb-1">
+                        {item.title}
+                      </h4>
+                    )}
+                    {item.description && (
+                      <div
+                        className="product-rich-text font-sans text-[13px] leading-relaxed text-[#4B5563]"
+                        dangerouslySetInnerHTML={{ __html: cleanPublicHtml(item.description) }}
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

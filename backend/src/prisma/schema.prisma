@@ -141,6 +141,7 @@ model Product {
   status                 ProductStatus          @default(DRAFT)
   isFeatured             Boolean                @default(false)
   hasVariants            Boolean                @default(false)
+  allowQuote             Boolean                @default(true)
   defaultCountryId       String?
   defaultCurrencyId      String?
   seoTitle               String?

@@ -208,6 +208,8 @@ export default function InventoryPage() {
   const [warehouseFilterId, setWarehouseFilterId] = useState("");
   const [productFilterId, setProductFilterId] = useState("");
   const [variantFilterId, setVariantFilterId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<Record<InventoryColumnKey, boolean>>(DEFAULT_COLUMNS);
   const [columnsReady, setColumnsReady] = useState(false);
   const [historyRow, setHistoryRow] = useState<InventoryRow | null>(null);
@@ -271,7 +273,7 @@ export default function InventoryPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [search, status, sortBy, sortDir, warehouseFilterId, productFilterId, variantFilterId]);
+  }, [search, status, sortBy, sortDir, warehouseFilterId, productFilterId, variantFilterId, fromDate, toDate]);
 
   const inventoryQuery = useAdminInventory({
     page,
@@ -283,6 +285,8 @@ export default function InventoryPage() {
     warehouseId: warehouseFilterId || undefined,
     productId: productFilterId || undefined,
     variantId: variantFilterId || undefined,
+    fromDate: fromDate || undefined,
+    toDate: toDate || undefined,
   });
   const { data, isLoading, refetch, isFetching } = inventoryQuery;
   const dashboard = useAdminInventoryDashboard();
@@ -586,6 +590,11 @@ export default function InventoryPage() {
           limit: 20,
           search: search || undefined,
           status: status || undefined,
+          warehouseId: warehouseFilterId || undefined,
+          productId: productFilterId || undefined,
+          variantId: variantFilterId || undefined,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
           sortBy,
           sortDir,
           ids: selectedOnly && selectedIds.length ? selectedIds.join(",") : undefined,
@@ -757,6 +766,8 @@ export default function InventoryPage() {
     setWarehouseFilterId("");
     setProductFilterId("");
     setVariantFilterId("");
+    setFromDate("");
+    setToDate("");
     setSortBy("updatedAt");
     setSortDir("desc");
     setLimit(20);
@@ -826,7 +837,7 @@ export default function InventoryPage() {
           filters={{
             showFilters,
             onToggle: () => setShowFilters(!showFilters),
-            activeCount: [status, warehouseFilterId, productFilterId, variantFilterId, sortBy !== "updatedAt" ? sortBy : ""].filter(Boolean).length,
+            activeCount: [status, warehouseFilterId, productFilterId, variantFilterId, fromDate, toDate, sortBy !== "updatedAt" ? sortBy : ""].filter(Boolean).length,
           }}
           columns={{
             visibleColumns,
@@ -858,7 +869,7 @@ export default function InventoryPage() {
           }}
           onResetFilters={handleResetFilters}
           filterPanel={
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
               <AdminMultiSearchableSelect
                 label="Product"
                 values={productFilterId ? productFilterId.split(",").filter(Boolean) : []}
@@ -913,6 +924,24 @@ export default function InventoryPage() {
                   { value: "OUT_OF_STOCK", label: "Out of Stock" },
                   { value: "BACKORDER", label: "Backorder" },
                 ]}
+              />
+              <AdminInput
+                label="From Date"
+                type="date"
+                value={fromDate}
+                onChange={(event) => {
+                  setFromDate(event.target.value);
+                  setPage(1);
+                }}
+              />
+              <AdminInput
+                label="To Date"
+                type="date"
+                value={toDate}
+                onChange={(event) => {
+                  setToDate(event.target.value);
+                  setPage(1);
+                }}
               />
               <AdminSelect
                 label="Sort By"

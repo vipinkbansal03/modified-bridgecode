@@ -51,90 +51,91 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
 
   return (
     <>
-      <div className="flex flex-col gap-3.5 sm:flex-row sm:gap-4.5">
-      {/* Thumbnail Strip (Vertical on Desktop, Horizontal on Mobile) */}
-      <div className="custom-scrollbar-x order-2 flex gap-2.5 overflow-x-auto pb-2 sm:order-1 sm:flex-col sm:gap-3.5 sm:overflow-visible sm:pb-0">
-        {safeImages.map((img: string, i: number) => (
-          <button
-            key={`${img}-${i}`}
-            type="button"
-            onClick={() => setIndex(i)}
-            className={cn(
-              "relative flex h-[72px] w-[72px] flex-none items-center justify-center overflow-hidden rounded-md border bg-[#FAFAFA] p-1 transition-all",
-              index === i ? "border-[#E31E24] shadow-2xs scale-105" : "border-[#E5E7EB] opacity-75 hover:opacity-100"
-            )}
+      <div className="flex flex-col gap-3.5 w-full">
+        {/* Main Image Box */}
+        <div className="relative flex min-h-[280px] sm:min-h-[340px] lg:min-h-[380px] w-full items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4">
+          {/* Previous Arrow */}
+          {safeImages.length > 1 && (
+            <button
+              aria-label="Previous image"
+              type="button"
+              onClick={() => go(-1)}
+              className="absolute left-3.5 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs transition-all hover:bg-white hover:scale-105 cursor-pointer"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
+
+          {/* Main Image Preview */}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={`Zoom ${title}`}
+            onClick={() => setZoomed(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") setZoomed(true);
+            }}
+            className="relative h-[240px] sm:h-[300px] lg:h-[340px] w-full max-w-[90%] cursor-zoom-in"
           >
-            {img.startsWith("data:") ? (
-              <img src={img} alt={`${title} thumbnail ${i + 1}`} className="h-full w-full object-contain p-0.5" />
+            {safeImages[index]?.startsWith("data:") ? (
+              <img src={safeImages[index]} alt={title} className="h-full w-full object-contain transition-all duration-300" />
             ) : (
               <Image
-                src={img}
-                alt={`${title} thumbnail ${i + 1}`}
+                src={safeImages[index]}
+                alt={title}
                 fill
-                sizes="72px"
-                className="object-contain p-0.5"
-                unoptimized={img?.startsWith("http://") || img?.startsWith("https://")}
+                sizes="(max-width: 768px) 90vw, 550px"
+                className="object-contain transition-all duration-300"
+                priority
+                unoptimized={safeImages[index]?.startsWith("http://") || safeImages[index]?.startsWith("https://")}
               />
             )}
-          </button>
-        ))}
-      </div>
+          </div>
 
-      {/* Main Image Box */}
-      <div className="relative order-1 flex min-h-[220px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:order-2 sm:min-h-[280px] lg:min-h-[320px]">
-        {/* Previous Arrow */}
-        {safeImages.length > 1 && (
-          <button
-            aria-label="Previous image"
-            type="button"
-            onClick={() => go(-1)}
-            className="absolute left-3.5 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs transition-all hover:bg-white hover:scale-105"
-          >
-            <ChevronLeft size={16} />
-          </button>
-        )}
-
-        {/* Main Image Preview */}
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label={`Zoom ${title}`}
-          onClick={() => setZoomed(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") setZoomed(true);
-          }}
-          className="relative h-[200px] w-[84%] cursor-zoom-in sm:h-[260px] lg:h-[300px] lg:w-[80%]"
-        >
-          {safeImages[index]?.startsWith("data:") ? (
-            <img src={safeImages[index]} alt={title} className="h-full w-full object-contain transition-all duration-300" />
-          ) : (
-            <Image
-              src={safeImages[index]}
-              alt={title}
-              fill
-              sizes="(max-width: 768px) 84vw, 500px"
-              className="object-contain transition-all duration-300"
-              priority
-              unoptimized={safeImages[index]?.startsWith("http://") || safeImages[index]?.startsWith("https://")}
-            />
+          {/* Next Arrow */}
+          {safeImages.length > 1 && (
+            <button
+              aria-label="Next image"
+              type="button"
+              onClick={() => go(1)}
+              className="absolute right-3.5 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs transition-all hover:bg-white hover:scale-105 cursor-pointer"
+            >
+              <ChevronRight size={16} />
+            </button>
           )}
-          {/* <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs">
-            <Maximize2 size={14} />
-          </span> */}
         </div>
 
-        {/* Next Arrow */}
+        {/* Thumbnail Strip - Downside (Horizontal underneath main image) */}
         {safeImages.length > 1 && (
-          <button
-            aria-label="Next image"
-            type="button"
-            onClick={() => go(1)}
-            className="absolute right-3.5 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white/90 text-[#1A1A1A] shadow-2xs transition-all hover:bg-white hover:scale-105"
-          >
-            <ChevronRight size={16} />
-          </button>
+          <div className="flex items-center gap-2.5 overflow-x-auto py-1 [scrollbar-width:thin]">
+            {safeImages.map((img: string, i: number) => (
+              <button
+                key={`${img}-${i}`}
+                type="button"
+                onClick={() => setIndex(i)}
+                className={cn(
+                  "relative flex h-[68px] w-[68px] sm:h-[72px] sm:w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border bg-[#FAFAFA] p-1 transition-all cursor-pointer",
+                  index === i
+                    ? "border-[#E31E24] shadow-xs ring-1 ring-[#E31E24]/30 scale-102 bg-white"
+                    : "border-[#E5E7EB] opacity-75 hover:opacity-100 hover:border-slate-300"
+                )}
+              >
+                {img.startsWith("data:") ? (
+                  <img src={img} alt={`${title} thumbnail ${i + 1}`} className="h-full w-full object-contain p-0.5" />
+                ) : (
+                  <Image
+                    src={img}
+                    alt={`${title} thumbnail ${i + 1}`}
+                    fill
+                    sizes="72px"
+                    className="object-contain p-0.5"
+                    unoptimized={img?.startsWith("http://") || img?.startsWith("https://")}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
         )}
-      </div>
       </div>
 
       {zoomed && (

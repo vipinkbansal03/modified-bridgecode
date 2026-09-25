@@ -77,12 +77,12 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
   return (
     <>
       {/* Dentalkart Style Feedback Bar */}
-      <div className="my-6 flex items-center justify-between rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-2xs">
+      <div className="my-6 flex items-center justify-between rounded-2xl border border-[#E31E24] bg-white p-4 shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EFF6FF] text-[#2563EB]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-[#E31E24] border border-[#E31E24]">
             <MessageSquarePlus size={20} />
           </div>
-          <p className="text-[14.5px] font-semibold text-[#1F2937]">
+          <p className="text-[14.5px] font-bold text-[#111827]">
             Would you like to tell us about the product?
           </p>
         </div>
@@ -94,7 +94,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
             setSubmittedSuccess(false);
             setIsOpen(true);
           }}
-          className="flex items-center gap-1.5 rounded-xl bg-[#FF7A59] px-5 py-2.5 text-[13.5px] font-bold text-white shadow-2xs transition-all hover:bg-[#E86745] hover:shadow-xs active:scale-95"
+          className="flex items-center gap-1.5 rounded-xl bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-bold text-white shadow-2xs transition-all hover:bg-[#B5151B] hover:shadow-xs active:scale-95 cursor-pointer"
         >
           Feedback &gt;&gt;
         </button>
@@ -224,7 +224,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
                     placeholder="Share your experience regarding performance, bonding strength, or packaging..."
                     value={feedbackText}
                     onChange={(e) => setFeedbackText(e.target.value)}
-                    className="w-full rounded-lg border border-[#D1D5DB] px-3.5 py-2 text-[13.5px] text-[#111827] outline-none focus:border-[#FF7A59] focus:ring-1 focus:ring-[#FF7A59]"
+                    className="w-full rounded-lg border border-[#D1D5DB] px-3.5 py-2 text-[13.5px] text-[#111827] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
                   />
                 </div>
 
@@ -232,7 +232,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#FF7A59] py-3 text-[14px] font-bold text-white shadow-md transition-all hover:bg-[#E86745] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] py-3 text-[14px] font-bold text-white shadow-md transition-all hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
                 >
                   <Send size={15} />
                   {submitting ? "Submitting..." : "Submit Feedback"}

@@ -50,6 +50,7 @@ export type TrackingSettings = {
     faviconUrl: string | null;
     defaultCurrency?: string | null;
     timezone?: string | null;
+    allowQuotes?: boolean;
   };
 };
 

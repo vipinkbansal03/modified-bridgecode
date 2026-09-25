@@ -1294,6 +1294,8 @@ export const useAdminInventory = (params?: {
   warehouseId?: string;
   productId?: string;
   variantId?: string;
+  fromDate?: string;
+  toDate?: string;
 }) =>
   useQuery({
     queryKey: ["admin-inventory", params],

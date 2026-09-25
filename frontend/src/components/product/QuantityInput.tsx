@@ -19,7 +19,7 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
 
   return (
     <div
-      className={`inline-flex min-w-0 items-center rounded-full border border-[#D1D5DB] ${
+      className={`inline-flex min-w-0 items-center rounded-full border border-[#E31E24] ${
         disabled ? "pointer-events-none opacity-40" : "bg-white shadow-2xs"
       } ${
         size === "xs"
@@ -32,7 +32,7 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
       <button
         type="button"
         onClick={() => onChange(value <= minPositive ? 0 : normalize(value - 1))}
-        className={`flex h-full select-none items-center justify-center rounded-l-full font-bold text-[#111827] transition-colors hover:bg-gray-100 active:bg-gray-200 ${
+        className={`flex h-full select-none items-center justify-center rounded-l-full font-bold text-[#E31E24] transition-colors hover:bg-red-50 active:bg-red-100 ${
           size === "xs" ? "w-7 text-[16px]" : size === "sm" ? "w-8 text-[17px]" : "w-10 text-[18px] sm:w-9"
         }`}
         aria-label="Decrease quantity"
@@ -51,14 +51,14 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
           onChange(isNaN(v) ? 0 : normalize(v));
         }}
         disabled={disabled}
-        className={`h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-center font-bold text-[#111827] focus:outline-none focus:ring-0 ${
+        className={`h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-center font-bold text-[#111827] placeholder:text-[#111827] focus:outline-none focus:ring-0 ${
           size === "xs" ? "text-[13px]" : size === "sm" ? "text-[13.5px]" : "text-[15px]"
         }`}
       />
       <button
         type="button"
         onClick={() => onChange(normalize(value + 1))}
-        className={`flex h-full select-none items-center justify-center rounded-r-full font-bold text-[#111827] transition-colors hover:bg-gray-100 active:bg-gray-200 ${
+        className={`flex h-full select-none items-center justify-center rounded-r-full font-bold text-[#E31E24] transition-colors hover:bg-red-50 active:bg-red-100 ${
           size === "xs" ? "w-7 text-[16px]" : size === "sm" ? "w-8 text-[17px]" : "w-10 text-[18px] sm:w-9"
         }`}
         aria-label="Increase quantity"

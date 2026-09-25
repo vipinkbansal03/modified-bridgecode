@@ -50,9 +50,17 @@ import {
   Upload,
   Globe,
   Loader2,
+  Columns2,
+  Columns3,
+  LayoutGrid,
+  FolderOpen,
+  RefreshCw,
+  Library,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
+import MediaSelectorModal from "@/components/admin/media/MediaSelectorModal";
+import type { MediaItem } from "@/services/mediaService";
 import {
   ToastProvider,
   useToast as useSharedToast,
@@ -2070,6 +2078,12 @@ function sanitizeRichText(html: string) {
     "FIGURE",
     "FIGCAPTION",
     "BUTTON",
+    "TABLE",
+    "THEAD",
+    "TBODY",
+    "TR",
+    "TD",
+    "TH",
   ]);
   const allowedAttrs = new Set([
     "href",
@@ -2084,6 +2098,11 @@ function sanitizeRichText(html: string) {
     "contenteditable",
     "onclick",
     "title",
+    "cellpadding",
+    "cellspacing",
+    "border",
+    "valign",
+    "align",
   ]);
 
   function clean(node: ChildNode) {
@@ -2152,10 +2171,8 @@ export function AdminRichTextEditor({
 }: AdminRichTextEditorProps) {
   const { showToast } = useSharedToast();
   const editorRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const [isFocused, setIsFocused] = useState(false);
-  const [uploadingImg, setUploadingImg] = useState(false);
   const [editorMode, setEditorMode] = useState<"visual" | "code">("visual");
 
   // Link Modal State
@@ -2166,11 +2183,24 @@ export function AdminRichTextEditor({
 
   // Image Modal State
   const [imgModalOpen, setImgModalOpen] = useState(false);
-  const [imgTab, setImgTab] = useState<"upload" | "url">("upload");
-  const [selectedImgFile, setSelectedImgFile] = useState<File | null>(null);
-  const [selectedImgPreview, setSelectedImgPreview] = useState<string>("");
+  const [imgTab, setImgTab] = useState<"media" | "url">("media");
+  const [selectedMediaItem, setSelectedMediaItem] = useState<MediaItem | null>(null);
+  const [mediaSelectorOpen, setMediaSelectorOpen] = useState(false);
   const [imgUrlInput, setImgUrlInput] = useState("");
   const [imgAltInput, setImgAltInput] = useState("");
+  const [imgAlign, setImgAlign] = useState<"left" | "right" | "center" | "inline">("left");
+  const [imgWidth, setImgWidth] = useState<string>("240px");
+
+  const insertLayoutColumns = (cols: 2 | 3) => {
+    saveCursorLocation();
+    let layoutHtml = "";
+    if (cols === 2) {
+      layoutHtml = `<table style="width: 100%; border-collapse: collapse; margin: 12px 0;" class="rich-col-layout"><tbody><tr><td style="width: 50%; vertical-align: top; padding-right: 12px;"><p><strong>Left Column:</strong> Add your text or image here...</p></td><td style="width: 50%; vertical-align: top; padding-left: 12px;"><p><strong>Right Column:</strong> Add your text or image here...</p></td></tr></tbody></table><p><br></p>`;
+    } else {
+      layoutHtml = `<table style="width: 100%; border-collapse: collapse; margin: 14px 0;" class="rich-col-layout"><tbody><tr><td style="width: 33.33%; vertical-align: top; padding-right: 10px;"><p><strong>Left Feature / Text:</strong><br>Enter your description points here...</p></td><td style="width: 33.33%; vertical-align: middle; text-align: center; padding: 0 8px;"><p style="text-align: center; color: #64748B; font-size: 12px;"><em>(Click here to insert Center Image)</em></p></td><td style="width: 33.33%; vertical-align: top; padding-left: 10px;"><p><strong>Right Feature / Text:</strong><br>Enter your specifications or instructions here...</p></td></tr></tbody></table><p><br></p>`;
+    }
+    insertHtmlAtSavedCursor(layoutHtml);
+  };
 
   const plainText = stripHtmlTags(value);
   const charCount = plainText.length;
@@ -2360,65 +2390,34 @@ export function AdminRichTextEditor({
 
   const openImageDialog = () => {
     saveCursorLocation();
-    setSelectedImgFile(null);
-    setSelectedImgPreview("");
+    setSelectedMediaItem(null);
     setImgUrlInput("");
     setImgAltInput("");
-    setImgTab("upload");
+    setImgTab("media");
     setImgModalOpen(true);
   };
 
-  const handleSelectFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      showToast(
-        "Please select a valid image file (PNG, JPG, WEBP, GIF).",
-        "error",
-      );
+  const handleInsertMediaImage = () => {
+    if (!selectedMediaItem?.url) {
+      showToast("Please select an image from the Media Library first.", "error");
       return;
     }
-    setSelectedImgFile(file);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setSelectedImgPreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleUploadAndInsertImage = async () => {
-    if (!selectedImgFile) {
-      showToast("Please select an image file first.", "error");
-      return;
+    let wrapperStyle = "";
+    if (imgAlign === "left") {
+      wrapperStyle = `float: left; margin: 0 16px 12px 0; max-width: ${imgWidth}; width: 100%;`;
+    } else if (imgAlign === "right") {
+      wrapperStyle = `float: right; margin: 0 0 12px 16px; max-width: ${imgWidth}; width: 100%;`;
+    } else if (imgAlign === "center") {
+      wrapperStyle = `display: block; margin: 16px auto; max-width: ${imgWidth}; width: 100%; text-align: center;`;
+    } else {
+      wrapperStyle = `display: inline-block; margin: 4px 10px 4px 0; max-width: ${imgWidth}; vertical-align: middle;`;
     }
-    setUploadingImg(true);
-    try {
-      const formData = new FormData();
-      formData.append("entityType", mediaContext?.entityType || "SYSTEM");
-      if (mediaContext?.entityId)
-        formData.append("entityId", mediaContext.entityId);
-      formData.append("purpose", "RICH_TEXT_IMAGE");
-      formData.append("files", selectedImgFile);
-      const res = await adminApi.post("/media", formData);
-      const mediaItem = Array.isArray(res.data?.data)
-        ? res.data.data[0]
-        : res.data?.data || res.data;
-      const url =
-        mediaItem?.url ||
-        mediaItem?.location ||
-        (typeof mediaItem === "string" ? mediaItem : "");
-      if (url) {
-        const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${url}" alt="${imgAltInput.trim() || selectedImgFile.name || "Product Image"}" class="max-h-56 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
-        insertHtmlAtSavedCursor(cleanImgHtml);
-        setImgModalOpen(false);
-        showToast("Image inserted successfully.", "success");
-      } else {
-        showToast("Failed to get uploaded media URL.", "error");
-      }
-    } catch (err) {
-      console.error("Image upload failed", err);
-      showToast("Image upload failed. Please try again.", "error");
-    } finally {
-      setUploadingImg(false);
-    }
+    const isPercent = imgWidth.endsWith("%");
+    const maxH = isPercent ? "360px" : imgWidth;
+    const cleanImgHtml = `<span class="img-wrapper relative select-none" style="${wrapperStyle}" contenteditable="false"><img src="${selectedMediaItem.url}" alt="${imgAltInput.trim() || selectedMediaItem.originalName || selectedMediaItem.title || "Product Image"}" style="width: 100%; max-height: ${maxH}; object-fit: contain; display: block; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; padding: 4px;" class="shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
+    insertHtmlAtSavedCursor(cleanImgHtml);
+    setImgModalOpen(false);
+    showToast("Image inserted successfully.", "success");
   };
 
   const handleInsertImageUrl = () => {
@@ -2426,7 +2425,19 @@ export function AdminRichTextEditor({
       showToast("Please enter an image URL.", "error");
       return;
     }
-    const cleanImgHtml = `<span class="img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none" contenteditable="false"><img src="${imgUrlInput.trim()}" alt="${imgAltInput.trim() || "Product Image"}" class="max-h-56 max-w-full w-auto inline-block rounded-lg border border-[#E5E7EB] bg-white p-1.5 shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
+    let wrapperStyle = "";
+    if (imgAlign === "left") {
+      wrapperStyle = `float: left; margin: 0 16px 12px 0; max-width: ${imgWidth}; width: 100%;`;
+    } else if (imgAlign === "right") {
+      wrapperStyle = `float: right; margin: 0 0 12px 16px; max-width: ${imgWidth}; width: 100%;`;
+    } else if (imgAlign === "center") {
+      wrapperStyle = `display: block; margin: 16px auto; max-width: ${imgWidth}; width: 100%; text-align: center;`;
+    } else {
+      wrapperStyle = `display: inline-block; margin: 4px 10px 4px 0; max-width: ${imgWidth}; vertical-align: middle;`;
+    }
+    const isPercent = imgWidth.endsWith("%");
+    const maxH = isPercent ? "360px" : imgWidth;
+    const cleanImgHtml = `<span class="img-wrapper relative select-none" style="${wrapperStyle}" contenteditable="false"><img src="${imgUrlInput.trim()}" alt="${imgAltInput.trim() || "Product Image"}" style="width: 100%; max-height: ${maxH}; object-fit: contain; display: block; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; padding: 4px;" class="shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
     insertHtmlAtSavedCursor(cleanImgHtml);
     setImgModalOpen(false);
     showToast("Image inserted successfully.", "success");
@@ -2640,15 +2651,37 @@ export function AdminRichTextEditor({
               </button>
 
               {!isMinimal && (
-                <button
-                  type="button"
-                  title="Insert Image"
-                  className="flex items-center gap-1.5 rounded bg-red-50 border border-red-200/70 px-2.5 py-1 text-[12px] font-semibold text-[#E31E24] hover:bg-red-100 transition-colors"
-                  onClick={openImageDialog}
-                >
-                  <ImageIcon size={13} />
-                  Image
-                </button>
+                <>
+                  <button
+                    type="button"
+                    title="Insert Image"
+                    className="flex items-center gap-1.5 rounded bg-red-50 border border-red-200/70 px-2.5 py-1 text-[12px] font-semibold text-[#E31E24] hover:bg-red-100 transition-colors"
+                    onClick={openImageDialog}
+                  >
+                    <ImageIcon size={13} />
+                    Image
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Insert 2-Column Side-by-Side Layout"
+                    className="flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                    onClick={() => insertLayoutColumns(2)}
+                  >
+                    <Columns2 size={13} />
+                    2 Cols
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Insert 3-Column Layout (Left Text • Center Image • Right Text)"
+                    className="flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                    onClick={() => insertLayoutColumns(3)}
+                  >
+                    <Columns3 size={13} />
+                    3 Cols
+                  </button>
+                </>
               )}
             </div>
 
@@ -2874,15 +2907,15 @@ export function AdminRichTextEditor({
               <div className="flex border-b border-[#E5E7EB]">
                 <button
                   type="button"
-                  onClick={() => setImgTab("upload")}
+                  onClick={() => setImgTab("media")}
                   className={`flex flex-1 items-center justify-center gap-1.5 pb-2.5 text-[13px] font-semibold border-b-2 transition-all cursor-pointer ${
-                    imgTab === "upload"
+                    imgTab === "media"
                       ? "border-[#E31E24] text-[#E31E24]"
                       : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
                   }`}
                 >
-                  <Upload size={14} />
-                  Upload File
+                  <FolderOpen size={14} />
+                  Media Library
                 </button>
                 <button
                   type="button"
@@ -2898,56 +2931,70 @@ export function AdminRichTextEditor({
                 </button>
               </div>
 
-              {imgTab === "upload" ? (
+              {imgTab === "media" ? (
                 <div className="space-y-3">
-                  {selectedImgPreview ? (
+                  {selectedMediaItem ? (
                     <div className="relative flex flex-col items-center rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-3 text-center">
                       <img
-                        src={selectedImgPreview}
-                        alt="Selected preview"
+                        src={selectedMediaItem.url}
+                        alt={selectedMediaItem.originalName || "Selected Media"}
                         className="max-h-36 w-auto rounded-md object-contain shadow-2xs mb-2 border border-[#E2E8F0] bg-white p-1"
                       />
-                      <div className="text-[12px] font-medium text-[#1E293B] truncate max-w-full">
-                        {selectedImgFile?.name}
+                      <div className="text-[12.5px] font-semibold text-[#1E293B] truncate max-w-full">
+                        {selectedMediaItem.originalName || selectedMediaItem.filename}
                       </div>
-                      <div className="text-[11px] text-[#64748B]">
-                        {selectedImgFile
-                          ? `${(selectedImgFile.size / 1024).toFixed(1)} KB`
+                      <div className="text-[11px] text-[#64748B] mt-0.5">
+                        {selectedMediaItem.width && selectedMediaItem.height
+                          ? `${selectedMediaItem.width} × ${selectedMediaItem.height} px • `
                           : ""}
+                        {(selectedMediaItem.size / 1024).toFixed(1)} KB
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="mt-2 text-[12px] font-semibold text-[#E31E24] hover:underline cursor-pointer"
-                      >
-                        Change file
-                      </button>
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMediaSelectorOpen(true)}
+                          className="text-[12px] font-semibold text-[#E31E24] hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <RefreshCw size={12} />
+                          Change from Media Library
+                        </button>
+                        <span className="text-[#CBD5E1]">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMediaItem(null)}
+                          className="text-[12px] font-semibold text-[#64748B] hover:text-red-600 cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center hover:bg-[#F1F5F9] hover:border-[#94A3B8] cursor-pointer transition-colors"
+                      onClick={() => setMediaSelectorOpen(true)}
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center hover:bg-[#F1F5F9] hover:border-[#E31E24] cursor-pointer transition-colors group"
                     >
-                      <Upload size={26} className="text-[#94A3B8] mb-2" />
-                      <p className="text-[13px] font-semibold text-[#334155]">
-                        Click or drag & drop image to select
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-[#E31E24] mb-2 group-hover:scale-105 transition-transform shadow-2xs">
+                        <ImageIcon size={22} />
+                      </div>
+                      <p className="text-[13.5px] font-bold text-[#1E293B]">
+                        Select from Media Library
                       </p>
-                      <p className="text-[11.5px] text-[#94A3B8] mt-0.5">
-                        PNG, JPG, WEBP, GIF up to 10MB
+                      <p className="text-[11.5px] text-[#64748B] mt-0.5">
+                        Browse existing media or upload new images to library
                       </p>
+                      <button
+                        type="button"
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-2xs hover:bg-[#B5151B] transition-colors cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMediaSelectorOpen(true);
+                        }}
+                      >
+                        <FolderOpen size={13} />
+                        Open Media Library
+                      </button>
                     </div>
                   )}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleSelectFile(file);
-                      e.target.value = "";
-                    }}
-                  />
 
                   <div>
                     <label className="block text-[12px] font-medium text-[#64748B] mb-1">
@@ -3005,6 +3052,42 @@ export function AdminRichTextEditor({
                 </div>
               )}
 
+              {/* Position / Text Flow and Size */}
+              <div className="grid grid-cols-2 gap-3 border-t border-[#E5E7EB] pt-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-[#374151] mb-1">
+                    Image Alignment
+                  </label>
+                  <select
+                    value={imgAlign}
+                    onChange={(e) => setImgAlign(e.target.value as any)}
+                    className="w-full rounded-md border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-[#1E293B] outline-none focus:border-[#E31E24]"
+                  >
+                    <option value="left">Float Left (Text wraps on right)</option>
+                    <option value="right">Float Right (Text wraps on left)</option>
+                    <option value="center">Centered (Full Row / Block)</option>
+                    <option value="inline">Inline</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-[#374151] mb-1">
+                    Image Size
+                  </label>
+                  <select
+                    value={imgWidth}
+                    onChange={(e) => setImgWidth(e.target.value)}
+                    className="w-full rounded-md border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-[#1E293B] outline-none focus:border-[#E31E24]"
+                  >
+                    <option value="120px">Micro (120px)</option>
+                    <option value="180px">Small (180px)</option>
+                    <option value="240px">Medium (240px - Recommended for text wrap)</option>
+                    <option value="340px">Large (340px)</option>
+                    <option value="50%">Half Width (50%)</option>
+                    <option value="100%">Full Width (100%)</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-2 border-t border-[#E5E7EB] pt-3">
                 <button
                   type="button"
@@ -3013,21 +3096,14 @@ export function AdminRichTextEditor({
                 >
                   Cancel
                 </button>
-                {imgTab === "upload" ? (
+                {imgTab === "media" ? (
                   <button
                     type="button"
-                    disabled={!selectedImgFile || uploadingImg}
-                    onClick={handleUploadAndInsertImage}
+                    disabled={!selectedMediaItem}
+                    onClick={handleInsertMediaImage}
                     className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    {uploadingImg ? (
-                      <>
-                        <Loader2 size={13} className="animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      "Upload & Insert Image"
-                    )}
+                    Insert Image
                   </button>
                 ) : (
                   <button
@@ -3041,6 +3117,21 @@ export function AdminRichTextEditor({
                 )}
               </div>
             </div>
+
+            {/* Media Selector Modal */}
+            <MediaSelectorModal
+              open={mediaSelectorOpen}
+              onClose={() => setMediaSelectorOpen(false)}
+              onSelect={(media) => {
+                setSelectedMediaItem(media);
+                if (!imgAltInput) {
+                  setImgAltInput(media.altText || media.title || media.originalName || "");
+                }
+                setMediaSelectorOpen(false);
+              }}
+              initialType="image"
+              title="Select Image from Media Library"
+            />
           </div>,
           document.body,
         )}

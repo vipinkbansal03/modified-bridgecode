@@ -5,9 +5,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#1A1A1A",
-        steel: "#6B6B6B",
-        "steel-2": "#9A9A9A",
+        ink: "#111827",
+        steel: "#111827",
+        "steel-2": "#111827",
         brand: {
           DEFAULT: "#E31E24",
           deep: "#B5151B",

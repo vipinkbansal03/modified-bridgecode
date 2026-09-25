@@ -232,11 +232,7 @@ export function VariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     );
   }
 
-  if (xAxisCount >= 1 && yAxisCount >= 1) {
-    return <DynamicVariantMatrixConfigurator apiProduct={activeProduct} />;
-  }
-
-  return <SingleVariantConfigurator apiProduct={activeProduct} />;
+  return <DynamicVariantMatrixConfigurator apiProduct={activeProduct} />;
 }
 
 function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
@@ -839,7 +835,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
   return (
     <section className="pt-8 sm:pt-8.5">
-      <div className="mb-8 rounded-2xl border-2 border-[#E31E24] bg-white p-4 sm:p-6 lg:p-8 shadow-sm transition-all duration-300">
+      <div className="mb-8 rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-6 lg:p-8 shadow-sm transition-all duration-300">
         <div className="mb-5 flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-[720px]">
             <span className="mb-2 inline-flex items-center gap-2 rounded-pill border border-red-200 bg-red-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E31E24]">

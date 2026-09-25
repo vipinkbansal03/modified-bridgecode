@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Star } from "lucide-react";
 import { fetchProductReviews } from "@/hooks/api/useProducts";
+import { cn } from "@/utils/cn";
 
 interface ProductHeaderRatingProps {
   slug: string;
@@ -10,6 +11,7 @@ interface ProductHeaderRatingProps {
   initialCount?: number;
   liveRating?: number | null;
   liveCount?: number | null;
+  className?: string;
 }
 
 export function ProductHeaderRating({
@@ -18,6 +20,7 @@ export function ProductHeaderRating({
   initialCount = 0,
   liveRating,
   liveCount,
+  className,
 }: ProductHeaderRatingProps) {
   const [rating, setRating] = useState(initialRating);
   const [count, setCount] = useState(initialCount);
@@ -50,11 +53,11 @@ export function ProductHeaderRating({
   }
 
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-[#F3F4F6] bg-[#FAFAFA] px-2.5 py-1 text-[13px]">
+    <div className={cn("inline-flex items-center gap-1.5 rounded-lg border border-[#F3F4F6] bg-[#FAFAFA] px-2.5 py-1 text-[13px]", className)}>
       <span className="inline-flex items-center gap-1 rounded bg-[#16A34A] px-1.5 py-0.5 text-[11px] font-bold text-white">
         {rating.toFixed(1)} <Star size={11} className="fill-current" />
       </span>
-      <span className="text-[#6B7280] font-medium">({count} {count === 1 ? "Rating" : "Ratings"})</span>
+      <span className="text-[#111827] font-semibold">({count} {count === 1 ? "Rating" : "Ratings"})</span>
     </div>
   );
 }

@@ -71,7 +71,7 @@ export function RecentlySeenSection({ currentSlug }: RecentlySeenSectionProps) {
     <section className="pb-15 pt-8">
       <Container>
         <div className="mb-6 flex items-end justify-between">
-          <h3 className="text-[22px] font-light text-ink">Recently seen</h3>
+          <h3 className="text-[22px] font-bold text-[#111827]">Recently seen</h3>
           <div className="flex gap-2.5">
             <button aria-label="Previous" onClick={() => scrollBy(-220)} className="flex h-9.5 w-9.5 items-center justify-center rounded-full border border-line hover:border-steel-2">
               <ChevronLeft size={14} />

@@ -37,7 +37,7 @@ export type ProductTranslationDraft = {
   highlights: Array<{ title: string; description: string; image?: string }>;
   technicalSpecs: Array<{ label: string; value: string; image?: string }>;
   warranty: string[];
-  primaryFeatures: Array<{ title: string; description: string }>;
+  primaryFeatures: Array<{ title: string; description: string; image?: string }>;
 };
 
 export interface TabTranslationsProps {
@@ -63,7 +63,7 @@ export function TabTranslations({ productId, product, refetch }: TabTranslations
         highlights?: Array<{ title: string; description: string; image?: string }> | string | null;
         technicalSpecs?: Array<{ label: string; value: string; image?: string }> | string | null;
         warranty?: string[] | string | null;
-        primaryFeatures?: Array<{ title: string; description: string }> | string | null;
+        primaryFeatures?: Array<{ title: string; description: string; image?: string }> | string | null;
       } | undefined;
 
       return {
