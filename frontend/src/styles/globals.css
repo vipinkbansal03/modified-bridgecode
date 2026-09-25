@@ -60,6 +60,12 @@ body {
   font-family: var(--font-poppins), "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* ─── Product Rich Text Font Normalization ─── */
+.product-rich-text,
+.product-rich-text * {
+  font-family: var(--font-body), 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
 /* Global elegant scrollbar styling across all pages & scrollable elements */
 * {
   scrollbar-width: thin;

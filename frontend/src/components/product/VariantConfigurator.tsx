@@ -862,21 +862,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
               {attributes.map((attribute, attrIndex) => {
-                const displayType = getAttributeDisplayType(attribute);
                 const selectedValue = selectedOptions[attribute.name];
                 const availableValues = getAvailableValuesForAttribute(attribute, attrIndex);
-                const isBinaryPill =
-                  displayType !== "DROPDOWN" && availableValues.length <= 4;
 
                 return (
                   <div
                     key={attribute.id}
-                    className={[
-                      "rounded-xl border border-line-deep bg-white p-3.5 shadow-2xs transition-colors hover:border-steel",
-                      isBinaryPill && availableValues.length > 2
-                        ? "sm:col-span-2"
-                        : "",
-                    ].join(" ")}
+                    className="rounded-xl border border-line-deep bg-white p-3.5 shadow-2xs transition-colors hover:border-steel"
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <label className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink">
@@ -887,53 +879,29 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                       </span>
                     </div>
 
-                    {isBinaryPill ? (
-                      <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {availableValues.map((value) => {
-                          const active = selectedValue === value.value;
-                          return (
-                            <button
-                              key={value.id}
-                              type="button"
-                              onClick={() =>
-                                handleOptionSelect(attribute.name, value.value)
-                              }
-                              className={[
-                                "flex-1 min-w-[60px] rounded-lg border py-2 px-3 text-center text-[13px] font-bold transition-all",
-                                active
-                                  ? "border-brand bg-brand text-white shadow-2xs"
-                                  : "border-line bg-white text-ink hover:border-brand hover:text-brand",
-                              ].join(" ")}
-                            >
-                              {value.value}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="relative pt-0.5" data-variant-dropdown>
-                        <select
-                          value={selectedValue || ""}
-                          onChange={(e) =>
-                            handleOptionSelect(attribute.name, e.target.value)
-                          }
-                          className="w-full cursor-pointer rounded-lg border border-line-deep bg-white py-2.5 pl-3 pr-8 text-[13.5px] font-bold text-ink outline-none transition hover:border-steel focus:border-brand focus:ring-1 focus:ring-brand shadow-2xs"
-                        >
-                          <option value="" className="font-semibold text-steel">
-                            Select {attribute.name}
+                    <div className="relative pt-0.5" data-variant-dropdown>
+                      <select
+                        value={selectedValue || ""}
+                        onChange={(e) =>
+                          handleOptionSelect(attribute.name, e.target.value)
+                        }
+                        className="w-full appearance-none cursor-pointer rounded-lg border border-line-deep bg-white py-2.5 pl-3.5 pr-10 text-[13.5px] font-bold text-ink outline-none transition hover:border-steel focus:border-brand focus:ring-1 focus:ring-brand shadow-2xs"
+                      >
+                        <option value="" className="font-semibold text-steel">
+                          Select {attribute.name}
+                        </option>
+                        {availableValues.map((value) => (
+                          <option
+                            key={value.id}
+                            value={value.value}
+                            className="font-semibold text-ink"
+                          >
+                            {value.value}
                           </option>
-                          {availableValues.map((value) => (
-                            <option
-                              key={value.id}
-                              value={value.value}
-                              className="font-semibold text-ink"
-                            >
-                              {value.value}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                        ))}
+                      </select>
+                      <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-steel" />
+                    </div>
                   </div>
                 );
               })}

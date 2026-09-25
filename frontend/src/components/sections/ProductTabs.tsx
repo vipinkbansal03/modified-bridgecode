@@ -44,7 +44,16 @@ function cleanPublicHtml(html: string) {
     .replace(/<button[^>]*>[\s\S]*?<\/button>/gi, "")
     .replace(/<span[^>]*class="[^"]*truncate[^"]*"[^>]*>[\s\S]*?<\/span>/gi, "")
     .replace(/✓ Uploaded Image/gi, "")
-    .replace(/Remove/gi, "");
+    .replace(/Remove/gi, "")
+    .replace(/<\/?font[^>]*>/gi, "")
+    .replace(/font-family\s*:\s*[^;"]+;?/gi, "")
+    .replace(/style="([^"]*)"/gi, (_match, styleContent) => {
+      const cleanedStyle = styleContent
+        .replace(/font-family\s*:\s*[^;]+;?/gi, "")
+        .replace(/font-size\s*:\s*[^;]+;?/gi, "")
+        .trim();
+      return cleanedStyle ? `style="${cleanedStyle}"` : "";
+    });
 }
 
 function isNonEmptyText(text?: string | null): boolean {
@@ -263,7 +272,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                       <strong className="block text-[13.5px] font-bold text-[#1A1A1A]">{item.title}</strong>
                       {item.description && (
                         <div
-                          className="mt-1 text-[12.5px] leading-relaxed text-[#6B7280] [&_p]:m-0 [&_p]:my-1 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:md:max-h-52 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1.5 [&_img]:shadow-2xs [&_img]:align-middle"
+                          className="product-rich-text font-sans mt-1 text-[12.5px] leading-relaxed text-[#6B7280] [&_*]:!font-sans [&_p]:m-0 [&_p]:my-1 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:md:max-h-52 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1.5 [&_img]:shadow-2xs [&_img]:align-middle"
                           dangerouslySetInnerHTML={{ __html: cleanPublicHtml(item.description) }}
                         />
                       )}
@@ -272,7 +281,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 ))}
               </div>
             ) : apiProduct?.shortDescription ? (
-              <div className="rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] p-4 text-[13.5px] text-[#374151] leading-relaxed">
+              <div className="product-rich-text font-sans rounded-lg border border-[#F3F4F6] bg-[#F9FAFB] p-4 text-[13.5px] text-[#374151] leading-relaxed [&_*]:!font-sans">
                 <p className="font-semibold text-[#1A1A1A] mb-1">{product.title}</p>
                 <div dangerouslySetInnerHTML={{ __html: cleanPublicHtml(apiProduct.shortDescription) }} />
               </div>
@@ -297,7 +306,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
           <div className="space-y-3 max-w-4xl">
             <h3 className="text-[16px] font-bold text-[#1A1A1A]">Clinical Product Description</h3>
             <div
-              className="text-[14px] leading-relaxed text-[#4B5563] [&_p]:mb-3.5 [&_p:last-child]:mb-0 [&_img]:my-2.5 [&_img]:inline-block [&_img]:max-h-56 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1 [&_img]:shadow-xs [&_img]:align-middle"
+              className="product-rich-text font-sans text-[14px] leading-relaxed text-[#4B5563] [&_*]:!font-sans [&_p]:mb-3.5 [&_p:last-child]:mb-0 [&_strong]:text-[#1A1A1A] [&_b]:text-[#1A1A1A] [&_img]:my-2.5 [&_img]:inline-block [&_img]:max-h-56 [&_img]:max-w-full [&_img]:w-auto [&_img]:rounded-lg [&_img]:border [&_img]:border-[#E5E7EB] [&_img]:bg-white [&_img]:p-1 [&_img]:shadow-xs [&_img]:align-middle"
               dangerouslySetInnerHTML={{
                 __html: formatRichText(apiProduct?.description || product.information || "Detailed orthodontic system engineered for high clinical accuracy and patient comfort during active treatment.")
               }}
@@ -520,7 +529,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                       <strong className="font-bold text-[#1A1A1A]">{item.title}</strong>
                       {item.description && (
                         <div
-                          className="mt-0.5 text-[13px] leading-relaxed text-[#6B7280] [&_p]:m-0 [&_p]:my-0.5 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:max-w-full [&_img]:rounded-lg"
+                          className="product-rich-text font-sans mt-0.5 text-[13px] leading-relaxed text-[#6B7280] [&_*]:!font-sans [&_p]:m-0 [&_p]:my-0.5 [&_img]:inline-block [&_img]:my-2 [&_img]:max-h-44 [&_img]:max-w-full [&_img]:rounded-lg"
                           dangerouslySetInnerHTML={{ __html: cleanPublicHtml(item.description) }}
                         />
                       )}
