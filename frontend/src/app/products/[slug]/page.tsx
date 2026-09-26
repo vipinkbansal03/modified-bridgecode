@@ -256,7 +256,30 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {/* Top Fold: Gallery Left, Header & Description Right */}
           <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr] items-start">
-            <ProductGallery images={product.images} title={product.title} />
+            <div className="space-y-5 lg:sticky lg:top-[140px] lg:self-start">
+              <ProductGallery images={product.images} title={product.title} />
+
+              {/* Information & Specifications (desktop: fills space below gallery) */}
+              {(product.information || product.productCode || product.catalogueUrl) && (
+                <div className="hidden sm:block rounded-xl border border-line-deep bg-white p-4.5 sm:p-5 shadow-2xs space-y-3">
+                  {product.information && (
+                    <div>
+                      <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">Information</span>
+                      <p className="text-[13.5px] font-medium leading-relaxed text-[#4B5563]">{product.information}</p>
+                    </div>
+                  )}
+                  {product.productCode && (
+                    <span className="block text-xs uppercase tracking-wide text-[#111827] font-bold">
+                      Product Code: {product.productCode}
+                    </span>
+                  )}
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <DownloadCatalogueButton catalogueUrl={product.catalogueUrl} title={product.title} />
+                    <ViewSpecsLink />
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div>
               <div className="mb-2 flex items-start justify-between gap-4">
@@ -374,22 +397,26 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 </div>
               )}
 
-              {/* Information & Specifications */}
-              <div className="space-y-3 pt-1">
-                <div>
-                  <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">Information</span>
-                  <p className="text-[14.5px] font-medium leading-relaxed text-[#111827]">{product.information}</p>
+              {/* Information & Specifications (mobile only) */}
+              {(product.information || product.productCode || product.catalogueUrl) && (
+                <div className="sm:hidden space-y-3 pt-2">
+                  {product.information && (
+                    <div>
+                      <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">Information</span>
+                      <p className="text-[14.5px] font-medium leading-relaxed text-[#111827]">{product.information}</p>
+                    </div>
+                  )}
+                  {product.productCode && (
+                    <span className="block text-xs uppercase tracking-wide text-[#111827] font-bold">
+                      Product Code: {product.productCode}
+                    </span>
+                  )}
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <DownloadCatalogueButton catalogueUrl={product.catalogueUrl} title={product.title} />
+                    <ViewSpecsLink />
+                  </div>
                 </div>
-                {product.productCode && (
-                  <span className="block text-xs uppercase tracking-wide text-[#111827] font-bold">
-                    Product Code: {product.productCode}
-                  </span>
-                )}
-                <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <DownloadCatalogueButton catalogueUrl={product.catalogueUrl} title={product.title} />
-                  <ViewSpecsLink />
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
