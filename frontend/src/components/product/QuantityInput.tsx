@@ -11,16 +11,24 @@ interface Props {
 }
 
 export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, disabled = false, size = "default" }: Props) {
-  const clamp = (v: number) => Math.max(min, max !== undefined ? Math.min(max, v) : v);
+  const isInputDisabled = disabled || (max !== undefined && max <= 0);
+  const clamp = (v: number) => {
+    if (max !== undefined && max <= 0) return 0;
+    const upperClamped = max !== undefined ? Math.min(max, v) : v;
+    return Math.max(min, upperClamped);
+  };
   const normalize = (v: number) => {
-    if (v <= 0) return 0;
+    if (isInputDisabled || v <= 0) return 0;
     return clamp(Math.max(minPositive, v));
   };
+
+  const isDecDisabled = isInputDisabled || value <= min;
+  const isIncDisabled = isInputDisabled || (max !== undefined && value >= max);
 
   return (
     <div
       className={`inline-flex min-w-0 items-center rounded-full border border-[#E31E24] ${
-        disabled ? "pointer-events-none opacity-40" : "bg-white shadow-2xs"
+        isInputDisabled ? "pointer-events-none opacity-40 bg-gray-50 cursor-not-allowed" : "bg-white shadow-2xs"
       } ${
         size === "xs"
           ? "h-7.5 w-full max-w-[100px] sm:w-[82px] sm:max-w-none"
@@ -31,8 +39,12 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
     >
       <button
         type="button"
-        onClick={() => onChange(value <= minPositive ? 0 : normalize(value - 1))}
-        className={`flex h-full select-none items-center justify-center rounded-l-full font-bold text-[#E31E24] transition-colors hover:bg-red-50 active:bg-red-100 ${
+        disabled={isDecDisabled}
+        onClick={() => {
+          if (isDecDisabled) return;
+          onChange(value <= minPositive ? 0 : normalize(value - 1));
+        }}
+        className={`flex h-full select-none items-center justify-center rounded-l-full font-bold text-[#E31E24] transition-colors hover:bg-red-50 active:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${
           size === "xs" ? "w-7 text-[16px]" : size === "sm" ? "w-8 text-[17px]" : "w-10 text-[18px] sm:w-9"
         }`}
         aria-label="Decrease quantity"
@@ -46,19 +58,24 @@ export function QuantityInput({ value, onChange, min = 0, max, minPositive = 1, 
         value={value || ""}
         placeholder="0"
         onChange={(e) => {
+          if (isInputDisabled) return;
           const raw = e.target.value.replace(/\D/g, "");
           const v = parseInt(raw, 10);
           onChange(isNaN(v) ? 0 : normalize(v));
         }}
-        disabled={disabled}
-        className={`h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-center font-bold text-[#111827] placeholder:text-[#111827] focus:outline-none focus:ring-0 ${
+        disabled={isInputDisabled}
+        className={`h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-center font-bold text-[#111827] placeholder:text-[#111827] focus:outline-none focus:ring-0 disabled:cursor-not-allowed ${
           size === "xs" ? "text-[13px]" : size === "sm" ? "text-[13.5px]" : "text-[15px]"
         }`}
       />
       <button
         type="button"
-        onClick={() => onChange(normalize(value + 1))}
-        className={`flex h-full select-none items-center justify-center rounded-r-full font-bold text-[#E31E24] transition-colors hover:bg-red-50 active:bg-red-100 ${
+        disabled={isIncDisabled}
+        onClick={() => {
+          if (isIncDisabled) return;
+          onChange(normalize(value + 1));
+        }}
+        className={`flex h-full select-none items-center justify-center rounded-r-full font-bold text-[#E31E24] transition-colors hover:bg-red-50 active:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${
           size === "xs" ? "w-7 text-[16px]" : size === "sm" ? "w-8 text-[17px]" : "w-10 text-[18px] sm:w-9"
         }`}
         aria-label="Increase quantity"

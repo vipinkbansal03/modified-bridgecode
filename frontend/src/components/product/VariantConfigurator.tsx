@@ -356,7 +356,9 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
     : 0;
 
   useEffect(() => {
-    if (currentAvailableStock > 0 && quantity > currentAvailableStock) {
+    if (currentAvailableStock > 0 && quantity === 0) {
+      setQuantity(1);
+    } else if (currentAvailableStock > 0 && quantity > currentAvailableStock) {
       setQuantity(currentAvailableStock);
     }
   }, [currentAvailableStock, quantity]);
@@ -918,10 +920,11 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <button
                     type="button"
                     aria-label="Decrease quantity"
-                    disabled={quantity <= 1 || (!currentVariant && variants.length > 0)}
-                    onClick={() =>
-                      setQuantity((current) => Math.max(1, current - 1))
-                    }
+                    disabled={quantity <= 1 || (!currentVariant && variants.length > 0) || currentAvailableStock <= 0}
+                    onClick={() => {
+                      if (currentAvailableStock <= 0) return;
+                      setQuantity((current) => Math.max(1, current - 1));
+                    }}
                     className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Minus size={14} />
@@ -930,12 +933,13 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    value={quantity}
-                    disabled={!currentVariant && variants.length > 0}
+                    value={currentAvailableStock <= 0 ? 0 : quantity}
+                    disabled={(!currentVariant && variants.length > 0) || currentAvailableStock <= 0}
                     onChange={(event) => {
+                      if (currentAvailableStock <= 0) return;
                       const raw = event.target.value.replace(/[^0-9]/g, "");
                       const num = Number(raw) || 1;
-                      const maxLimit = currentAvailableStock > 0 ? currentAvailableStock : 9999;
+                      const maxLimit = currentAvailableStock > 0 ? currentAvailableStock : 0;
                       setQuantity(Math.min(maxLimit, Math.max(1, num)));
                     }}
                     className="w-12 appearance-none border-0 bg-transparent text-center text-[15px] font-semibold text-ink outline-none sm:w-16 disabled:opacity-40"
@@ -943,13 +947,14 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                   <button
                     type="button"
                     aria-label="Increase quantity"
-                    disabled={(!currentVariant && variants.length > 0) || (currentAvailableStock > 0 && quantity >= currentAvailableStock)}
-                    onClick={() =>
+                    disabled={(!currentVariant && variants.length > 0) || currentAvailableStock <= 0 || (currentAvailableStock > 0 && quantity >= currentAvailableStock)}
+                    onClick={() => {
+                      if (currentAvailableStock <= 0) return;
                       setQuantity((current) => {
-                        const maxLimit = currentAvailableStock > 0 ? currentAvailableStock : 9999;
+                        const maxLimit = currentAvailableStock > 0 ? currentAvailableStock : 0;
                         return Math.min(maxLimit, current + 1);
-                      })
-                    }
+                      });
+                    }}
                     className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink transition hover:border-steel-2 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus size={14} />

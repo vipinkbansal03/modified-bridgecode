@@ -688,13 +688,28 @@ export function DynamicVariantMatrixConfigurator({
   };
 
   const handleQuantityChange = (variantId: string, quantity: number) => {
+    const variant = normalizedVariants.find((v) => v.id === variantId);
+    const availableStock = variant?.warehouseInventories?.length
+      ? variant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+      : (variant?.inventory?.available ?? 0);
+
+    if (quantity > 0 && availableStock <= 0) {
+      return;
+    }
+
     setQuantityMap((current) => {
       if (quantity <= 0) {
         const next = { ...current };
         delete next[variantId];
         return next;
       }
-      return { ...current, [variantId]: quantity };
+      const capped = availableStock > 0 ? Math.min(quantity, availableStock) : 0;
+      if (capped <= 0) {
+        const next = { ...current };
+        delete next[variantId];
+        return next;
+      }
+      return { ...current, [variantId]: capped };
     });
     setFeedback(null);
   };
@@ -1049,10 +1064,10 @@ export function DynamicVariantMatrixConfigurator({
                       <span className="text-[13px] font-bold text-[#111827]">Qty:</span>
                       <QuantityInput
                         size="sm"
-                        value={dropdownQuantity}
+                        value={isSingleOutOfStock ? 0 : dropdownQuantity}
                         onChange={(nextQty) => setDropdownQuantity(Math.max(1, nextQty))}
-                        min={1}
-                        max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : undefined}
+                        min={isSingleOutOfStock ? 0 : 1}
+                        max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : 0}
                         disabled={isSingleOutOfStock}
                       />
                     </div>
@@ -1157,7 +1172,7 @@ export function DynamicVariantMatrixConfigurator({
                                     >
                                       <QuantityInput
                                         size="xs"
-                                        value={quantity}
+                                        value={outOfStock ? 0 : quantity}
                                         onChange={(nextQuantity) =>
                                           handleQuantityChange(
                                             variant.id,
@@ -1165,9 +1180,9 @@ export function DynamicVariantMatrixConfigurator({
                                           )
                                         }
                                         min={0}
-                                        max={availableStock > 0 ? availableStock : undefined}
+                                        max={availableStock > 0 ? availableStock : 0}
                                         minPositive={minPositive}
-                                        disabled={!variant}
+                                        disabled={!variant || outOfStock}
                                       />
                                       <div className="mt-1.5 text-center">
                                         <p className="text-[13px] font-bold text-[#111827]">
@@ -1302,10 +1317,10 @@ export function DynamicVariantMatrixConfigurator({
                         <div className="flex items-center gap-1.5">
                           <QuantityInput
                             size="xs"
-                            value={dropdownQuantity}
+                            value={isSingleOutOfStock ? 0 : dropdownQuantity}
                             onChange={(next) => setDropdownQuantity(Math.max(1, next))}
-                            min={1}
-                            max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : undefined}
+                            min={isSingleOutOfStock ? 0 : 1}
+                            max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : 0}
                             disabled={isSingleOutOfStock}
                           />
                         </div>
@@ -1358,7 +1373,11 @@ export function DynamicVariantMatrixConfigurator({
                         }`}
                       >
                         <ShoppingBag size={17} />
-                        {!hasOrderableItems ? "Select Options" : "Add To Cart"}
+                        {!hasOrderableItems
+                          ? singleResolvedVariant && isSingleOutOfStock
+                            ? "Out of Stock"
+                            : "Select Options"
+                          : "Add To Cart"}
                       </button>
 
                       {isQuoteAllowed && (
@@ -1371,7 +1390,11 @@ export function DynamicVariantMatrixConfigurator({
                           }`}
                         >
                           <Layers3 size={17} />
-                          {!hasOrderableItems ? "Select Options" : "Add To Quote"}
+                          {!hasOrderableItems
+                            ? singleResolvedVariant && isSingleOutOfStock
+                              ? "Out of Stock"
+                              : "Select Options"
+                            : "Add To Quote"}
                         </button>
                       )}
                     </div>

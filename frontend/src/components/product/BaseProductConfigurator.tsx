@@ -86,6 +86,7 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
   const isOutOfStock = totalAvailableStock <= 0;
 
   const handleAddToCart = async (continueShopping = false) => {
+    if (isOutOfStock || totalAvailableStock <= 0) return;
     try {
       setIsAdding(true);
       addItem({
@@ -157,10 +158,10 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
             </span>
           </div>
           <QuantityInput 
-            value={quantity}
+            value={isOutOfStock ? 0 : quantity}
             onChange={setQuantity}
-            min={1}
-            max={totalAvailableStock || 999}
+            min={isOutOfStock ? 0 : 1}
+            max={totalAvailableStock > 0 ? totalAvailableStock : 0}
             disabled={isOutOfStock || isAdding}
           />
         </div>
@@ -235,7 +236,7 @@ export function BaseProductConfigurator({ apiProduct }: BaseProductConfiguratorP
           className="flex flex-1 min-w-[150px] h-12 items-center justify-center gap-2 whitespace-nowrap rounded-pill bg-[#E31E24] px-6 text-[14px] font-bold text-white shadow-xs transition-all hover:bg-[#B5151B] hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
         >
           <ShoppingBag size={17} />
-          {isAdding ? "Adding to Cart..." : "Add to Cart"}
+          {isOutOfStock ? "Out of Stock" : isAdding ? "Adding to Cart..." : "Add to Cart"}
         </button>
         <button
           type="button"
