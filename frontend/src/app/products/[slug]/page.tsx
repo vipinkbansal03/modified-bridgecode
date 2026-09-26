@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Zap, Lock, Truck } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { ProductGallery } from "@/components/sections/ProductGallery";
 import { ProductTabs } from "@/components/sections/ProductTabs";
@@ -256,33 +256,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {/* Top Fold: Gallery Left, Header & Description Right */}
           <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr] items-start">
-            <div className="space-y-5 lg:sticky lg:top-[140px] lg:self-start">
+            <div className="lg:sticky lg:top-[140px] lg:self-start">
               <ProductGallery images={product.images} title={product.title} />
-
-              {/* Information & Specifications (desktop: fills space below gallery) */}
-              {(product.information || product.productCode || product.catalogueUrl) && (
-                <div className="hidden sm:block rounded-xl border border-line-deep bg-white p-4.5 sm:p-5 shadow-2xs space-y-3">
-                  {product.information && (
-                    <div>
-                      <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">Information</span>
-                      <p className="text-[13.5px] font-medium leading-relaxed text-[#4B5563]">{product.information}</p>
-                    </div>
-                  )}
-                  {product.productCode && (
-                    <span className="block text-xs uppercase tracking-wide text-[#111827] font-bold">
-                      Product Code: {product.productCode}
-                    </span>
-                  )}
-                  <div className="flex flex-wrap items-center gap-3 pt-1">
-                    <DownloadCatalogueButton catalogueUrl={product.catalogueUrl} title={product.title} />
-                    <ViewSpecsLink />
-                  </div>
-                </div>
-              )}
             </div>
 
-            <div>
-              <div className="mb-2 flex items-start justify-between gap-4">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
                 <h1 className="text-[28px] font-normal leading-tight tracking-tight text-[#111827] sm:text-[32px] sm:leading-tight">
                   {product.title}
                 </h1>
@@ -294,7 +273,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               </div>
 
               {product.informationImage || product.informationDescription ? (
-                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   {product.informationImage ? (
                     <img
                       src={product.informationImage}
@@ -310,10 +289,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 </div>
               ) : null}
 
-              <ProductHeaderRating slug={product.slug} className="mb-4" />
+              <ProductHeaderRating slug={product.slug} />
 
               {publicPrice ? (
-                <div className="mb-4 space-y-1">
+                <div className="space-y-1">
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-[13px] font-bold uppercase tracking-wider text-[#111827]">Starting at</span>
                     <span className="text-[26px] font-extrabold text-[#E31E24]">
@@ -345,7 +324,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   )}
                 </div>
               ) : (
-                <div className="mb-4 flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5">
                   <span className="inline-block w-fit rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-3.5 py-1 text-sm font-semibold text-[#E31E24]">
                     Price Upon Request
                   </span>
@@ -357,7 +336,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
               {/* Primary Buy Box & Actions */}
               {hasVariants ? (
-                <div className="my-5 rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 space-y-3 shadow-xs">
+                <div className="rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 space-y-3.5 shadow-xs">
                   <div className="flex flex-wrap items-center gap-3">
                     <ConfigureButton label="Buy Now" className="h-11 flex-1 min-w-[150px]" />
                     {apiProduct?.id && (
@@ -373,13 +352,28 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     <span className="inline-block h-2 w-2 rounded-full bg-[#E31E24] shrink-0 animate-pulse" />
                     {t("ui.products.selectVariantsHelper")}
                   </p>
+                  {/* Micro Trust Perks Row */}
+                  <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-[11.5px] text-[#111827]">
+                    <div className="flex items-center gap-1.5 justify-center font-medium">
+                      <ShieldCheck size={14} className="text-[#E31E24] shrink-0" />
+                      <span>100% Medical Grade</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 justify-center font-medium border-x border-slate-100">
+                      <Zap size={14} className="text-[#E31E24] shrink-0" />
+                      <span>Direct Dispatch</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 justify-center font-medium">
+                      <Lock size={14} className="text-[#E31E24] shrink-0" />
+                      <span>Secure Checkout</span>
+                    </div>
+                  </div>
                 </div>
               ) : (apiProduct?.prices?.length ?? 0) > 0 ? (
-                <div className="my-5 rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 shadow-xs">
+                <div className="rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 shadow-xs">
                   <BaseProductConfigurator apiProduct={apiProduct} />
                 </div>
               ) : (
-                <div className="my-5 flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <a
                     href="#configurator-section"
                     className="inline-flex h-11 items-center justify-center gap-2 rounded-pill bg-brand px-6 text-[13.5px] font-semibold text-white shadow-sm transition hover:bg-brand/90"
@@ -397,13 +391,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 </div>
               )}
 
-              {/* Information & Specifications (mobile only) */}
+              {/* Information & Specifications */}
               {(product.information || product.productCode || product.catalogueUrl) && (
-                <div className="sm:hidden space-y-3 pt-2">
+                <div className="rounded-xl border border-line-deep bg-white p-4 sm:p-5 shadow-2xs space-y-3">
                   {product.information && (
                     <div>
                       <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">Information</span>
-                      <p className="text-[14.5px] font-medium leading-relaxed text-[#111827]">{product.information}</p>
+                      <p className="text-[13.5px] font-medium leading-relaxed text-[#4B5563]">{product.information}</p>
                     </div>
                   )}
                   {product.productCode && (
@@ -411,12 +405,25 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       Product Code: {product.productCode}
                     </span>
                   )}
-                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
                     <DownloadCatalogueButton catalogueUrl={product.catalogueUrl} title={product.title} />
                     <ViewSpecsLink />
                   </div>
                 </div>
               )}
+
+              {/* Dispatch & Logistics Perks Banner */}
+              <div className="rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-3.5 sm:p-4 text-[12.5px] text-[#374151] flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white border border-[#E5E7EB] text-[#E31E24] shrink-0 shadow-2xs">
+                    <Truck size={16} />
+                  </div>
+                  <div>
+                    <span className="font-bold text-[#111827] block text-[13px]">Fast Dispatch & Pan-India Shipping</span>
+                    <span className="text-[12px] text-[#6B7280]">Direct warehouse dispatch within 24-48 hours • Free shipping above ₹3,000</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
