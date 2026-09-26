@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "allowQuote" BOOLEAN NOT NULL DEFAULT true;
