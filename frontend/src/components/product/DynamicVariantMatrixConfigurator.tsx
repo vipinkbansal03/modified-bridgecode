@@ -306,13 +306,28 @@ export function DynamicVariantMatrixConfigurator({
     [apiProduct.attributes],
   );
 
-  const xAxisAttributes = useMemo(
-    () => attributes.filter((attribute) => getAttributeDisplayType(attribute) === "X_GRID"),
+  const hasConfiguredGridAxis = useMemo(
+    () => attributes.some((a) => a.gridAxis === "COLUMN" || a.gridAxis === "ROW"),
     [attributes],
   );
+
+  const xAxisAttributes = useMemo(
+    () =>
+      attributes.filter((attribute) =>
+        hasConfiguredGridAxis
+          ? attribute.gridAxis === "COLUMN"
+          : getAttributeDisplayType(attribute) === "X_GRID",
+      ),
+    [attributes, hasConfiguredGridAxis],
+  );
   const yAxisAttributes = useMemo(
-    () => attributes.filter((attribute) => getAttributeDisplayType(attribute) === "Y_GRID"),
-    [attributes],
+    () =>
+      attributes.filter((attribute) =>
+        hasConfiguredGridAxis
+          ? attribute.gridAxis === "ROW"
+          : getAttributeDisplayType(attribute) === "Y_GRID",
+      ),
+    [attributes, hasConfiguredGridAxis],
   );
   const rowAxisAttributes = yAxisAttributes;
   const matrixEnabled = Boolean(

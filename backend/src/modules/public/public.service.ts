@@ -1741,6 +1741,10 @@ async function toPublicProductDetail(
     }
   }
 
+  const hasConfiguredMatrix = p.attributes.some(
+    (attr) => attr.gridAxis === "COLUMN" || attr.gridAxis === "ROW"
+  );
+
   const configuratorAttributes = p.hasVariants
     ? p.attributes
     .map((pa) => {
@@ -1761,13 +1765,16 @@ async function toPublicProductDetail(
           ? "X_GRID"
           : pa.gridAxis === "ROW"
             ? "Y_GRID"
-            : (pa.attribute.role ?? "DROPDOWN");
+            : hasConfiguredMatrix
+              ? "DROPDOWN"
+              : (pa.attribute.role ?? "DROPDOWN");
 
       return {
         id: pa.attribute.id,
         name: pa.attribute.name,
         role,
         displayType: role,
+        gridAxis: pa.gridAxis ?? null,
         status: pa.attribute.status,
         required: pa.required,
         sortOrder: pa.attribute.sortOrder,

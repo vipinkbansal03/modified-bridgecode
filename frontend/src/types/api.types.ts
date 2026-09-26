@@ -60,6 +60,7 @@ export interface ApiAttribute {
   status: string;
   sortOrder: number;
   required?: boolean;
+  gridAxis?: "ROW" | "COLUMN" | null;
   values?: ApiAttributeValue[];
   allowedValueIds?: string[];
   _count?: { values: number };
