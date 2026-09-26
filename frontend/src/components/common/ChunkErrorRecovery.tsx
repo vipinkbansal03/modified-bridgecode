@@ -18,13 +18,26 @@ export function isChunkLoadError(err: any): boolean {
   );
 }
 
+export function forceHardReload(): void {
+  try {
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+    const url = new URL(window.location.href);
+    url.searchParams.set("_r", Date.now().toString());
+    window.location.href = url.toString();
+  } catch {
+    window.location.reload();
+  }
+}
+
 export function attemptHardReload(): void {
   try {
     const lastReload = sessionStorage.getItem(CHUNK_RELOAD_KEY);
     const now = Date.now();
     if (!lastReload || now - parseInt(lastReload, 10) > RELOAD_COOLDOWN_MS) {
       sessionStorage.setItem(CHUNK_RELOAD_KEY, now.toString());
-      window.location.reload();
+      const url = new URL(window.location.href);
+      url.searchParams.set("_r", Date.now().toString());
+      window.location.href = url.toString();
     }
   } catch {
     window.location.reload();

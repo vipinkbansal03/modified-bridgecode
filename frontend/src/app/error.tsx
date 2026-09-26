@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { isChunkLoadError, attemptHardReload } from "@/components/common/ChunkErrorRecovery";
+import { isChunkLoadError, attemptHardReload, forceHardReload } from "@/components/common/ChunkErrorRecovery";
 import { RotateCcw, AlertTriangle } from "lucide-react";
 
 export default function RootError({
@@ -19,11 +19,7 @@ export default function RootError({
   }, [error]);
 
   const handleReload = () => {
-    if (isChunkLoadError(error)) {
-      attemptHardReload();
-    } else {
-      window.location.reload();
-    }
+    forceHardReload();
   };
 
   return (
