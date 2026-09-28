@@ -8671,9 +8671,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 }
               >
                 <div className="p-6 space-y-4">
-                  <AdminSelect
+                  <AdminSearchableSelect
                     label="Attribute"
                     value={selectedMappingAttributeId}
+                    placeholder="Select attribute..."
+                    searchPlaceholder="Search attribute by name..."
                     onChange={(e) => {
                       setSelectedMappingAttributeId(e.target.value);
                       setNewMappingGridAxis(null);

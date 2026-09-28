@@ -525,9 +525,13 @@ async function loadActiveAttributeValues(attributeValueIds: string[]) {
   if (!uniqueIds.length) throw new AppError("Select at least one attribute value.", 400);
 
   const values = await prisma.attributeValue.findMany({
-    where: { id: { in: uniqueIds }, status: "ACTIVE" },
+    where: { id: { in: uniqueIds } },
   });
-  if (values.length !== uniqueIds.length) throw new AppError("One or more attribute values are invalid.", 400);
+  if (values.length !== uniqueIds.length) {
+    const foundIds = new Set(values.map((v) => v.id));
+    const missingIds = uniqueIds.filter((id) => !foundIds.has(id));
+    throw new AppError(`The following attribute values were not found in catalog: ${missingIds.join(", ")}`, 400);
+  }
 
   const counts = values.reduce<Record<string, number>>((acc, value) => {
     acc[value.attributeId] = (acc[value.attributeId] ?? 0) + 1;
@@ -545,9 +549,13 @@ async function loadActiveAttributeValuesForGeneration(attributeValueIds: string[
   if (!uniqueIds.length) throw new AppError("Select at least one attribute value.", 400);
 
   const values = await prisma.attributeValue.findMany({
-    where: { id: { in: uniqueIds }, status: "ACTIVE" },
+    where: { id: { in: uniqueIds } },
   });
-  if (values.length !== uniqueIds.length) throw new AppError("One or more attribute values are invalid.", 400);
+  if (values.length !== uniqueIds.length) {
+    const foundIds = new Set(values.map((v) => v.id));
+    const missingIds = uniqueIds.filter((id) => !foundIds.has(id));
+    throw new AppError(`The following attribute values were not found in catalog: ${missingIds.join(", ")}`, 400);
+  }
 
   return values;
 }
@@ -3342,7 +3350,7 @@ export async function generateVariants(
     .filter((e) => e.existing.status === "INACTIVE" || e.existing.deletedAt !== null)
     .map((e) => e.existing.id);
 
-  if (toRestoreIds.length > 0 || (existingTargets.length > 0 && inventoryTemplates.length > 0)) {
+  if (existingTargets.length > 0) {
     const existingVariantIds = existingTargets.map((e) => e.existing.id);
     const existingInventories: { id: string; variantId: string | null; countryId: string | null }[] = [];
     if (existingVariantIds.length > 0) {
@@ -3375,7 +3383,35 @@ export async function generateVariants(
       }
     }
 
-    if (toRestoreIds.length > 0 || invToCreate.length > 0) {
+    const existingAttrVals: { variantId: string; attributeId: string }[] = [];
+    if (existingVariantIds.length > 0) {
+      for (let i = 0; i < existingVariantIds.length; i += 500) {
+        const chunk = await prisma.productVariantAttributeValue.findMany({
+          where: { variantId: { in: existingVariantIds.slice(i, i + 500) } },
+          select: { variantId: true, attributeId: true },
+        });
+        existingAttrVals.push(...chunk);
+      }
+    }
+    const existingAttrValSet = new Set(
+      existingAttrVals.map((av) => `${av.variantId}:${av.attributeId}`)
+    );
+
+    const attrValuesToCreateForExisting: any[] = [];
+    for (const e of existingTargets) {
+      for (const value of e.target.combo) {
+        const key = `${e.existing.id}:${value.attributeId}`;
+        if (!existingAttrValSet.has(key)) {
+          attrValuesToCreateForExisting.push({
+            variantId: e.existing.id,
+            attributeId: value.attributeId,
+            attributeValueId: value.id,
+          });
+        }
+      }
+    }
+
+    if (toRestoreIds.length > 0 || invToCreate.length > 0 || attrValuesToCreateForExisting.length > 0) {
       await prisma.$transaction(async (tx) => {
         if (toRestoreIds.length > 0) {
           for (let i = 0; i < toRestoreIds.length; i += 500) {
@@ -3393,6 +3429,15 @@ export async function generateVariants(
           for (let i = 0; i < invToCreate.length; i += 1000) {
             await tx.inventory.createMany({
               data: invToCreate.slice(i, i + 1000),
+              skipDuplicates: true,
+            });
+          }
+        }
+
+        if (attrValuesToCreateForExisting.length > 0) {
+          for (let i = 0; i < attrValuesToCreateForExisting.length; i += 1000) {
+            await tx.productVariantAttributeValue.createMany({
+              data: attrValuesToCreateForExisting.slice(i, i + 1000),
               skipDuplicates: true,
             });
           }

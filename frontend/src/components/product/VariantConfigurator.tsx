@@ -105,6 +105,12 @@ function variantMatchesSelection(
       }
     }
   }
+  if (variant.title) {
+    const titleParts = variant.title.split("/").map((p) => p.trim().toLowerCase());
+    if (titleParts.includes(value.trim().toLowerCase())) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -563,6 +569,10 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
         .filter((val): val is string => Boolean(val)),
     );
 
+    if (availableValueSet.size === 0) {
+      return attribute.values;
+    }
+
     return attribute.values.filter((v) => availableValueSet.has(v.value));
   }
 
@@ -875,7 +885,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                         {attribute.name}
                       </label>
                       <span className="rounded-pill border border-line bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-steel">
-                        {availableValues.length} {availableValues.length === 1 ? "opt" : "opts"}
+                        {availableValues.length} {availableValues.length === 1 ? "option" : "options"}
                       </span>
                     </div>
 

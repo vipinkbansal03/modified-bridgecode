@@ -128,11 +128,26 @@ function normalizeVariantSelections(
 
   const fallback: Record<string, string> = {};
   for (const attribute of attributes) {
-    const selectedLabel = variant.attributeCombination[attribute.name];
-    const matchedValue = attribute.values.find(
-      (value) => value.value === selectedLabel,
-    );
-    if (matchedValue) fallback[attribute.id] = matchedValue.id;
+    const selectedLabel = variant.attributeCombination?.[attribute.name];
+    if (selectedLabel) {
+      const matchedValue = attribute.values.find(
+        (value) => value.value.toLowerCase() === selectedLabel.toLowerCase(),
+      );
+      if (matchedValue) {
+        fallback[attribute.id] = matchedValue.id;
+        continue;
+      }
+    }
+
+    if (variant.title) {
+      const titleSegments = variant.title.split("/").map((s) => s.trim().toLowerCase());
+      const matchedValue = attribute.values.find((value) =>
+        titleSegments.includes(value.value.toLowerCase())
+      );
+      if (matchedValue) {
+        fallback[attribute.id] = matchedValue.id;
+      }
+    }
   }
   return fallback;
 }
@@ -641,6 +656,10 @@ export function DynamicVariantMatrixConfigurator({
         .filter((val): val is string => Boolean(val)),
     );
 
+    if (availableValueIdSet.size === 0) {
+      return attribute.values;
+    }
+
     return attribute.values.filter((v) => availableValueIdSet.has(v.id));
   }
 
@@ -982,7 +1001,7 @@ export function DynamicVariantMatrixConfigurator({
                   return (
                     <label
                       key={attribute.id}
-                      className="block rounded-xl border border-[#E31E24] bg-white p-4 shadow-2xs transition-all"
+                      className="block rounded-xl border border-black bg-white p-4 shadow-2xs transition-all"
                     >
                       <div className="mb-2 flex items-center justify-between">
                         <span className="block text-[12px] font-bold uppercase tracking-[0.12em] text-[#111827]">
@@ -990,7 +1009,7 @@ export function DynamicVariantMatrixConfigurator({
                         </span>
                         <span className="rounded-full border border-[#E31E24] bg-white px-2.5 py-0.5 text-[11px] font-bold text-[#E31E24]">
                           {availableValues.length}{" "}
-                          {availableValues.length === 1 ? "opt" : "opts"}
+                          {availableValues.length === 1 ? "option" : "options"}
                         </span>
                       </div>
                       <select
