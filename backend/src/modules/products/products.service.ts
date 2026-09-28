@@ -3320,7 +3320,7 @@ export async function generateVariants(
     : [null];
 
   const totalCombosCount = attrValueSets.reduce((acc, set) => acc * set.length, 1) * (packages.length || 1);
-  const MAX_GENERATE_VARIANTS = 5000;
+  const MAX_GENERATE_VARIANTS = 10000;
   if (totalCombosCount > MAX_GENERATE_VARIANTS) {
     throw new AppError(
       `Cannot generate ${totalCombosCount.toLocaleString()} variants at once. The maximum allowed is ${MAX_GENERATE_VARIANTS.toLocaleString()} variants per batch. Please select fewer attribute values.`,
@@ -3465,7 +3465,7 @@ export async function generateVariants(
   }
 
   const createdVariantsList: any[] = [];
-  const BATCH_SIZE = 50;
+  const BATCH_SIZE = 100;
 
   for (let i = 0; i < newTargets.length; i += BATCH_SIZE) {
     const chunk = newTargets.slice(i, i + BATCH_SIZE);
@@ -3538,12 +3538,14 @@ export async function generateVariants(
     ...existingTargets.map((e) => e.existing),
     ...createdVariantsList,
   ];
-  const activeVariantIds = allVariants
-    .filter((v) => v.status === "ACTIVE")
-    .map((v) => v.id);
+  const newOrRestoredActiveIds = [
+    ...createdVariantsList.filter((v) => v.status === "ACTIVE").map((v) => v.id),
+    ...toRestoreIds,
+  ];
 
-  await syncVariantsStorefrontVisibility(activeVariantIds, productId);
-  await syncVariantCountriesFromProduct(productId, allVariants.map((v) => v.id));
+  if (newOrRestoredActiveIds.length > 0) {
+    await syncVariantsStorefrontVisibility(newOrRestoredActiveIds, productId);
+  }
 
   const newCount = createdVariantsList.length;
   const restoredCount = toRestoreIds.length;

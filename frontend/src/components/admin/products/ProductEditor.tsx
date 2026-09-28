@@ -4619,11 +4619,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   };
 
   const estimatedGenerateVariantCount = useMemo(() => {
-    if (generateAttributeIds.length === 0) return 0;
+    const activeAttributeIds = generateAttributeIds.filter(
+      (attributeId) => (generateSelectionMap[attributeId] ?? []).length > 0
+    );
+    if (activeAttributeIds.length === 0) return 0;
     let count = generatePackageIds.length > 0 ? generatePackageIds.length : 1;
-    for (const attributeId of generateAttributeIds) {
+    for (const attributeId of activeAttributeIds) {
       const selected = generateSelectionMap[attributeId] ?? [];
-      if (selected.length === 0) return 0;
       count *= selected.length;
     }
     return count;
@@ -9037,7 +9039,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 <span
                   className={cn(
                     "font-bold",
-                    estimatedGenerateVariantCount > 5000
+                    estimatedGenerateVariantCount > 10000
                       ? "text-red-600"
                       : estimatedGenerateVariantCount > 0
                       ? "text-emerald-600"
@@ -9046,9 +9048,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 >
                   {estimatedGenerateVariantCount.toLocaleString()}
                 </span>
-                {estimatedGenerateVariantCount > 5000 && (
+                {estimatedGenerateVariantCount > 10000 && (
                   <span className="ml-2 text-[12px] font-medium text-red-600">
-                    (Max limit is 5,000. Please select fewer options.)
+                    (Max limit is 10,000. Please select fewer options.)
                   </span>
                 )}
               </p>
@@ -9064,7 +9066,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <button
                 type="button"
                 onClick={handleGenerateVariants}
-                disabled={generatingVariants || estimatedGenerateVariantCount === 0 || estimatedGenerateVariantCount > 5000}
+                disabled={generatingVariants || estimatedGenerateVariantCount === 0 || estimatedGenerateVariantCount > 10000}
                 className="rounded-lg bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {generatingVariants
