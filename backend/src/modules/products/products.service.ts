@@ -3851,9 +3851,15 @@ export async function bulkUpdateVariants(
   await prisma.$transaction(async (tx) => {
     for (const row of validRows) {
       if (row.action) {
+        const isDeleteOrArchive = row.action === "delete" || row.action === "archive";
+        const isRestore = row.action === "restore";
         await tx.productVariant.update({
           where: { id: row.variantId },
-          data: { status: (row.action === "restore" || row.action === "active") ? "ACTIVE" : "INACTIVE" },
+          data: {
+            status: (isRestore || row.action === "active") ? "ACTIVE" : "INACTIVE",
+            ...(isDeleteOrArchive ? { deletedAt: new Date() } : {}),
+            ...(isRestore ? { deletedAt: null } : {}),
+          },
         });
         results[row.index].success = true;
         continue;
