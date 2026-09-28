@@ -1,12 +1,11 @@
 import "../../config/env";
-import { PrismaClient, NotificationType, NotificationTarget } from "@prisma/client";
+import { NotificationType, NotificationTarget } from "@prisma/client";
 import { getApps } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { logger } from "../../config/logger";
 import { notificationQueue } from "./notification.queue";
 import { notificationManagerService } from "./notificationManager.service";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../config/database";
 
 export class NotificationsService {
   // --- Global Seeding & Init ---

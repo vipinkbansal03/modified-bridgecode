@@ -8,9 +8,22 @@ declare global {
   var prisma: PrismaClient | undefined;
 }
 
+// Ensure connection pool settings if not explicitly specified in DATABASE_URL
+if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes("connection_limit=")) {
+  const separator = process.env.DATABASE_URL.includes("?") ? "&" : "?";
+  process.env.DATABASE_URL = `${process.env.DATABASE_URL}${separator}connection_limit=15&pool_timeout=30`;
+}
+
 export const prisma =
   global.prisma ||
   new PrismaClient({
+    datasources: process.env.DATABASE_URL
+      ? {
+          db: {
+            url: process.env.DATABASE_URL,
+          },
+        }
+      : undefined,
     log: [
       { level: "query", emit: "event" },
       { level: "error", emit: "stdout" },
