@@ -211,6 +211,7 @@ type VariantRow = {
   id: string;
   title: string;
   sku: string;
+  variantKey?: string | null;
   status: string;
   moq?: number | null;
   packageId?: string | null;
@@ -4631,6 +4632,76 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     return count;
   }, [generatePackageIds, generateAttributeIds, generateSelectionMap]);
 
+  const usedAttributeValueCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    (variantRows || []).forEach((variant) => {
+      if (variant.status === "INACTIVE") return;
+      const seen = new Set<string>();
+      (variant.attributeValues ?? []).forEach((av) => {
+        const valId = av.attributeValueId || av.attributeValue?.id;
+        if (valId) seen.add(valId);
+      });
+      if (variant.variantKey) {
+        const keyWithoutPkg = variant.variantKey.includes("::")
+          ? variant.variantKey.split("::")[1]
+          : variant.variantKey;
+        if (keyWithoutPkg) {
+          keyWithoutPkg.split("-").forEach((id: string) => {
+            if (id) seen.add(id);
+          });
+        }
+      }
+      seen.forEach((id) => {
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      });
+    });
+    return counts;
+  }, [variantRows]);
+
+  const combinationBreakdown = useMemo(() => {
+    if (estimatedGenerateVariantCount === 0 || estimatedGenerateVariantCount > 5000) {
+      return null;
+    }
+    const activeAttributeIds = generateAttributeIds.filter(
+      (attributeId) => (generateSelectionMap[attributeId] ?? []).length > 0
+    );
+    if (activeAttributeIds.length === 0) return null;
+
+    const existingKeySet = new Set(
+      (variantRows || [])
+        .filter((v) => v.status !== "INACTIVE")
+        .map((v) => v.variantKey)
+        .filter(Boolean)
+    );
+    const packages = generatePackageIds.length > 0 ? generatePackageIds : [null];
+
+    const valueSets = activeAttributeIds.map((attrId) => generateSelectionMap[attrId] ?? []);
+    let combos: string[][] = [[]];
+    for (const set of valueSets) {
+      const next: string[][] = [];
+      for (const current of combos) {
+        for (const val of set) {
+          next.push([...current, val]);
+        }
+      }
+      combos = next;
+    }
+
+    let existingCount = 0;
+    for (const combo of combos) {
+      const valueKey = [...combo].sort().join("-");
+      for (const pkgId of packages) {
+        const key = pkgId ? `${pkgId}::${valueKey}` : valueKey;
+        if (existingKeySet.has(key)) {
+          existingCount++;
+        }
+      }
+    }
+
+    const newCount = Math.max(0, estimatedGenerateVariantCount - existingCount);
+    return { existingCount, newCount };
+  }, [estimatedGenerateVariantCount, generateAttributeIds, generateSelectionMap, generatePackageIds, variantRows]);
+
   const openGenerateVariantModal = () => {
     const seedAttributeIds = hasMappedProductAttributes
       ? mappedAttributeRows.map((mapping) => mapping.attributeId)
@@ -5206,6 +5277,59 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       ...current,
       [attributeId]: [],
     }));
+  };
+
+  const selectUnusedGenerateValues = (attributeId: string) => {
+    const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
+    if (!attribute) return;
+    const values = getAttributeValues(attribute);
+    const unusedIds = values.filter((v) => !usedAttributeValueCounts.has(v.id)).map((v) => v.id);
+    setGenerateSelectionMap((current) => ({
+      ...current,
+      [attributeId]: unusedIds,
+    }));
+  };
+
+  const selectUsedGenerateValues = (attributeId: string) => {
+    const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
+    if (!attribute) return;
+    const values = getAttributeValues(attribute);
+    const usedIds = values.filter((v) => usedAttributeValueCounts.has(v.id)).map((v) => v.id);
+    setGenerateSelectionMap((current) => ({
+      ...current,
+      [attributeId]: usedIds,
+    }));
+  };
+
+  const handleSelectAllUnusedValues = () => {
+    const nextMap: SelectionMap = {};
+    generateAttributeIds.forEach((attrId) => {
+      const attribute = variantGenerationCatalog.find((item) => item.id === attrId);
+      if (!attribute) return;
+      const values = getAttributeValues(attribute);
+      const unusedIds = values.filter((v) => !usedAttributeValueCounts.has(v.id)).map((v) => v.id);
+      nextMap[attrId] = unusedIds;
+    });
+    setGenerateSelectionMap(nextMap);
+  };
+
+  const handleSelectAllValuesAcrossAttributes = () => {
+    const nextMap: SelectionMap = {};
+    generateAttributeIds.forEach((attrId) => {
+      const attribute = variantGenerationCatalog.find((item) => item.id === attrId);
+      if (!attribute) return;
+      const values = getAttributeValues(attribute);
+      nextMap[attrId] = values.map((v) => v.id);
+    });
+    setGenerateSelectionMap(nextMap);
+  };
+
+  const handleClearAllValuesAcrossAttributes = () => {
+    const nextMap: SelectionMap = {};
+    generateAttributeIds.forEach((attrId) => {
+      nextMap[attrId] = [];
+    });
+    setGenerateSelectionMap(nextMap);
   };
 
   const addEditVariantAttribute = () => {
@@ -9048,6 +9172,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 >
                   {estimatedGenerateVariantCount.toLocaleString()}
                 </span>
+                {combinationBreakdown && combinationBreakdown.existingCount > 0 && (
+                  <span className="ml-2 text-[12px] font-medium text-slate-600">
+                    (<span className="font-semibold text-emerald-700">{combinationBreakdown.newCount.toLocaleString()} new</span>
+                    <span className="text-slate-500">, {combinationBreakdown.existingCount.toLocaleString()} already exist</span>)
+                  </span>
+                )}
                 {estimatedGenerateVariantCount > 10000 && (
                   <span className="ml-2 text-[12px] font-medium text-red-600">
                     (Max limit is 10,000. Please select fewer options.)
@@ -9098,28 +9228,78 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             />
           </div>
 
+          {variantRows.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-700">
+                      i
+                    </span>
+                    <p className="text-[13px] font-semibold text-slate-800">
+                      Product has {variantRows.length.toLocaleString()} existing {variantRows.length === 1 ? "variant" : "variants"}
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[12px] text-slate-600">
+                    Values previously used are tagged <span className="inline-flex items-center rounded bg-slate-200 px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-700">✓ In X</span>. Values not yet picked are tagged <span className="inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 text-[10.5px] font-bold text-emerald-800">★ Unused</span>.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllUnusedValues}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    ⚡ Select Only Unused Values Across All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSelectAllValuesAcrossAttributes}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearAllValuesAcrossAttributes}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             {generateAttributeIds.map((attributeId) => {
               const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
               if (!attribute) return null;
               const selectedValueIds = generateSelectionMap[attribute.id] ?? [];
               const values = getAttributeValues(attribute);
+              const usedValues = values.filter((v) => usedAttributeValueCounts.has(v.id));
+              const unusedValues = values.filter((v) => !usedAttributeValueCounts.has(v.id));
 
               return (
                 <div key={attribute.id} className="rounded-xl border border-[#E6E6E6] bg-white p-5 transition-all duration-200 hover:shadow-xs">
                   {/* Header */}
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#F5F5F5] pb-3">
-                    <div className="text-[14px] font-bold text-[#1A1A1A] flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="h-2 w-2 rounded-full bg-[#E31E24]"></span>
-                      {attribute.name}
+                      <span className="text-[14px] font-bold text-[#1A1A1A]">{attribute.name}</span>
+                      {variantRows.length > 0 && (
+                        <span className="text-[11.5px] font-normal text-[#6B6B6B]">
+                          ({usedValues.length} in existing variants • <span className="font-semibold text-emerald-700">{unusedValues.length} unused</span>)
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
                       {!hasMappedProductAttributes && (
                         <>
                           <button
                             type="button"
                             onClick={() => removeGenerateAttribute(attribute.id)}
-                            className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#E31E24] transition-colors underline underline-offset-2 cursor-pointer"
+                            className="font-semibold text-[#6B6B6B] hover:text-[#E31E24] transition-colors underline underline-offset-2 cursor-pointer"
                           >
                             Remove
                           </button>
@@ -9129,17 +9309,41 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <button
                         type="button"
                         onClick={() => selectAllGenerateValues(attribute.id)}
-                        className="text-[11px] font-semibold text-[#E31E24] hover:text-[#B5151B] transition-colors underline underline-offset-2 cursor-pointer"
+                        className="font-semibold text-[#E31E24] hover:text-[#B5151B] transition-colors underline underline-offset-2 cursor-pointer"
                       >
-                        Select All
+                        Select All ({values.length})
                       </button>
+                      {variantRows.length > 0 && unusedValues.length > 0 && unusedValues.length < values.length && (
+                        <>
+                          <span className="text-[#D1D5DB] text-[10px]">|</span>
+                          <button
+                            type="button"
+                            onClick={() => selectUnusedGenerateValues(attribute.id)}
+                            className="font-semibold text-emerald-700 hover:text-emerald-800 transition-colors underline underline-offset-2 cursor-pointer"
+                          >
+                            Select Unused ({unusedValues.length})
+                          </button>
+                        </>
+                      )}
+                      {variantRows.length > 0 && usedValues.length > 0 && usedValues.length < values.length && (
+                        <>
+                          <span className="text-[#D1D5DB] text-[10px]">|</span>
+                          <button
+                            type="button"
+                            onClick={() => selectUsedGenerateValues(attribute.id)}
+                            className="font-semibold text-slate-600 hover:text-slate-800 transition-colors underline underline-offset-2 cursor-pointer"
+                          >
+                            Select Used ({usedValues.length})
+                          </button>
+                        </>
+                      )}
                       <span className="text-[#D1D5DB] text-[10px]">|</span>
                       <button
                         type="button"
                         onClick={() => clearGenerateValues(attribute.id)}
-                        className="text-[11px] font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] transition-colors underline underline-offset-2 cursor-pointer"
+                        className="font-semibold text-[#6B6B6B] hover:text-[#1A1A1A] transition-colors underline underline-offset-2 cursor-pointer"
                       >
-                        Clear Selection
+                        Clear
                       </button>
                     </div>
                   </div>
@@ -9152,19 +9356,59 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <div className="flex flex-wrap gap-2.5">
                         {values.map((val) => {
                           const isSelected = selectedValueIds.includes(val.id);
+                          const useCount = usedAttributeValueCounts.get(val.id) ?? 0;
+                          const isUsed = useCount > 0;
+                          const hasExistingVariants = variantRows.length > 0;
+
                           return (
                             <button
                               key={val.id}
                               type="button"
                               onClick={(e) => toggleGenerateValue(attribute.id, val.id, !isSelected, e.shiftKey)}
+                              title={
+                                hasExistingVariants
+                                  ? isUsed
+                                    ? `Used in ${useCount} existing variant${useCount === 1 ? "" : "s"}`
+                                    : "Not used in any variant yet (New)"
+                                  : undefined
+                              }
                               className={cn(
-                                "group relative flex items-center justify-center rounded-lg border px-4 py-2 text-[12.5px] font-medium transition-all duration-200 select-none cursor-pointer",
+                                "group relative flex items-center justify-center gap-1.5 rounded-lg border px-3.5 py-2 text-[12.5px] font-medium transition-all duration-200 select-none cursor-pointer",
                                 isSelected
                                   ? "border-[#E31E24] bg-[#E31E24] text-white shadow-xs"
+                                  : hasExistingVariants
+                                  ? isUsed
+                                    ? "border-slate-300 bg-slate-50 text-slate-700 hover:border-slate-400 hover:bg-slate-100"
+                                    : "border-emerald-300 bg-emerald-50/70 text-emerald-900 hover:border-emerald-500 hover:bg-emerald-100/70"
                                   : "border-[#E0E0E0] bg-white text-[#4A4A4A] hover:border-[#1A1A1A] hover:bg-[#F9FAFB]"
                               )}
                             >
-                              {val.value}
+                              <span>{val.value}</span>
+                              {hasExistingVariants && (
+                                isUsed ? (
+                                  <span
+                                    className={cn(
+                                      "rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
+                                      isSelected
+                                        ? "bg-white/20 text-white"
+                                        : "bg-slate-200 text-slate-600"
+                                    )}
+                                  >
+                                    In {useCount}
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={cn(
+                                      "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors",
+                                      isSelected
+                                        ? "bg-emerald-400/30 text-emerald-100"
+                                        : "bg-emerald-200/80 text-emerald-800"
+                                    )}
+                                  >
+                                    Unused
+                                  </span>
+                                )
+                              )}
                             </button>
                           );
                         })}
