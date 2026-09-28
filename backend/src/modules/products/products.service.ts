@@ -3314,11 +3314,21 @@ export async function generateVariants(
     })
   );
 
-  const combos = cartesian(attrValueSets);
   const packageIds = Array.from(new Set(data?.packageIds ?? []));
   const packages = packageIds.length
     ? await Promise.all(packageIds.map((packageId) => ensureProductPackage(productId, packageId)))
     : [null];
+
+  const totalCombosCount = attrValueSets.reduce((acc, set) => acc * set.length, 1) * (packages.length || 1);
+  const MAX_GENERATE_VARIANTS = 5000;
+  if (totalCombosCount > MAX_GENERATE_VARIANTS) {
+    throw new AppError(
+      `Cannot generate ${totalCombosCount.toLocaleString()} variants at once. The maximum allowed is ${MAX_GENERATE_VARIANTS.toLocaleString()} variants per batch. Please select fewer attribute values.`,
+      400,
+    );
+  }
+
+  const combos = cartesian(attrValueSets);
 
   const targets = combos.flatMap((combo) =>
     packages.map((pkg) => ({

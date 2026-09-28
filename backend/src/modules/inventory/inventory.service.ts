@@ -471,9 +471,19 @@ export async function updateInventory(
   if (data.lowStockThreshold !== undefined && data.lowStockThreshold < 0) throw new AppError("Low stock threshold cannot be negative.", 400);
 
   const nextStock = data.stock ?? existing.stock;
-  const nextReservedStock = data.reservedStock ?? existing.reservedStock;
+  let nextReservedStock = data.reservedStock ?? existing.reservedStock;
   const nextLowStockThreshold = data.lowStockThreshold ?? existing.lowStockThreshold;
-  if (nextReservedStock > nextStock) throw new AppError("Reserved stock cannot exceed stock.", 400);
+
+  if (data.stock !== undefined && nextReservedStock > nextStock) {
+    if (data.reservedStock === undefined) {
+      nextReservedStock = nextStock;
+      data.reservedStock = nextStock;
+    } else {
+      throw new AppError("Reserved stock cannot exceed stock.", 400);
+    }
+  } else if (nextReservedStock > nextStock) {
+    throw new AppError("Reserved stock cannot exceed stock.", 400);
+  }
   const shouldRecalculateStatus = data.stock !== undefined || data.reservedStock !== undefined || data.lowStockThreshold !== undefined;
   
   let updated;
@@ -513,12 +523,16 @@ export async function upsertProductInventory(
   }
 
   const stock = Math.trunc(Number(data.stock ?? 0));
-  const reservedStock = Math.trunc(Number(data.reservedStock ?? 0));
+  let reservedStock = Math.trunc(Number(data.reservedStock ?? 0));
   const lowStockThreshold = Math.trunc(Number(data.lowStockThreshold ?? 10));
   if (![stock, reservedStock, lowStockThreshold].every(Number.isFinite) || stock < 0 || reservedStock < 0 || lowStockThreshold < 0) {
     throw new AppError("Inventory values must be valid non-negative numbers.", 400);
   }
-  if (reservedStock > stock) throw new AppError("Reserved stock cannot exceed stock.", 400);
+  if (data.reservedStock === undefined) {
+    reservedStock = Math.min(reservedStock, stock);
+  } else if (reservedStock > stock) {
+    throw new AppError("Reserved stock cannot exceed stock.", 400);
+  }
 
   const existing = await prisma.inventory.findFirst({ where: { productId, variantId: null, warehouseId } });
   if (existing) return updateInventory(existing.id, { stock, reservedStock, lowStockThreshold });

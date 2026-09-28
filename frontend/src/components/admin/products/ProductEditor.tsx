@@ -4618,6 +4618,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     setManualVariantOpen(true);
   };
 
+  const estimatedGenerateVariantCount = useMemo(() => {
+    if (generateAttributeIds.length === 0) return 0;
+    let count = generatePackageIds.length > 0 ? generatePackageIds.length : 1;
+    for (const attributeId of generateAttributeIds) {
+      const selected = generateSelectionMap[attributeId] ?? [];
+      if (selected.length === 0) return 0;
+      count *= selected.length;
+    }
+    return count;
+  }, [generatePackageIds, generateAttributeIds, generateSelectionMap]);
+
   const openGenerateVariantModal = () => {
     const seedAttributeIds = hasMappedProductAttributes
       ? mappedAttributeRows.map((mapping) => mapping.attributeId)
@@ -4625,18 +4636,32 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     setGeneratePackageIds([]);
     setGenerateAttributeIds(seedAttributeIds);
     
-    // Auto-select all available values for each attribute by default
+    // Calculate total potential combinations if all were selected
+    let totalAllCombos = 1;
+    for (const attributeId of seedAttributeIds) {
+      const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
+      const vals = attribute ? getAttributeValues(attribute) : [];
+      totalAllCombos *= Math.max(1, vals.length);
+    }
+
     const initialSelections: Record<string, string[]> = {};
+    const shouldAutoSelectAll = totalAllCombos <= 1000;
+
     for (const attributeId of seedAttributeIds) {
       const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);
       if (attribute) {
-        initialSelections[attributeId] = getAttributeValues(attribute).map((v) => v.id);
+        const vals = getAttributeValues(attribute);
+        if (shouldAutoSelectAll) {
+          initialSelections[attributeId] = vals.map((v) => v.id);
+        } else {
+          initialSelections[attributeId] = [];
+        }
       }
     }
     setGenerateSelectionMap(initialSelections);
 
     setGenerateModeMap(
-      Object.fromEntries(seedAttributeIds.map((attributeId) => [attributeId, "all"])) as GenerateModeMap,
+      Object.fromEntries(seedAttributeIds.map((attributeId) => [attributeId, shouldAutoSelectAll ? "all" : "specific"])) as GenerateModeMap,
     );
     setGenerateAttributePicker("");
     setGenerateValuePickerMap({});
@@ -9006,7 +9031,28 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         size="3xl"
         footer={
           <div className="flex flex-wrap items-center justify-between gap-3 w-full">
-            <p className="text-[12.5px] text-[#6B6B6B]">Review the selected packages and attribute values before generating variants.</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[12.5px] text-[#6B6B6B]">
+                Combinations to create:{" "}
+                <span
+                  className={cn(
+                    "font-bold",
+                    estimatedGenerateVariantCount > 5000
+                      ? "text-red-600"
+                      : estimatedGenerateVariantCount > 0
+                      ? "text-emerald-600"
+                      : "text-gray-500"
+                  )}
+                >
+                  {estimatedGenerateVariantCount.toLocaleString()}
+                </span>
+                {estimatedGenerateVariantCount > 5000 && (
+                  <span className="ml-2 text-[12px] font-medium text-red-600">
+                    (Max limit is 5,000. Please select fewer options.)
+                  </span>
+                )}
+              </p>
+            </div>
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
@@ -9018,10 +9064,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <button
                 type="button"
                 onClick={handleGenerateVariants}
-                disabled={generatingVariants}
+                disabled={generatingVariants || estimatedGenerateVariantCount === 0 || estimatedGenerateVariantCount > 5000}
                 className="rounded-lg bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer"
               >
-                {generatingVariants ? "Generating…" : "Generate Variants"}
+                {generatingVariants
+                  ? "Generating…"
+                  : estimatedGenerateVariantCount > 0
+                  ? `Generate ${estimatedGenerateVariantCount.toLocaleString()} Variants`
+                  : "Generate Variants"}
               </button>
             </div>
           </div>
