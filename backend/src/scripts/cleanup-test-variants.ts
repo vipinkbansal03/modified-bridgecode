@@ -44,6 +44,11 @@ async function cleanupProductVariants(productId: string) {
   console.log("Deleted variant inventory.");
 
   await prisma.$executeRawUnsafe(`
+    DELETE FROM variant_countries WHERE "variantId" IN (SELECT id FROM product_variants WHERE "productId" = '${productId}');
+  `);
+  console.log("Deleted variant countries.");
+
+  await prisma.$executeRawUnsafe(`
     DELETE FROM product_variants WHERE "productId" = '${productId}';
   `);
   console.log("Deleted product variants.");
