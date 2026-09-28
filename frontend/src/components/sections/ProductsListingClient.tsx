@@ -223,8 +223,8 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
   );
   const heroBlock = heroSection?.blocks?.[0];
 
-  const pageTitle = heroBlock?.title || "Orthodontic products manufactured in-house.";
-  const pageDescription = heroBlock?.description || "Browse product families built for orthodontists, dealers, and OEM distribution partners across global markets.";
+  const pageTitle = t("ui.products.title") || heroBlock?.title || "Orthodontic products manufactured in-house.";
+  const pageDescription = t("ui.products.description") || heroBlock?.description || "Browse product families built for orthodontists, dealers, and distribution partners across global markets.";
 
   // Group products into category sections
   const categorySections = useMemo(() => {

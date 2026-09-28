@@ -12,6 +12,7 @@ router.post("/coverage/import", requirePermission("translations.manage"), upload
 router.get("/languages", requirePermission("translations.view", "translations.manage"), C.listLanguages);
 router.post("/languages", requirePermission("translations.manage"), C.createLanguage);
 router.put("/languages/:id", requirePermission("translations.manage"), C.updateLanguage);
+router.delete("/languages/:id", requirePermission("translations.manage"), C.deleteLanguage);
 router.get("/review-queue", requirePermission("translations.view", "translations.manage"), C.listReviewQueue);
 router.post("/review-queue/approve", requirePermission("translations.manage"), C.bulkApproveTranslations);
 router.get("/products/:productId", requirePermission("translations.view", "translations.manage"), C.getProductTranslations);

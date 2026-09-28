@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, Search, X } from "lucide-react";
 import { useInfiniteProducts } from "@/hooks/api/useProducts";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { cn } from "@/utils/cn";
 
 interface PdpProductSidebarProps {
@@ -63,10 +64,12 @@ export function PdpProductSidebar({ currentSlug }: PdpProductSidebarProps) {
     }
   };
 
+  const { t } = useStaticTranslations();
+
   return (
     <div className="w-full h-full min-h-[480px] lg:min-h-0 rounded-xl border border-[#E31E24] bg-white p-3.5 shadow-2xs flex flex-col">
       <div className="flex items-center justify-between pb-2.5 border-b border-[#E31E24] shrink-0">
-        <h2 className="text-[14.5px] font-bold text-[#111827] tracking-tight">All Products</h2>
+        <h2 className="text-[14.5px] font-bold text-[#111827] tracking-tight">{t("ui.pdp.sidebarTitle")}</h2>
         <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-[#E31E24] border border-[#E31E24]">
           {isLoading ? "..." : totalCount}
         </span>
@@ -79,7 +82,7 @@ export function PdpProductSidebar({ currentSlug }: PdpProductSidebarProps) {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search products..."
+          placeholder={t("ui.pdp.sidebarSearchPlaceholder")}
           className="w-full rounded-md border border-[#E31E24] bg-white py-1.5 pl-8 pr-7 text-[12px] text-[#111827] placeholder:text-[#6B7280] outline-none focus:ring-1 focus:ring-[#E31E24] transition-colors"
         />
         {search && (
@@ -111,7 +114,7 @@ export function PdpProductSidebar({ currentSlug }: PdpProductSidebarProps) {
           </div>
         ) : products.length === 0 ? (
           <div className="py-8 text-center text-[12px] text-[#111827]">
-            No products found{debouncedSearch ? ` for "${debouncedSearch}"` : ""}.
+            {t("ui.pdp.sidebarNoProducts")}{debouncedSearch ? ` for "${debouncedSearch}"` : ""}.
           </div>
         ) : (
           products.map((p) => {
@@ -140,7 +143,7 @@ export function PdpProductSidebar({ currentSlug }: PdpProductSidebarProps) {
         {isFetchingNextPage && (
           <div className="flex items-center justify-center gap-1.5 py-2 text-[11px] font-medium text-steel">
             <Loader2 size={12} className="animate-spin text-[#E31E24]" />
-            <span>Loading more...</span>
+            <span>{t("ui.pdp.sidebarLoadingMore")}</span>
           </div>
         )}
       </div>

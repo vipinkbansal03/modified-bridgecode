@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import TechnicalSpecificationsEditor, {
   TechnicalSpecification,
+  normalizeTechnicalSpecifications,
 } from "../TechnicalSpecificationsEditor";
 
 interface TechnicalSpecificationsFieldProps {
-  initialValue: TechnicalSpecification[];
+  initialValue?: TechnicalSpecification[] | Record<string, unknown> | string | null;
   onSave: (value: TechnicalSpecification[]) => Promise<void>;
 }
 
@@ -14,8 +15,13 @@ export default function TechnicalSpecificationsField({
   initialValue,
   onSave,
 }: TechnicalSpecificationsFieldProps) {
-  const [value, setValue] =
-    useState<TechnicalSpecification[]>(initialValue);
+  const [value, setValue] = useState<TechnicalSpecification[]>(() =>
+    normalizeTechnicalSpecifications(initialValue),
+  );
+
+  useEffect(() => {
+    setValue(normalizeTechnicalSpecifications(initialValue));
+  }, [initialValue]);
 
   const [saving, setSaving] = useState(false);
 

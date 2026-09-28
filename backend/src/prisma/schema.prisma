@@ -370,6 +370,7 @@ model Country {
   updatedAt             DateTime               @default(now())
   sortOrder             Int                    @default(0)
   dutyPercentage        Decimal                @default(0) @db.Decimal(5, 2)
+  autoGenerateInvoice   Boolean                @default(true)
   currency              Currency               @relation(fields: [currencyId], references: [id])
   banners               Banner[]
   categoryCountries     CategoryCountry[]
@@ -776,6 +777,14 @@ model Order {
   fromQuoteId         String?
   paymentExpiresAt    DateTime?
   isTest              Boolean            @default(false)
+  isInvoiceGenerated  Boolean            @default(true)
+  invoiceType         String?            @default("AUTO")
+  invoiceNumber       String?
+  invoiceDate         DateTime?
+  invoiceDueDate      DateTime?
+  invoiceUrl          String?
+  invoiceOriginalName String?
+  invoiceData         Json?
   deletedAt           DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt

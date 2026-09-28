@@ -432,9 +432,43 @@ async function collectCmsGaps(languageId: string): Promise<CoverageCollection> {
   return { gaps, totalFields };
 }
 
+function gapMatchesSection(gap: CoverageGap, section?: string) {
+  if (!section || section === "all") return true;
+
+  if (gap.type === "static") {
+    const key = gap.entityId.toLowerCase();
+    if (section === "nav") return key.startsWith("ui.nav") || key.startsWith("ui.header") || key.startsWith("ui.menu");
+    if (section === "product") return key.startsWith("ui.product") || key.startsWith("ui.catalog") || key.startsWith("ui.price") || key.startsWith("ui.pdp") || key.startsWith("ui.filter");
+    if (section === "cart") return key.startsWith("ui.cart") || key.startsWith("ui.checkout") || key.startsWith("ui.quote") || key.startsWith("ui.order");
+    if (section === "account") return key.startsWith("ui.account") || key.startsWith("ui.auth") || key.startsWith("ui.login") || key.startsWith("ui.user") || key.startsWith("ui.profile");
+    if (section === "footer") return key.startsWith("ui.footer") || key.startsWith("ui.legal") || key.startsWith("ui.terms") || key.startsWith("ui.cookie");
+    if (section === "general") return !key.startsWith("ui.nav") && !key.startsWith("ui.header") && !key.startsWith("ui.product") && !key.startsWith("ui.cart") && !key.startsWith("ui.account") && !key.startsWith("ui.footer");
+  }
+
+  if (gap.type === "cms") {
+    if (section === "page") return gap.cmsEntityType === "page";
+    if (section === "section") return gap.cmsEntityType === "section" || gap.cmsEntityType === "block";
+    if (section === "menu") return gap.cmsEntityType === "menuItem";
+    if (section === "footer") return gap.cmsEntityType === "footer";
+  }
+
+  if (gap.type === "product") {
+    if (section === "info") return gap.missingFields.some((f) => ["title", "shortDescription", "description"].includes(f.field));
+    if (section === "specs") return gap.missingFields.some((f) => ["technicalSpecs", "primaryFeatures", "highlights", "warranty"].includes(f.field));
+    if (section === "seo") return gap.missingFields.some((f) => ["seoTitle", "seoDescription", "seoKeywords"].includes(f.field));
+  }
+
+  if (gap.type === "category") {
+    if (section === "names") return gap.missingFields.some((f) => f.field === "name");
+    if (section === "descriptions") return gap.missingFields.some((f) => f.field === "description");
+  }
+
+  return true;
+}
+
 export async function getTranslationCoverage(
   languageId: string,
-  query: { type?: string; priority?: string; page?: string; limit?: string; search?: string },
+  query: { type?: string; priority?: string; page?: string; limit?: string; search?: string; section?: string },
 ) {
   if (!languageId || languageId === "undefined" || languageId === "null") {
     throw new AppError("languageId is required.", 400);
@@ -451,6 +485,7 @@ export async function getTranslationCoverage(
 
   const filterType = query.type as CoverageGapType | "all" | undefined;
   const priorityFilter = query.priority as CoveragePriority | "all" | undefined;
+  const sectionFilter = query.section;
   const { page, limit, skip } = getPagination(query);
 
   if (filterType && filterType !== "all" && !["product", "category", "static", "cms"].includes(filterType)) {
@@ -488,7 +523,8 @@ export async function getTranslationCoverage(
       ? allGaps
       : allGaps.filter((gap) => gap.type === filterType);
 
-  const priorityGaps = filteredGaps.filter((gap) => gapMatchesPriority(gap, priorityFilter));
+  const sectionGaps = filteredGaps.filter((gap) => gapMatchesSection(gap, sectionFilter));
+  const priorityGaps = sectionGaps.filter((gap) => gapMatchesPriority(gap, priorityFilter));
   const searchedGaps = priorityGaps.filter((gap) => gapMatchesSearch(gap, query.search));
 
   const total = searchedGaps.length;

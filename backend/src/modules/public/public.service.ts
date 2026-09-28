@@ -2049,6 +2049,12 @@ export async function getProductWarehouses(
     },
   });
 
+  const sellerSetting = await prisma.setting.findFirst({
+    where: { key: { in: ["tax.seller_name", "general.company_name"] } },
+    orderBy: { key: "desc" },
+  });
+  const defaultSellerName = sellerSetting?.value?.trim() || "Modern Orthodontics Pvt Ltd";
+
   const validWarehousesMap = new Map<string, any>();
 
   for (const inv of inventories) {
@@ -2059,7 +2065,7 @@ export async function getProductWarehouses(
       } else {
         validWarehousesMap.set("default", {
           id: "default",
-          name: "Default Seller",
+          name: defaultSellerName,
           countryId: "",
           countryCode: "",
           countryName: "Global",

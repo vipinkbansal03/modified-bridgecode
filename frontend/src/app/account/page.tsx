@@ -115,7 +115,9 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 function canDownloadInvoice(order: CustomerOrderSummary) {
-  return order.status !== "CANCELLED" && order.status !== "REJECTED";
+  if (order.status === "CANCELLED" || order.status === "REJECTED") return false;
+  if (order.isInvoiceGenerated === false && !order.invoiceUrl) return false;
+  return true;
 }
 
 function getPackagingSummary(order: CustomerOrderSummary) {

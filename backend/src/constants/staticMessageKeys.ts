@@ -223,8 +223,8 @@ export const staticMessageDefaults: Record<string, string> = {
   "ui.products.allProducts": "All Products",
   "ui.products.breadcrumbHome": "Home",
   "ui.products.breadcrumbProducts": "Products",
-  "ui.products.description":
-    "Precision orthodontic hardware manufactured in-house since 1994 — brackets, wires, bands and tubes, available as single packs or full dealer cases.",
+  "ui.products.title": "Orthodontic products manufactured in-house.",
+  "ui.products.description": "Browse product families built for orthodontists, dealers, and distribution partners across global markets.",
   "ui.products.hideFilters": "Hide Filters",
   "ui.products.showFilters": "Show Filters",
   "ui.products.doctor": "Doctor",
@@ -287,6 +287,106 @@ export const staticMessageDefaults: Record<string, string> = {
   "ui.footer.privacyPolicy": "Privacy Policy",
   "ui.footer.sitemap": "Sitemap",
   "ui.footer.newsletter": "Stay up to date on the latest news and more.",
+
+  // PDP Navigation & Breadcrumbs
+  "ui.pdp.backToProducts": "Back to Products",
+
+  // PDP Price & Badges
+  "ui.pdp.startingAt": "Starting at",
+  "ui.pdp.mrp": "M.R.P.:",
+  "ui.pdp.percentOff": "{percent}% OFF",
+  "ui.pdp.taxExempt": "Tax Exempt",
+  "ui.pdp.priceUponRequest": "Price Upon Request",
+  "ui.pdp.pricingViaQuote": "Pricing for this region is provided via custom quote.",
+  "ui.pdp.pricingNotAvailableOnline": "Pricing for this product is not available online. Please request a quote.",
+
+  // PDP Actions & Buttons
+  "ui.pdp.buyNow": "Buy Now",
+  "ui.pdp.addToCart": "Add to Cart",
+  "ui.pdp.addingToCart": "Adding to Cart...",
+  "ui.pdp.continueShopping": "Continue Shopping",
+  "ui.pdp.requestPricing": "Request Pricing",
+  "ui.pdp.savedToWishlist": "Saved to Wishlist",
+  "ui.pdp.addToWishlist": "Add to Wishlist",
+
+  // PDP Trust Perks
+  "ui.pdp.perkMedicalGrade": "100% Medical Grade",
+  "ui.pdp.perkDirectDispatch": "Direct Dispatch",
+  "ui.pdp.perkSecureCheckout": "Secure Checkout",
+
+  // PDP Information & Specifications
+  "ui.pdp.information": "Information",
+  "ui.pdp.productCode": "Product Code:",
+  "ui.pdp.downloadCatalogue": "Download Catalogue",
+  "ui.pdp.viewSpecs": "View full specifications",
+
+  // PDP Shipping & Logistics Banner
+  "ui.pdp.shippingTitle": "Fast Dispatch & Pan-India Shipping",
+  "ui.pdp.shippingSubtitle": "Direct warehouse dispatch within 24-48 hours • Free shipping above ₹3,000",
+
+  // PDP Sidebar
+  "ui.pdp.sidebarTitle": "All Products",
+  "ui.pdp.sidebarSearchPlaceholder": "Search products...",
+  "ui.pdp.sidebarNoProducts": "No products found",
+  "ui.pdp.sidebarLoadingMore": "Loading more...",
+
+  // PDP Stock Badges
+  "ui.stock.inStock": "In Stock",
+  "ui.stock.lowStock": "Low Stock",
+  "ui.stock.outOfStock": "Out of Stock",
+  "ui.stock.backorder": "Backorder",
+  "ui.stock.unavailable": "Unavailable",
+
+  // PDP Base Configurator
+  "ui.pdp.availabilityStatus": "Availability Status",
+  "ui.pdp.quantity": "Quantity",
+  "ui.pdp.maxUnits": "Max {count}",
+  "ui.pdp.estimation": "Estimation:",
+  "ui.pdp.subtotal": "Subtotal:",
+  "ui.pdp.volumeDiscounts": "Available Volume & Tier Discounts",
+  "ui.pdp.tierPricing": "Tier Pricing",
+  "ui.pdp.moqPricing": "Volume MOQ Pricing",
+
+  // PDP Horizontal Tabs
+  "ui.pdp.tabFeatures": "Features",
+  "ui.pdp.tabDescription": "Description",
+  "ui.pdp.tabSpecs": "Key Specifications",
+  "ui.pdp.tabUsage": "Direction To Use",
+  "ui.pdp.tabAdditional": "Additional Info",
+  "ui.pdp.tabReviews": "Reviews & Feedback ({count})",
+  "ui.pdp.featuresHeading": "Key Features & Advantages",
+  "ui.pdp.descriptionHeading": "Clinical Product Description",
+  "ui.pdp.specsHeading": "Technical Specifications & Clinical Geometry",
+  "ui.pdp.specsBadge": "ISO 13485 & CE Precision Engineering",
+  "ui.pdp.specsDiagrams": "Specification Diagrams",
+  "ui.pdp.clickToZoom": "Click to zoom",
+  "ui.pdp.specsNotes": "All bracket dimensions, slot tolerances (.018 / .022), torque, and angulation parameters adhere to international clinical standards.",
+  "ui.pdp.usageHeading": "Direction To Use & Clinical Guidelines",
+  "ui.pdp.additionalHeading": "Additional Information",
+  "ui.pdp.noAdditionalInfo": "No additional information available for this product.",
+  "ui.pdp.reviewsHeading": "Customer Reviews & Feedback",
+  "ui.pdp.outOfFive": "out of 5",
+  "ui.pdp.basedOnReviews": "Based on {count} verified customer {label}",
+  "ui.pdp.productQuality": "Product Quality:",
+  "ui.pdp.valueForMoney": "Value for Money:",
+  "ui.pdp.verifiedBuyer": "Verified Buyer",
+  "ui.pdp.loadingReviews": "Loading reviews & feedback...",
+
+  // PDP Feedback Prompt
+  "ui.pdp.feedbackPrompt": "Would you like to tell us about the product?",
+  "ui.pdp.feedbackButton": "Feedback >>",
+  "ui.pdp.feedbackModalTitle": "Feedback & Product Inquiry",
+  "ui.pdp.submitFeedback": "Submit Feedback",
+  "ui.pdp.submittingFeedback": "Submitting...",
+  "ui.pdp.feedbackLoginPrompt": "Please log in to submit verified clinical feedback.",
+
+  // Matrix Configurator
+  "ui.pdp.selectedVariant": "Selected Variant",
+  "ui.pdp.unitPrice": "Unit Price",
+  "ui.pdp.matrixGridTitle": "Matrix Grid (Size Combinations)",
+  "ui.pdp.matrixGridSubtitle": "Enter quantities directly in cells to order multiple sizes at once",
+  "ui.pdp.selectDropdownHelper": "Please select an option in each dropdown above to view available variants and pricing.",
+  "ui.pdp.shipsFrom": "Ships from: {warehouse}",
 };
 
 export const staticMessageKeys = Object.keys(staticMessageDefaults);

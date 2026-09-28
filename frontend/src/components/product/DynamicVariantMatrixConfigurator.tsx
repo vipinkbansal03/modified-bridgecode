@@ -191,6 +191,7 @@ function buildCartItems(
     let finalWarehouseName = selectedWarehouseName;
     let finalIsLocal = isLocal;
     let finalEstimatedDeliveryDays = estimatedDeliveryDays;
+    const defaultSellerName = (warehouses || []).find((w: any) => w.id === "default")?.name || "Modern Orthodontics Pvt Ltd";
 
     if (variant.warehouseInventories && variant.warehouseInventories.length > 0) {
       const inSelected = variant.warehouseInventories.find(
@@ -202,7 +203,7 @@ function buildCartItems(
         const inDefault = variant.warehouseInventories.find((inv) => inv.warehouseId === null && inv.available >= quantity);
         if (inDefault) {
           finalWarehouseId = undefined;
-          finalWarehouseName = "Default Seller";
+          finalWarehouseName = defaultSellerName;
         } else {
           const anyOther = variant.warehouseInventories.find((inv) => inv.available >= quantity);
           if (anyOther) {
@@ -213,7 +214,7 @@ function buildCartItems(
               finalIsLocal = wh ? wh.isLocal : isLocal;
               finalEstimatedDeliveryDays = wh?.estimatedDeliveryDays ?? estimatedDeliveryDays;
             } else {
-              finalWarehouseName = "Default Seller";
+              finalWarehouseName = defaultSellerName;
             }
           } else {
              const fallback = variant.warehouseInventories.find((inv) => inv.available > 0);
@@ -225,7 +226,7 @@ function buildCartItems(
                   finalIsLocal = wh ? wh.isLocal : isLocal;
                   finalEstimatedDeliveryDays = wh?.estimatedDeliveryDays ?? estimatedDeliveryDays;
                 } else {
-                  finalWarehouseName = "Default Seller";
+                  finalWarehouseName = defaultSellerName;
                 }
              }
           }
@@ -1014,7 +1015,7 @@ export function DynamicVariantMatrixConfigurator({
 
             {!allDropdownsSelected && dropdownAttributes.length > 0 && (
               <div className="rounded-xl border border-dashed border-[#E31E24] bg-red-50/20 p-6 text-center text-[14px] font-medium text-[#111827]">
-                Please select an option in each dropdown above to view available variants and pricing.
+                {t("ui.pdp.selectDropdownHelper")}
               </div>
             )}
 
@@ -1024,7 +1025,7 @@ export function DynamicVariantMatrixConfigurator({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-brand px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white shadow-2xs">
-                        Selected Variant
+                        {t("ui.pdp.selectedVariant")}
                       </span>
                       <StockBadge
                         status={singleResolvedVariant.inventory?.status}
@@ -1042,7 +1043,7 @@ export function DynamicVariantMatrixConfigurator({
                       )}
                       {selectedWarehouse && (
                         <span className="rounded-full border border-[#E31E24] bg-white px-2.5 py-0.5 text-[11.5px] font-semibold text-[#111827]">
-                          Ships from: {selectedWarehouse.name}
+                          {t("ui.pdp.shipsFrom", { warehouse: selectedWarehouse.name })}
                         </span>
                       )}
                     </div>
@@ -1051,12 +1052,12 @@ export function DynamicVariantMatrixConfigurator({
                   <div className="flex flex-col sm:items-end gap-2">
                     <div className="sm:text-right">
                       <span className="text-[11.5px] font-bold uppercase tracking-wider text-[#111827]">
-                        Unit Price
+                        {t("ui.pdp.unitPrice")}
                       </span>
                       <p className="text-[22px] font-bold text-[#111827]">
                         {singleResolvedPrice && singleResolvedUnitPrice > 0
                           ? formatMoney(singleResolvedPrice.currencySymbol, singleResolvedUnitPrice)
-                          : "Price Upon Request"}
+                          : t("ui.pdp.priceUponRequest")}
                       </p>
                     </div>
 
@@ -1080,10 +1081,10 @@ export function DynamicVariantMatrixConfigurator({
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[13.5px] sm:text-[14px] font-bold uppercase tracking-[0.1em] text-[#111827]">
-                    Matrix Grid (Size Combinations)
+                    {t("ui.pdp.matrixGridTitle")}
                   </span>
                   <span className="text-[12px] font-medium text-[#4B5563]">
-                    Enter quantities directly in cells to order multiple sizes at once
+                    {t("ui.pdp.matrixGridSubtitle")}
                   </span>
                 </div>
                 <div className="overflow-hidden rounded-xl border border-[#E31E24] bg-white shadow-xs">

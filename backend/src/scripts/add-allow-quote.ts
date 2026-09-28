@@ -1,3 +1,4 @@
+import "../config/env";
 import { prisma } from "../config/database";
 
 async function main() {

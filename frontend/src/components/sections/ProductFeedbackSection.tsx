@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Star, MessageSquarePlus, X, Copy, Check, Send, LogIn, Lock } from "lucide-react";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { submitProductReview } from "@/hooks/api/useProducts";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import type { ProductDetail } from "@/types/product.types";
 
 interface ProductFeedbackSectionProps {
@@ -15,6 +16,7 @@ interface ProductFeedbackSectionProps {
 
 export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedbackSectionProps) {
   const { currentCustomer } = useCustomerAuth();
+  const { t } = useStaticTranslations();
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -31,7 +33,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
   const thumbnail = product.images?.[0] || "";
 
   const customerName = currentCustomer
-    ? `${currentCustomer.firstName || ""} ${currentCustomer.lastName || ""}`.trim() || "Verified Buyer"
+    ? `${currentCustomer.firstName || ""} ${currentCustomer.lastName || ""}`.trim() || t("ui.pdp.verifiedBuyer")
     : "";
 
   const handleCopyUrl = () => {
@@ -50,7 +52,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
 
     try {
       const data = await submitProductReview(product.slug || product.productCode || "", {
-        customerName: customerName || "Verified Buyer",
+        customerName: customerName || t("ui.pdp.verifiedBuyer"),
         customerEmail: currentCustomer.email || "",
         ratingQuality: qualityRating,
         ratingPrice: priceRating,
@@ -83,7 +85,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
             <MessageSquarePlus size={20} />
           </div>
           <p className="text-[14.5px] font-bold text-[#111827]">
-            Would you like to tell us about the product?
+            {t("ui.pdp.feedbackPrompt")}
           </p>
         </div>
 
@@ -96,7 +98,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
           }}
           className="flex items-center gap-1.5 rounded-xl bg-[#E31E24] px-5 py-2.5 text-[13.5px] font-bold text-white shadow-2xs transition-all hover:bg-[#B5151B] hover:shadow-xs active:scale-95 cursor-pointer"
         >
-          Feedback &gt;&gt;
+          {t("ui.pdp.feedbackButton")}
         </button>
       </div>
 
@@ -113,7 +115,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
               <X size={18} />
             </button>
 
-            <h3 className="mb-4 text-[18px] font-bold text-[#111827]">Valuable Feedback</h3>
+            <h3 className="mb-4 text-[18px] font-bold text-[#111827]">{t("ui.pdp.feedbackModalTitle")}</h3>
 
             {/* Product Header inside Modal */}
             <div className="mb-5 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-3.5">
@@ -200,12 +202,12 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
                 {/* Star Ratings */}
                 <div className="space-y-3 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-3.5">
                   <InteractiveStarRating
-                    label="Product Quality"
+                    label={t("ui.pdp.productQuality")}
                     value={qualityRating}
                     onChange={setQualityRating}
                   />
                   <InteractiveStarRating
-                    label="Product Price"
+                    label={t("ui.pdp.valueForMoney")}
                     value={priceRating}
                     onChange={setPriceRating}
                   />
@@ -235,7 +237,7 @@ export function ProductFeedbackSection({ product, onRatingUpdate }: ProductFeedb
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] py-3 text-[14px] font-bold text-white shadow-md transition-all hover:bg-[#B5151B] disabled:opacity-50 cursor-pointer"
                 >
                   <Send size={15} />
-                  {submitting ? "Submitting..." : "Submit Feedback"}
+                  {submitting ? t("ui.pdp.submittingFeedback") : t("ui.pdp.submitFeedback")}
                 </button>
               </form>
             )}

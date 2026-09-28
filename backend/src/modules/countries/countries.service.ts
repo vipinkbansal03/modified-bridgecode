@@ -190,6 +190,7 @@ export const updateCountry = async (id: string, data: object) => {
     if (payload.status !== undefined) updateData.status = payload.status;
     if (payload.isDefault !== undefined) updateData.isDefault = payload.isDefault;
     if (payload.dutyPercentage !== undefined) updateData.dutyPercentage = payload.dutyPercentage;
+    if ((payload as any).autoGenerateInvoice !== undefined) updateData.autoGenerateInvoice = Boolean((payload as any).autoGenerateInvoice);
 
     if (payload.status === "INACTIVE") {
       await deactivateCountryAssociations(tx, [id]);

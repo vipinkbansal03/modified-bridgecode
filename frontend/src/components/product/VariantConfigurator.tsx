@@ -384,6 +384,8 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
 
   const selectedWarehouse = warehouses?.find(w => w.id === selectedWarehouseId);
 
+  const defaultSellerName = warehouses?.find((w) => w.id === "default")?.name || "Modern Orthodontics Pvt Ltd";
+
   const resolveWarehouseForCart = (variant: ApiVariant, qty: number) => {
     let finalWarehouseId = selectedWarehouse?.id;
     let finalWarehouseName = selectedWarehouse?.name;
@@ -399,7 +401,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
         const inDefault = variant.warehouseInventories.find((inv) => inv.warehouseId === null && inv.available >= qty);
         if (inDefault) {
           finalWarehouseId = undefined;
-          finalWarehouseName = "Default Seller";
+          finalWarehouseName = defaultSellerName;
         } else {
           const anyOther = variant.warehouseInventories.find((inv) => inv.available >= qty);
           if (anyOther) {
@@ -409,7 +411,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
               finalWarehouseName = wh ? wh.name : "Unknown Warehouse";
               finalIsLocal = wh ? wh.isLocal : undefined;
             } else {
-              finalWarehouseName = "Default Seller";
+              finalWarehouseName = defaultSellerName;
             }
           } else {
             const fallback = variant.warehouseInventories.find((inv) => inv.available > 0);
@@ -420,7 +422,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 finalWarehouseName = wh ? wh.name : "Unknown Warehouse";
                 finalIsLocal = wh ? wh.isLocal : undefined;
               } else {
-                finalWarehouseName = "Default Seller";
+                finalWarehouseName = defaultSellerName;
               }
             }
           }
@@ -1041,7 +1043,7 @@ function SingleVariantConfigurator({ apiProduct }: VariantConfiguratorProps) {
                 <div className="mt-4 flex items-center justify-between rounded-lg border border-[#E0E0E0] bg-[#F9F9F9] p-3">
                   <div className="flex flex-col gap-1">
                     <span className="text-[12px] font-medium text-steel">Sold by / Ships from</span>
-                    <span className="text-[13.5px] font-bold text-ink">{selectedWarehouse ? selectedWarehouse.name : "Default Seller"}</span>
+                    <span className="text-[13.5px] font-bold text-ink">{selectedWarehouse ? selectedWarehouse.name : defaultSellerName}</span>
                     <span className="text-[12px] text-emerald-600 font-bold">Estimated Delivery: {selectedWarehouse ? selectedWarehouse.estimatedDeliveryDays : "3-5"} days</span>
                   </div>
                   {warehouses && warehouses.length > 0 && (

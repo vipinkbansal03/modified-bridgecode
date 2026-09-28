@@ -65,6 +65,7 @@ import {
   ToastProvider,
   useToast as useSharedToast,
 } from "@/components/ui/ToastProvider";
+import { Modal } from "@/components/ui/Modal";
 export { Modal, type ModalProps } from "@/components/ui/Modal";
 export { Tooltip, type TooltipProps } from "@/components/ui/Tooltip";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -2108,6 +2109,14 @@ function sanitizeRichText(html: string) {
   function clean(node: ChildNode) {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
+      if (
+        el.classList.contains("img-delete-btn") ||
+        el.classList.contains("img-controls") ||
+        el.classList.contains("img-align-btn")
+      ) {
+        el.remove();
+        return;
+      }
       if (!allowedTags.has(el.tagName)) {
         const fragment = document.createDocumentFragment();
         while (el.firstChild) {
@@ -2141,6 +2150,22 @@ function sanitizeRichText(html: string) {
 }
 
 import { stripHtmlTags } from "@/utils/sanitize";
+
+const RICH_IMAGE_ALIGNMENT_OPTIONS = [
+  { value: "inline", label: "📍 Inline (Directly follows text on the same line)" },
+  { value: "left", label: "🖼️ Image on Left (Text beside image - Recommended)" },
+  { value: "right", label: "🖼️ Image on Right (Text beside image)" },
+  { value: "center", label: "🖼️ Centered (Full Row)" },
+];
+
+const RICH_IMAGE_SIZE_OPTIONS = [
+  { value: "120px", label: "Micro (120px)" },
+  { value: "180px", label: "Small (180px)" },
+  { value: "240px", label: "Medium (240px - Recommended for text wrap)" },
+  { value: "340px", label: "Large (340px)" },
+  { value: "50%", label: "Half Width (50%)" },
+  { value: "100%", label: "Full Width (100%)" },
+];
 
 interface AdminRichTextEditorProps {
   value: string;
@@ -2209,6 +2234,26 @@ export function AdminRichTextEditor({
     maxLength && charCount >= maxLength && !isOverLimit,
   );
   const [hitLimitShake, setHitLimitShake] = useState(false);
+  const draggedWrapperRef = useRef<HTMLElement | null>(null);
+
+  const createImgControls = () => {
+    const controls = document.createElement("span");
+    controls.className =
+      "img-controls absolute -top-3.5 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full bg-[#1E293B] px-2 py-0.5 shadow-md select-none opacity-90 hover:opacity-100 z-10 whitespace-nowrap";
+    controls.setAttribute("contenteditable", "false");
+    controls.innerHTML = `
+      <button type="button" data-align="inline" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Inline (Directly follows text on the same line)">📍 Inline</button>
+      <span class="text-slate-500 text-[10px]">|</span>
+      <button type="button" data-align="left" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Image on Left (Text flows beside image)">⬅ Left</button>
+      <span class="text-slate-500 text-[10px]">|</span>
+      <button type="button" data-align="right" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Image on Right (Text flows beside image)">Right ➡</button>
+      <span class="text-slate-500 text-[10px]">|</span>
+      <button type="button" data-align="center" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Centered (Full Row)">⏺ Center</button>
+      <span class="text-slate-500 text-[10px]">|</span>
+      <button type="button" class="img-delete-btn text-red-400 hover:text-red-300 text-[11px] font-bold px-1 cursor-pointer" title="Remove image">✕</button>
+    `;
+    return controls;
+  };
 
   useEffect(() => {
     if (
@@ -2217,25 +2262,29 @@ export function AdminRichTextEditor({
       editorRef.current.innerHTML !== value
     ) {
       editorRef.current.innerHTML = value;
-      // Ensure all images inside editor have a cross (X) delete button
+      // Ensure all images inside editor have quick alignment controls and delete button
       const imgs = editorRef.current.querySelectorAll("img");
       imgs.forEach((img) => {
-        if (!img.parentElement?.classList.contains("img-wrapper")) {
-          const wrapper = document.createElement("span");
+        img.setAttribute("draggable", "false");
+        let wrapper = img.closest(".img-wrapper") as HTMLElement | null;
+        if (!wrapper) {
+          wrapper = document.createElement("span");
           wrapper.className =
-            "img-wrapper relative inline-block my-2 mr-3 align-bottom group select-none";
+            "img-wrapper relative inline-block my-1 mr-2 align-top group select-none";
+          wrapper.style.verticalAlign = "top";
           wrapper.setAttribute("contenteditable", "false");
-
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className =
-            "img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer";
-          btn.title = "Remove image";
-          btn.innerHTML = "✕";
-
+          wrapper.setAttribute("draggable", "true");
           img.parentNode?.insertBefore(wrapper, img);
           wrapper.appendChild(img);
-          wrapper.appendChild(btn);
+        } else {
+          wrapper.setAttribute("draggable", "true");
+          wrapper.setAttribute("contenteditable", "false");
+        }
+
+        if (!wrapper.querySelector(".img-controls")) {
+          const oldBtn = wrapper.querySelector(".img-delete-btn");
+          if (oldBtn) oldBtn.remove();
+          wrapper.appendChild(createImgControls());
         }
       });
     }
@@ -2244,6 +2293,68 @@ export function AdminRichTextEditor({
   const updateValue = () => {
     if (!editorRef.current) return;
     onChange(sanitizeRichText(editorRef.current.innerHTML));
+  };
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const wrapper = target.closest(".img-wrapper") as HTMLElement | null;
+    if (wrapper) {
+      draggedWrapperRef.current = wrapper;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", "");
+    } else if (target.tagName === "IMG") {
+      const parentWrapper = (target as HTMLElement).closest(".img-wrapper") as HTMLElement | null;
+      draggedWrapperRef.current = parentWrapper || target;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", "");
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (draggedWrapperRef.current) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (draggedWrapperRef.current && editorRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      const nodeToMove = draggedWrapperRef.current;
+      draggedWrapperRef.current = null;
+
+      let range: Range | null = null;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      } else if ((document as any).caretPositionFromPoint) {
+        const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
+        if (pos) {
+          range = document.createRange();
+          range.setStart(pos.offsetNode, pos.offset);
+          range.collapse(true);
+        }
+      }
+
+      if (range && editorRef.current.contains(range.commonAncestorContainer)) {
+        if (!nodeToMove.contains(range.commonAncestorContainer)) {
+          range.insertNode(nodeToMove);
+          const sel = window.getSelection();
+          if (sel) {
+            sel.removeAllRanges();
+            const newRange = document.createRange();
+            newRange.setStartAfter(nodeToMove);
+            newRange.collapse(true);
+            sel.addRange(newRange);
+          }
+          updateValue();
+        }
+      }
+    }
+  };
+
+  const handleDragEnd = () => {
+    draggedWrapperRef.current = null;
   };
 
   const saveCursorLocation = () => {
@@ -2327,6 +2438,57 @@ export function AdminRichTextEditor({
         deleteBtn.remove();
       }
       updateValue();
+      return;
+    }
+
+    const alignBtn = target.closest(".img-align-btn") as HTMLElement | null;
+    if (alignBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const align = alignBtn.getAttribute("data-align");
+      const wrapper = alignBtn.closest(".img-wrapper") as HTMLElement | null;
+      if (wrapper) {
+        if (align === "left") {
+          wrapper.style.cssFloat = "left";
+          wrapper.style.margin = "4px 16px 10px 0";
+          wrapper.style.display = "block";
+          wrapper.style.verticalAlign = "";
+          wrapper.style.textAlign = "left";
+        } else if (align === "right") {
+          wrapper.style.cssFloat = "right";
+          wrapper.style.margin = "4px 0 10px 16px";
+          wrapper.style.display = "block";
+          wrapper.style.verticalAlign = "";
+          wrapper.style.textAlign = "right";
+        } else if (align === "center") {
+          wrapper.style.cssFloat = "none";
+          wrapper.style.margin = "16px auto";
+          wrapper.style.display = "block";
+          wrapper.style.verticalAlign = "";
+          wrapper.style.textAlign = "center";
+        } else if (align === "inline") {
+          wrapper.style.cssFloat = "none";
+          wrapper.style.margin = "4px 8px";
+          wrapper.style.display = "inline-block";
+          wrapper.style.verticalAlign = "top";
+          wrapper.style.textAlign = "left";
+        }
+        updateValue();
+      }
+      return;
+    }
+
+    const wrapper = target.closest(".img-wrapper") as HTMLElement | null;
+    if (wrapper) {
+      const range = document.createRange();
+      range.setStartAfter(wrapper);
+      range.collapse(true);
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      editorRef.current?.focus();
     }
   };
 
@@ -2404,17 +2566,18 @@ export function AdminRichTextEditor({
     }
     let wrapperStyle = "";
     if (imgAlign === "left") {
-      wrapperStyle = `float: left; margin: 0 16px 12px 0; max-width: ${imgWidth}; width: 100%;`;
+      wrapperStyle = `float: left; margin: 4px 16px 10px 0; max-width: ${imgWidth}; width: 100%;`;
     } else if (imgAlign === "right") {
-      wrapperStyle = `float: right; margin: 0 0 12px 16px; max-width: ${imgWidth}; width: 100%;`;
+      wrapperStyle = `float: right; margin: 4px 0 10px 16px; max-width: ${imgWidth}; width: 100%;`;
     } else if (imgAlign === "center") {
       wrapperStyle = `display: block; margin: 16px auto; max-width: ${imgWidth}; width: 100%; text-align: center;`;
     } else {
-      wrapperStyle = `display: inline-block; margin: 4px 10px 4px 0; max-width: ${imgWidth}; vertical-align: middle;`;
+      wrapperStyle = `display: inline-block; margin: 4px 10px 4px 0; max-width: ${imgWidth}; vertical-align: top;`;
     }
     const isPercent = imgWidth.endsWith("%");
     const maxH = isPercent ? "360px" : imgWidth;
-    const cleanImgHtml = `<span class="img-wrapper relative select-none" style="${wrapperStyle}" contenteditable="false"><img src="${selectedMediaItem.url}" alt="${imgAltInput.trim() || selectedMediaItem.originalName || selectedMediaItem.title || "Product Image"}" style="width: 100%; max-height: ${maxH}; object-fit: contain; display: block; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; padding: 4px;" class="shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
+    const afterHtml = imgAlign === "center" ? "<p><br></p>" : "&nbsp;";
+    const cleanImgHtml = `<span class="img-wrapper relative select-none" style="${wrapperStyle}" contenteditable="false" draggable="true"><img src="${selectedMediaItem.url}" alt="${imgAltInput.trim() || selectedMediaItem.originalName || selectedMediaItem.title || "Product Image"}" draggable="false" style="width: 100%; max-height: ${maxH}; object-fit: contain; display: block; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; padding: 4px;" class="shadow-2xs" /><span class="img-controls absolute -top-3.5 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full bg-[#1E293B] px-2 py-0.5 shadow-md select-none opacity-90 hover:opacity-100 z-10 whitespace-nowrap" contenteditable="false"><button type="button" data-align="inline" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Inline (Directly follows text on the same line)">📍 Inline</button><span class="text-slate-500 text-[10px]">|</span><button type="button" data-align="left" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Image on Left (Text flows beside image)">⬅ Left</button><span class="text-slate-500 text-[10px]">|</span><button type="button" data-align="right" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Image on Right (Text flows beside image)">Right ➡</button><span class="text-slate-500 text-[10px]">|</span><button type="button" data-align="center" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Centered (Full Row)">⏺ Center</button><span class="text-slate-500 text-[10px]">|</span><button type="button" class="img-delete-btn text-red-400 hover:text-red-300 text-[11px] font-bold px-1 cursor-pointer" title="Remove image">✕</button></span></span>${afterHtml}`;
     insertHtmlAtSavedCursor(cleanImgHtml);
     setImgModalOpen(false);
     showToast("Image inserted successfully.", "success");
@@ -2427,17 +2590,18 @@ export function AdminRichTextEditor({
     }
     let wrapperStyle = "";
     if (imgAlign === "left") {
-      wrapperStyle = `float: left; margin: 0 16px 12px 0; max-width: ${imgWidth}; width: 100%;`;
+      wrapperStyle = `float: left; margin: 4px 16px 10px 0; max-width: ${imgWidth}; width: 100%;`;
     } else if (imgAlign === "right") {
-      wrapperStyle = `float: right; margin: 0 0 12px 16px; max-width: ${imgWidth}; width: 100%;`;
+      wrapperStyle = `float: right; margin: 4px 0 10px 16px; max-width: ${imgWidth}; width: 100%;`;
     } else if (imgAlign === "center") {
       wrapperStyle = `display: block; margin: 16px auto; max-width: ${imgWidth}; width: 100%; text-align: center;`;
     } else {
-      wrapperStyle = `display: inline-block; margin: 4px 10px 4px 0; max-width: ${imgWidth}; vertical-align: middle;`;
+      wrapperStyle = `display: inline-block; margin: 4px 10px 4px 0; max-width: ${imgWidth}; vertical-align: top;`;
     }
     const isPercent = imgWidth.endsWith("%");
     const maxH = isPercent ? "360px" : imgWidth;
-    const cleanImgHtml = `<span class="img-wrapper relative select-none" style="${wrapperStyle}" contenteditable="false"><img src="${imgUrlInput.trim()}" alt="${imgAltInput.trim() || "Product Image"}" style="width: 100%; max-height: ${maxH}; object-fit: contain; display: block; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; padding: 4px;" class="shadow-2xs" /><button type="button" class="img-delete-btn absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#E31E24] text-white text-[11px] font-bold shadow-md hover:bg-[#B5151B] transition-transform hover:scale-110 cursor-pointer" title="Remove image">✕</button></span><p><br></p>`;
+    const afterHtml = imgAlign === "center" ? "<p><br></p>" : "&nbsp;";
+    const cleanImgHtml = `<span class="img-wrapper relative select-none" style="${wrapperStyle}" contenteditable="false" draggable="true"><img src="${imgUrlInput.trim()}" alt="${imgAltInput.trim() || "Product Image"}" draggable="false" style="width: 100%; max-height: ${maxH}; object-fit: contain; display: block; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; padding: 4px;" class="shadow-2xs" /><span class="img-controls absolute -top-3.5 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full bg-[#1E293B] px-2 py-0.5 shadow-md select-none opacity-90 hover:opacity-100 z-10 whitespace-nowrap" contenteditable="false"><button type="button" data-align="inline" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Inline (Directly follows text on the same line)">📍 Inline</button><span class="text-slate-500 text-[10px]">|</span><button type="button" data-align="left" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Image on Left (Text flows beside image)">⬅ Left</button><span class="text-slate-500 text-[10px]">|</span><button type="button" data-align="right" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Image on Right (Text flows beside image)">Right ➡</button><span class="text-slate-500 text-[10px]">|</span><button type="button" data-align="center" class="img-align-btn text-white text-[10.5px] font-semibold hover:text-[#38BDF8] px-1 cursor-pointer" title="Centered (Full Row)">⏺ Center</button><span class="text-slate-500 text-[10px]">|</span><button type="button" class="img-delete-btn text-red-400 hover:text-red-300 text-[11px] font-bold px-1 cursor-pointer" title="Remove image">✕</button></span></span>${afterHtml}`;
     insertHtmlAtSavedCursor(cleanImgHtml);
     setImgModalOpen(false);
     showToast("Image inserted successfully.", "success");
@@ -2733,6 +2897,10 @@ export function AdminRichTextEditor({
               suppressContentEditableWarning
               onClick={handleEditorClick}
               onKeyDown={handleKeyDown}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
               onInput={() => {
                 saveCursorLocation();
                 updateValue();
@@ -2805,336 +2973,265 @@ export function AdminRichTextEditor({
       )}
 
       {/* Link Inserter Modal */}
-      {linkModalOpen &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
-                <h4 className="text-[15px] font-bold text-[#1A1A1A] flex items-center gap-2">
-                  <Link2 size={16} className="text-[#E31E24]" />
-                  Insert Hyperlink
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setLinkModalOpen(false)}
-                  className="text-[#9CA3AF] hover:text-[#1A1A1A] transition-colors cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+      <Modal
+        open={linkModalOpen}
+        onClose={() => setLinkModalOpen(false)}
+        title={
+          <div className="flex items-center gap-2 text-[16px] font-bold text-[#1A1A1A]">
+            <Link2 size={18} className="text-[#E31E24]" />
+            <span>Insert Hyperlink</span>
+          </div>
+        }
+        size="sm"
+        bodyClassName="p-6"
+        onSave={handleApplyLink}
+        saveText="Insert Link"
+        cancelText="Cancel"
+        closeOnClickOutside={false}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[12.5px] font-semibold text-[#374151] mb-1.5">
+              Link URL
+            </label>
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full rounded-md border border-[#D1D5DB] px-3.5 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+            />
+          </div>
 
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">
-                    Link URL
-                  </label>
-                  <input
-                    type="url"
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://example.com"
-                    className="w-full rounded-md border border-[#D1D5DB] px-3 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
-                  />
-                </div>
+          <div>
+            <label className="block text-[12.5px] font-semibold text-[#374151] mb-1.5">
+              Display Text
+            </label>
+            <input
+              type="text"
+              value={linkText}
+              onChange={(e) => setLinkText(e.target.value)}
+              placeholder="Click here to view"
+              className="w-full rounded-md border border-[#D1D5DB] px-3.5 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+            />
+          </div>
 
-                <div>
-                  <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">
-                    Display Text
-                  </label>
-                  <input
-                    type="text"
-                    value={linkText}
-                    onChange={(e) => setLinkText(e.target.value)}
-                    placeholder="Click here to view"
-                    className="w-full rounded-md border border-[#D1D5DB] px-3 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
-                  />
-                </div>
-
-                <label className="flex items-center gap-2 text-[13px] text-[#374151] cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={linkNewTab}
-                    onChange={(e) => setLinkNewTab(e.target.checked)}
-                    className="rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
-                  />
-                  Open link in a new tab
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 border-t border-[#E5E7EB] pt-3">
-                <button
-                  type="button"
-                  onClick={() => setLinkModalOpen(false)}
-                  className="rounded-md border border-[#D1D5DB] bg-white px-3.5 py-1.5 text-[13px] font-medium text-[#374151] hover:bg-[#F3F4F6] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyLink}
-                  className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors cursor-pointer"
-                >
-                  Insert Link
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+          <label className="flex items-center gap-2 text-[13px] text-[#374151] cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={linkNewTab}
+              onChange={(e) => setLinkNewTab(e.target.checked)}
+              className="rounded border-[#D1D5DB] text-[#E31E24] focus:ring-[#E31E24]"
+            />
+            Open link in a new tab
+          </label>
+        </div>
+      </Modal>
 
       {/* Image Inserter Modal */}
-      {imgModalOpen &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
-                <h4 className="text-[15px] font-bold text-[#1A1A1A] flex items-center gap-2">
-                  <ImageIcon size={16} className="text-[#E31E24]" />
-                  Insert Image
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setImgModalOpen(false)}
-                  className="text-[#9CA3AF] hover:text-[#1A1A1A] transition-colors cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+      <Modal
+        open={imgModalOpen}
+        onClose={() => setImgModalOpen(false)}
+        title={
+          <div className="flex items-center gap-2 text-[16px] font-bold text-[#1A1A1A]">
+            <ImageIcon size={18} className="text-[#E31E24]" />
+            <span>Insert Image</span>
+          </div>
+        }
+        size="md"
+        bodyClassName="p-6 md:p-7"
+        onSave={imgTab === "media" ? handleInsertMediaImage : handleInsertImageUrl}
+        saveText="Insert Image"
+        cancelText="Cancel"
+        isSaveDisabled={imgTab === "media" ? !selectedMediaItem : !imgUrlInput.trim()}
+        closeOnClickOutside={false}
+      >
+        <div>
+          {/* Tab selection */}
+          <div className="flex border-b border-[#E5E7EB] mb-5">
+            <button
+              type="button"
+              onClick={() => setImgTab("media")}
+              className={`flex flex-1 items-center justify-center gap-2 pb-3 text-[13.5px] font-semibold border-b-2 transition-all cursor-pointer ${
+                imgTab === "media"
+                  ? "border-[#E31E24] text-[#E31E24]"
+                  : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
+              }`}
+            >
+              <FolderOpen size={15} />
+              Media Library
+            </button>
+            <button
+              type="button"
+              onClick={() => setImgTab("url")}
+              className={`flex flex-1 items-center justify-center gap-2 pb-3 text-[13.5px] font-semibold border-b-2 transition-all cursor-pointer ${
+                imgTab === "url"
+                  ? "border-[#E31E24] text-[#E31E24]"
+                  : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
+              }`}
+            >
+              <Globe size={15} />
+              Image URL
+            </button>
+          </div>
 
-              {/* Tab selection */}
-              <div className="flex border-b border-[#E5E7EB]">
-                <button
-                  type="button"
-                  onClick={() => setImgTab("media")}
-                  className={`flex flex-1 items-center justify-center gap-1.5 pb-2.5 text-[13px] font-semibold border-b-2 transition-all cursor-pointer ${
-                    imgTab === "media"
-                      ? "border-[#E31E24] text-[#E31E24]"
-                      : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
-                  }`}
-                >
-                  <FolderOpen size={14} />
-                  Media Library
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setImgTab("url")}
-                  className={`flex flex-1 items-center justify-center gap-1.5 pb-2.5 text-[13px] font-semibold border-b-2 transition-all cursor-pointer ${
-                    imgTab === "url"
-                      ? "border-[#E31E24] text-[#E31E24]"
-                      : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
-                  }`}
-                >
-                  <Globe size={14} />
-                  Image URL
-                </button>
-              </div>
-
-              {imgTab === "media" ? (
-                <div className="space-y-3">
-                  {selectedMediaItem ? (
-                    <div className="relative flex flex-col items-center rounded-lg border border-[#E5E7EB] bg-[#F8FAFC] p-3 text-center">
-                      <img
-                        src={selectedMediaItem.url}
-                        alt={selectedMediaItem.originalName || "Selected Media"}
-                        className="max-h-36 w-auto rounded-md object-contain shadow-2xs mb-2 border border-[#E2E8F0] bg-white p-1"
-                      />
-                      <div className="text-[12.5px] font-semibold text-[#1E293B] truncate max-w-full">
-                        {selectedMediaItem.originalName || selectedMediaItem.filename}
-                      </div>
-                      <div className="text-[11px] text-[#64748B] mt-0.5">
-                        {selectedMediaItem.width && selectedMediaItem.height
-                          ? `${selectedMediaItem.width} × ${selectedMediaItem.height} px • `
-                          : ""}
-                        {(selectedMediaItem.size / 1024).toFixed(1)} KB
-                      </div>
-                      <div className="mt-2.5 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setMediaSelectorOpen(true)}
-                          className="text-[12px] font-semibold text-[#E31E24] hover:underline cursor-pointer flex items-center gap-1"
-                        >
-                          <RefreshCw size={12} />
-                          Change from Media Library
-                        </button>
-                        <span className="text-[#CBD5E1]">|</span>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedMediaItem(null)}
-                          className="text-[12px] font-semibold text-[#64748B] hover:text-red-600 cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
+          {imgTab === "media" ? (
+            <div className="space-y-4">
+              {selectedMediaItem ? (
+                <div className="relative flex flex-col items-center rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-4 text-center">
+                  <img
+                    src={selectedMediaItem.url}
+                    alt={selectedMediaItem.originalName || "Selected Media"}
+                    className="max-h-36 w-auto rounded-md object-contain shadow-2xs mb-2.5 border border-[#E2E8F0] bg-white p-1"
+                  />
+                  <div className="text-[13px] font-semibold text-[#1E293B] truncate max-w-full">
+                    {selectedMediaItem.originalName || selectedMediaItem.filename}
+                  </div>
+                  <div className="text-[11.5px] text-[#64748B] mt-0.5">
+                    {selectedMediaItem.width && selectedMediaItem.height
+                      ? `${selectedMediaItem.width} × ${selectedMediaItem.height} px • `
+                      : ""}
+                    {(selectedMediaItem.size / 1024).toFixed(1)} KB
+                  </div>
+                  <div className="mt-3 flex items-center gap-2.5">
+                    <button
+                      type="button"
                       onClick={() => setMediaSelectorOpen(true)}
-                      className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center hover:bg-[#F1F5F9] hover:border-[#E31E24] cursor-pointer transition-colors group"
+                      className="text-[12px] font-semibold text-[#E31E24] hover:underline cursor-pointer flex items-center gap-1"
                     >
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-[#E31E24] mb-2 group-hover:scale-105 transition-transform shadow-2xs">
-                        <ImageIcon size={22} />
-                      </div>
-                      <p className="text-[13.5px] font-bold text-[#1E293B]">
-                        Select from Media Library
-                      </p>
-                      <p className="text-[11.5px] text-[#64748B] mt-0.5">
-                        Browse existing media or upload new images to library
-                      </p>
-                      <button
-                        type="button"
-                        className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-2xs hover:bg-[#B5151B] transition-colors cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMediaSelectorOpen(true);
-                        }}
-                      >
-                        <FolderOpen size={13} />
-                        Open Media Library
-                      </button>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">
-                      Alt description (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={imgAltInput}
-                      onChange={(e) => setImgAltInput(e.target.value)}
-                      placeholder="e.g. Product diagram or technical illustration"
-                      className="w-full rounded-md border border-[#D1D5DB] px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24]"
-                    />
+                      <RefreshCw size={12} />
+                      Change from Media Library
+                    </button>
+                    <span className="text-[#CBD5E1]">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMediaItem(null)}
+                      className="text-[12px] font-semibold text-[#64748B] hover:text-red-600 cursor-pointer"
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[12.5px] font-semibold text-[#374151] mb-1">
-                      Image URL
-                    </label>
-                    <input
-                      type="url"
-                      value={imgUrlInput}
-                      onChange={(e) => setImgUrlInput(e.target.value)}
-                      placeholder="https://example.com/image.jpg"
-                      className="w-full rounded-md border border-[#D1D5DB] px-3 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
-                    />
+                <div
+                  onClick={() => setMediaSelectorOpen(true)}
+                  className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center hover:bg-[#F1F5F9] hover:border-[#E31E24] cursor-pointer transition-colors group"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-[#E31E24] mb-2.5 group-hover:scale-105 transition-transform shadow-2xs">
+                    <ImageIcon size={24} />
                   </div>
-
-                  {imgUrlInput.trim() && (
-                    <div className="flex items-center justify-center p-2 rounded-md border border-[#E2E8F0] bg-[#F8FAFC]">
-                      <img
-                        src={imgUrlInput.trim()}
-                        alt="URL preview"
-                        onError={(e) =>
-                          ((e.target as HTMLElement).style.display = "none")
-                        }
-                        className="max-h-28 rounded object-contain"
-                      />
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-[12px] font-medium text-[#64748B] mb-1">
-                      Alt description (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={imgAltInput}
-                      onChange={(e) => setImgAltInput(e.target.value)}
-                      placeholder="e.g. Product diagram or technical illustration"
-                      className="w-full rounded-md border border-[#D1D5DB] px-3 py-1.5 text-[12.5px] outline-none focus:border-[#E31E24]"
-                    />
-                  </div>
+                  <p className="text-[14px] font-bold text-[#1E293B]">
+                    Select from Media Library
+                  </p>
+                  <p className="text-[12px] text-[#64748B] mt-1">
+                    Browse existing media or upload new images to library
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-3.5 inline-flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-2 text-[12.5px] font-semibold text-white shadow-2xs hover:bg-[#B5151B] transition-colors cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMediaSelectorOpen(true);
+                    }}
+                  >
+                    <FolderOpen size={14} />
+                    Open Media Library
+                  </button>
                 </div>
               )}
 
-              {/* Position / Text Flow and Size */}
-              <div className="grid grid-cols-2 gap-3 border-t border-[#E5E7EB] pt-3">
-                <div>
-                  <label className="block text-[12px] font-semibold text-[#374151] mb-1">
-                    Image Alignment
-                  </label>
-                  <select
-                    value={imgAlign}
-                    onChange={(e) => setImgAlign(e.target.value as any)}
-                    className="w-full rounded-md border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-[#1E293B] outline-none focus:border-[#E31E24]"
-                  >
-                    <option value="left">Float Left (Text wraps on right)</option>
-                    <option value="right">Float Right (Text wraps on left)</option>
-                    <option value="center">Centered (Full Row / Block)</option>
-                    <option value="inline">Inline</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-[#374151] mb-1">
-                    Image Size
-                  </label>
-                  <select
-                    value={imgWidth}
-                    onChange={(e) => setImgWidth(e.target.value)}
-                    className="w-full rounded-md border border-[#D1D5DB] bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-[#1E293B] outline-none focus:border-[#E31E24]"
-                  >
-                    <option value="120px">Micro (120px)</option>
-                    <option value="180px">Small (180px)</option>
-                    <option value="240px">Medium (240px - Recommended for text wrap)</option>
-                    <option value="340px">Large (340px)</option>
-                    <option value="50%">Half Width (50%)</option>
-                    <option value="100%">Full Width (100%)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 border-t border-[#E5E7EB] pt-3">
-                <button
-                  type="button"
-                  onClick={() => setImgModalOpen(false)}
-                  className="rounded-md border border-[#D1D5DB] bg-white px-3.5 py-1.5 text-[13px] font-medium text-[#374151] hover:bg-[#F3F4F6] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                {imgTab === "media" ? (
-                  <button
-                    type="button"
-                    disabled={!selectedMediaItem}
-                    onClick={handleInsertMediaImage}
-                    className="flex items-center gap-1.5 rounded-md bg-[#E31E24] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    Insert Image
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!imgUrlInput.trim()}
-                    onClick={handleInsertImageUrl}
-                    className="rounded-md bg-[#E31E24] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    Insert Image
-                  </button>
-                )}
+              <div>
+                <label className="block text-[12.5px] font-medium text-[#475569] mb-1.5">
+                  Alt description (optional)
+                </label>
+                <input
+                  type="text"
+                  value={imgAltInput}
+                  onChange={(e) => setImgAltInput(e.target.value)}
+                  placeholder="e.g. Product diagram or technical illustration"
+                  className="w-full rounded-md border border-[#D1D5DB] px-3.5 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+                />
               </div>
             </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[12.5px] font-semibold text-[#374151] mb-1.5">
+                  Image URL
+                </label>
+                <input
+                  type="url"
+                  value={imgUrlInput}
+                  onChange={(e) => setImgUrlInput(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full rounded-md border border-[#D1D5DB] px-3.5 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+                />
+              </div>
 
-            {/* Media Selector Modal */}
-            <MediaSelectorModal
-              open={mediaSelectorOpen}
-              onClose={() => setMediaSelectorOpen(false)}
-              onSelect={(media) => {
-                setSelectedMediaItem(media);
-                if (!imgAltInput) {
-                  setImgAltInput(media.altText || media.title || media.originalName || "");
-                }
-                setMediaSelectorOpen(false);
-              }}
-              initialType="image"
-              title="Select Image from Media Library"
-            />
-          </div>,
-          document.body,
-        )}
+              {imgUrlInput.trim() && (
+                <div className="flex items-center justify-center p-3 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC]">
+                  <img
+                    src={imgUrlInput.trim()}
+                    alt="URL preview"
+                    onError={(e) =>
+                      ((e.target as HTMLElement).style.display = "none")
+                    }
+                    className="max-h-32 rounded object-contain"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[12.5px] font-medium text-[#475569] mb-1.5">
+                  Alt description (optional)
+                </label>
+                <input
+                  type="text"
+                  value={imgAltInput}
+                  onChange={(e) => setImgAltInput(e.target.value)}
+                  placeholder="e.g. Product diagram or technical illustration"
+                  className="w-full rounded-md border border-[#D1D5DB] px-3.5 py-2 text-[13px] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24]"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Position / Text Flow and Size */}
+          <div className="grid grid-cols-2 gap-4 border-t border-[#E5E7EB] pt-5 mt-5">
+            <div>
+              <AdminSelect
+                label="Image Alignment"
+                options={RICH_IMAGE_ALIGNMENT_OPTIONS}
+                value={imgAlign}
+                onChange={(e) => setImgAlign(e.target.value as any)}
+              />
+            </div>
+            <div>
+              <AdminSelect
+                label="Image Size"
+                options={RICH_IMAGE_SIZE_OPTIONS}
+                value={imgWidth}
+                onChange={(e) => setImgWidth(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Media Selector Modal */}
+      <MediaSelectorModal
+        open={mediaSelectorOpen}
+        onClose={() => setMediaSelectorOpen(false)}
+        onSelect={(media) => {
+          setSelectedMediaItem(media);
+          if (!imgAltInput) {
+            setImgAltInput(media.altText || media.title || media.originalName || "");
+          }
+          setMediaSelectorOpen(false);
+        }}
+        initialType="image"
+        title="Select Image from Media Library"
+      />
 
       {error && <p className="text-[12px] text-red-500">{error}</p>}
     </div>

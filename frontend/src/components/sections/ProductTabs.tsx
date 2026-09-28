@@ -21,6 +21,7 @@ import {
 import type { ProductDetail } from "@/types/product.types";
 import type { ApiProductDetail } from "@/types/api.types";
 import { fetchProductReviews } from "@/hooks/api/useProducts";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 
 interface ProductTabsProps {
   product: ProductDetail;
@@ -215,14 +216,16 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
     fetchReviews();
   }, [product.slug]);
 
+  const { t } = useStaticTranslations();
+
   const tabs = [
-    { id: "features", label: "Features", icon: CheckCircle2 },
-    { id: "description", label: "Description", icon: FileText },
-    { id: "specs", label: "Key Specifications", icon: Layers },
-    { id: "usage", label: "Direction To Use", icon: Stethoscope },
-    { id: "additional", label: "Additional Info", icon: Info },
+    { id: "features", label: t("ui.pdp.tabFeatures"), icon: CheckCircle2 },
+    { id: "description", label: t("ui.pdp.tabDescription"), icon: FileText },
+    { id: "specs", label: t("ui.pdp.tabSpecs"), icon: Layers },
+    { id: "usage", label: t("ui.pdp.tabUsage"), icon: Stethoscope },
+    { id: "additional", label: t("ui.pdp.tabAdditional"), icon: Info },
     // { id: "warranty", label: "Service & Warranty", icon: ShieldCheck },
-    { id: "reviews", label: `Reviews & Feedback (${reviewsData.totalRatings})`, icon: Star },
+    { id: "reviews", label: t("ui.pdp.tabReviews", { count: reviewsData.totalRatings }), icon: Star },
   ] as const;
 
   return (
@@ -258,7 +261,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {/* 1. FEATURES TAB */}
         {activeTab === "features" && (
           <div className="space-y-4">
-            <h3 className="text-[16px] font-bold text-[#111827]">Key Features & Advantages</h3>
+            <h3 className="text-[16px] font-bold text-[#111827]">{t("ui.pdp.featuresHeading")}</h3>
             {validHighlights.length > 0 ? (
               <div className="columns-1 sm:columns-2 gap-3 space-y-3">
                 {validHighlights.map((item, idx) => (
@@ -304,7 +307,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {/* 2. DESCRIPTION TAB */}
         {activeTab === "description" && (
           <div className="space-y-4">
-            <h3 className="text-[16px] font-bold text-[#111827]">Clinical Product Description</h3>
+            <h3 className="text-[16px] font-bold text-[#111827]">{t("ui.pdp.descriptionHeading")}</h3>
             {validPrimaryFeatures.length > 0 ? (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 {/* Left Column: Clinical Description Text */}
@@ -368,9 +371,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "specs" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <h3 className="text-[16px] font-bold text-[#111827]">Technical Specifications & Clinical Geometry</h3>
+              <h3 className="text-[16px] font-bold text-[#111827]">{t("ui.pdp.specsHeading")}</h3>
               <span className="text-[12px] font-bold text-[#111827] bg-red-50 px-2.5 py-1 rounded-md border border-red-200">
-                ISO 13485 & CE Precision Engineering
+                {t("ui.pdp.specsBadge")}
               </span>
             </div>
 
@@ -393,7 +396,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 {/* Additional Spec Notes */}
                 <div className="rounded-lg border-2 border-red-200 bg-red-50/30 p-3 text-[12.5px] text-[#111827] flex items-center gap-2">
                   <Info size={16} className="text-[#E31E24] shrink-0" />
-                  <span>All bracket dimensions, slot tolerances (.018 / .022), torque, and angulation parameters adhere to international clinical standards.</span>
+                  <span>{t("ui.pdp.specsNotes")}</span>
                 </div>
               </div>
 
@@ -403,7 +406,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                   <div className="flex items-center justify-between mb-2.5">
                     <span className="text-[13px] font-bold text-[#111827] flex items-center gap-1.5">
                       <Layers size={14} className="text-[#E31E24]" />
-                      Specification Diagrams
+                      {t("ui.pdp.specsDiagrams")}
                     </span>
                     <span className="text-[11.5px] font-semibold text-[#6B7280] bg-white px-2 py-0.5 rounded border border-[#E5E7EB]">
                       {activeSpecImageIndex + 1} / {specImages.length}
@@ -446,7 +449,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                       />
                       <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-[11px] font-medium text-white backdrop-blur-xs opacity-80 group-hover:opacity-100 transition-opacity">
                         <Maximize2 size={12} />
-                        Click to zoom
+                        {t("ui.pdp.clickToZoom")}
                       </span>
                     </div>
 
@@ -566,7 +569,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {/* 5. DIRECTION TO USE TAB */}
         {activeTab === "usage" && validPrimaryFeatures.length > 0 && (
           <div className="space-y-3 max-w-4xl">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Direction To Use & Clinical Guidelines</h3>
+            <h3 className="text-[16px] font-bold text-[#1A1A1A]">{t("ui.pdp.usageHeading")}</h3>
             <div className="space-y-3">
               {validPrimaryFeatures.map((item: { title?: string; description?: string; image?: string }, idx: number) => (
                 <div
@@ -608,12 +611,12 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {/* 6. ADDITIONAL INFO TAB */}
         {activeTab === "additional" && (
           <div className="space-y-3">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Additional Information</h3>
+            <h3 className="text-[16px] font-bold text-[#1A1A1A]">{t("ui.pdp.additionalHeading")}</h3>
             {((product.productCode || apiProduct?.productCode) || customInfoList.length > 0) ? (
               <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
                 <div className="space-y-2 text-[13px] text-[#374151]">
                   {(product.productCode || apiProduct?.productCode) ? (
-                    <p><strong>Product Code:</strong> {product.productCode || apiProduct?.productCode}</p>
+                    <p><strong>{t("ui.pdp.productCode")}</strong> {product.productCode || apiProduct?.productCode}</p>
                   ) : null}
                   {customInfoList.slice(0, Math.ceil(customInfoList.length / 2)).map((item, idx) => (
                     <p key={idx}><strong>{item.label}:</strong> {item.value}</p>
@@ -626,45 +629,12 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 </div>
               </div>
             ) : (
-              <p className="text-[13.5px] text-[#6B7280]">No additional information available for this product.</p>
+              <p className="text-[13.5px] text-[#6B7280]">{t("ui.pdp.noAdditionalInfo")}</p>
             )}
           </div>
         )}
 
         {/* 7. SERVICE & WARRANTY TAB (COMMENTED OUT FOR FUTURE USE) */}
-        {/* {activeTab === "warranty" && (
-          <div className="space-y-3">
-            <h3 className="text-[16px] font-bold text-[#1A1A1A]">Service & Warranty Guarantee</h3>
-            {product.warranty && product.warranty.length > 0 ? (
-              <div className="space-y-2">
-                {product.warranty.map((wLine, idx) => (
-                  <div key={idx} className="flex items-start gap-2.5 rounded-lg border border-[#DCFCE7] bg-[#F0FDF4] p-3 text-[13.5px] text-[#14532D]">
-                    <ShieldCheck className="mt-0.5 text-[#16A34A] shrink-0" size={18} />
-                    <div dangerouslySetInnerHTML={{ __html: wLine }} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-[#DCFCE7] bg-[#F0FDF4] p-3.5">
-                  <ShieldCheck className="mb-1.5 text-[#16A34A]" size={22} />
-                  <h4 className="text-[13.5px] font-bold text-[#14532D]">100% Quality Assurance</h4>
-                  <p className="mt-0.5 text-[12px] text-[#166534]">Rigorous quality control and ISO 13485 clinical standards.</p>
-                </div>
-                <div className="rounded-lg border border-[#DBEAFE] bg-[#EFF6FF] p-3.5">
-                  <Box className="mb-1.5 text-[#2563EB]" size={22} />
-                  <h4 className="text-[13.5px] font-bold text-[#1E3A8A]">10-Day Return Policy</h4>
-                  <p className="mt-0.5 text-[12px] text-[#1E40AF]">Hassle-free returns for unopened manufacturing packs.</p>
-                </div>
-                <div className="rounded-lg border border-[#FFE4E6] bg-[#FFF1F2] p-3.5">
-                  <Info className="mb-1.5 text-[#E11D48]" size={22} />
-                  <h4 className="text-[13.5px] font-bold text-[#881337]">Dedicated Support</h4>
-                  <p className="mt-0.5 text-[12px] text-[#9F1239]">Direct technical support from orthodontic specialists.</p>
-                </div>
-              </div>
-            )}
-          </div>
-        )} */}
 
         {/* 8. REVIEWS & FEEDBACK TAB */}
         {activeTab === "reviews" && (
@@ -675,7 +645,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                 <div className="flex items-center gap-4">
                   <div className="flex flex-col items-center justify-center rounded-xl bg-[#E31E24] px-5 py-3 text-white shadow-2xs">
                     <span className="text-[28px] font-extrabold leading-none">{reviewsData.averageRating.toFixed(1)}</span>
-                    <span className="mt-1 text-[11px] font-bold uppercase tracking-wider text-white/90">out of 5</span>
+                    <span className="mt-1 text-[11px] font-bold uppercase tracking-wider text-white/90">{t("ui.pdp.outOfFive")}</span>
                   </div>
                   <div>
                     <div className="flex items-center gap-1">
@@ -692,17 +662,20 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                       ))}
                     </div>
                     <p className="mt-1 text-[13.5px] font-semibold text-[#1F2937]">
-                      Based on {reviewsData.totalRatings} verified customer {reviewsData.totalRatings === 1 ? "review" : "reviews"}
+                      {t("ui.pdp.basedOnReviews", {
+                        count: reviewsData.totalRatings,
+                        label: reviewsData.totalRatings === 1 ? "review" : "reviews",
+                      })}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4 text-[13px] font-semibold text-[#4B5563]">
                   <div className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 shadow-2xs">
-                    Product Quality: <span className="font-bold text-[#16A34A]">5.0 ★</span>
+                    {t("ui.pdp.productQuality")} <span className="font-bold text-[#16A34A]">5.0 ★</span>
                   </div>
                   <div className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 shadow-2xs">
-                    Value for Money: <span className="font-bold text-[#2563EB]">5.0 ★</span>
+                    {t("ui.pdp.valueForMoney")} <span className="font-bold text-[#2563EB]">5.0 ★</span>
                   </div>
                 </div>
               </div>
@@ -710,10 +683,10 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
 
             {/* List of Submitted Reviews */}
             {loadingReviews ? (
-              <p className="py-6 text-center text-[13.5px] text-[#6B7280]">Loading reviews &amp; feedback...</p>
+              <p className="py-6 text-center text-[13.5px] text-[#6B7280]">{t("ui.pdp.loadingReviews")}</p>
             ) : reviewsData.reviews.length > 0 ? (
               <div className="space-y-4">
-                <h4 className="text-[15px] font-bold text-[#111827]">Customer Reviews &amp; Feedback</h4>
+                <h4 className="text-[15px] font-bold text-[#111827]">{t("ui.pdp.reviewsHeading")}</h4>
                 <div className="grid gap-4">
                   {reviewsData.reviews.map((rev) => (
                     <div key={rev.id} className="rounded-xl border border-[#E5E7EB] bg-white p-4.5 shadow-2xs transition-all hover:border-[#D1D5DB]">
@@ -724,9 +697,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-[14px] font-bold text-[#111827]">{rev.customerName || "Verified Buyer"}</span>
+                              <span className="text-[14px] font-bold text-[#111827]">{rev.customerName || t("ui.pdp.verifiedBuyer")}</span>
                               <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[11px] font-bold text-[#15803D]">
-                                <UserCheck size={11} /> Verified Buyer
+                                <UserCheck size={11} /> {t("ui.pdp.verifiedBuyer")}
                               </span>
                             </div>
                             <span className="text-[11.5px] text-[#9CA3AF]">

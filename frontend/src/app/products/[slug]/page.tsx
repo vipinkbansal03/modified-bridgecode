@@ -38,9 +38,9 @@ const API_ORIGIN =
     : "http://localhost:4000");
 
 const fetchStaticTranslations = cache(async (language?: string): Promise<Record<string, string>> => {
-  if (!language || language === "en") return {};
+  const lang = language || "en";
   try {
-    const res = await fetch(`${API_ORIGIN}/api/translations/static?lang=${encodeURIComponent(language)}`, {
+    const res = await fetch(`${API_ORIGIN}/api/translations/static?lang=${encodeURIComponent(lang)}`, {
       cache: "no-store",
     });
     if (res.ok) {
@@ -204,7 +204,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   if (!apiProduct) notFound();
 
-  const t = (key: StaticMessageKey): string => staticTranslations[key] || staticMessages[key] || key;
+  const t = (key: StaticMessageKey, params?: Record<string, string | number>): string => {
+    let value = staticTranslations[key] || staticMessages[key] || key;
+    if (params) {
+      for (const [name, paramValue] of Object.entries(params)) {
+        value = value.replaceAll(`{${name}}`, String(paramValue));
+      }
+    }
+    return value;
+  };
   const publicPrice = getPublicPrice(apiProduct);
   const publicDiscount = getPublicDiscount(publicPrice);
   const product = mergeProduct(apiProduct);
@@ -230,17 +238,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-[12.5px] font-semibold text-[#374151] shadow-2xs transition-colors hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:text-[#111827]"
                   >
                 <ArrowLeft size={14} className="text-[#E31E24]" />
-                <span>Back to Products</span>
+                <span>{t("ui.pdp.backToProducts")}</span>
               </Link>
             </div>
 
             <nav className="text-[13px] text-[#111827] font-medium">
               <Link href="/" className="hover:text-brand">
-                Home
+                {t("ui.products.breadcrumbHome")}
               </Link>{" "}
               /{" "}
               <Link href="/products" className="hover:text-brand">
-                Products
+                {t("ui.products.breadcrumbProducts")}
               </Link>{" "}
               {product.category && (
                 <>
@@ -294,27 +302,27 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               {publicPrice ? (
                 <div className="space-y-1">
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-[13px] font-bold uppercase tracking-wider text-[#111827]">Starting at</span>
+                    <span className="text-[13px] font-bold uppercase tracking-wider text-[#111827]">{t("ui.pdp.startingAt")}</span>
                     <span className="text-[26px] font-extrabold text-[#E31E24]">
                       {formatMoney(publicPrice.currencySymbol, publicPrice.sellingPrice)}
                     </span>
                     {publicDiscount ? (
                       <span className="rounded-md bg-[#DCFCE7] px-2 py-0.5 text-[12px] font-bold text-[#15803D]">
-                        {publicDiscount.percent}% OFF
+                        {t("ui.pdp.percentOff", { percent: publicDiscount.percent })}
                       </span>
                     ) : null}
                   </div>
 
                   {publicDiscount ? (
                     <p className="text-[13px] font-semibold text-[#111827]">
-                      M.R.P.: <span className="line-through">{formatMoney(publicPrice.currencySymbol, publicPrice.mrp)}</span>
+                      {t("ui.pdp.mrp")} <span className="line-through">{formatMoney(publicPrice.currencySymbol, publicPrice.mrp)}</span>
                     </p>
                   ) : null}
 
                   {(publicPrice as any)?.taxMode === "EXEMPT" ? (
                     <div className="pt-1">
                       <span className="inline-block rounded bg-[#F3F4F6] px-2 py-0.5 text-[11.5px] font-semibold text-[#374151]">
-                        Tax Exempt
+                        {t("ui.pdp.taxExempt")}
                       </span>
                     </div>
                   ) : (publicPrice as any)?.taxMode === "INCLUSIVE" ? (
@@ -326,10 +334,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               ) : (
                 <div className="flex flex-col gap-1.5">
                   <span className="inline-block w-fit rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-3.5 py-1 text-sm font-semibold text-[#E31E24]">
-                    Price Upon Request
+                    {t("ui.pdp.priceUponRequest")}
                   </span>
                   <p className="text-[13px] font-medium text-[#111827]">
-                    Pricing for this region is provided via custom quote.
+                    {t("ui.pdp.pricingViaQuote")}
                   </p>
                 </div>
               )}
@@ -338,7 +346,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               {hasVariants ? (
                 <div className="rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 space-y-3.5 shadow-xs">
                   <div className="flex flex-wrap items-center gap-3">
-                    <ConfigureButton label="Buy Now" className="h-11 flex-1 min-w-[150px]" />
+                    <ConfigureButton label={t("ui.pdp.buyNow")} className="h-11 flex-1 min-w-[150px]" />
                     {apiProduct?.id && (
                       <WishlistButton
                         productId={apiProduct.id}
@@ -356,15 +364,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-[11.5px] text-[#111827]">
                     <div className="flex items-center gap-1.5 justify-center font-medium">
                       <ShieldCheck size={14} className="text-[#E31E24] shrink-0" />
-                      <span>100% Medical Grade</span>
+                      <span>{t("ui.pdp.perkMedicalGrade")}</span>
                     </div>
                     <div className="flex items-center gap-1.5 justify-center font-medium border-x border-slate-100">
                       <Zap size={14} className="text-[#E31E24] shrink-0" />
-                      <span>Direct Dispatch</span>
+                      <span>{t("ui.pdp.perkDirectDispatch")}</span>
                     </div>
                     <div className="flex items-center gap-1.5 justify-center font-medium">
                       <Lock size={14} className="text-[#E31E24] shrink-0" />
-                      <span>Secure Checkout</span>
+                      <span>{t("ui.pdp.perkSecureCheckout")}</span>
                     </div>
                   </div>
                 </div>
@@ -378,7 +386,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     href="#configurator-section"
                     className="inline-flex h-11 items-center justify-center gap-2 rounded-pill bg-brand px-6 text-[13.5px] font-semibold text-white shadow-sm transition hover:bg-brand/90"
                   >
-                    Request Pricing
+                    {t("ui.pdp.requestPricing")}
                   </a>
                   {apiProduct?.id && (
                     <WishlistButton
@@ -396,13 +404,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 <div className="rounded-xl border border-line-deep bg-white p-4 sm:p-5 shadow-2xs space-y-3">
                   {product.information && (
                     <div>
-                      <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">Information</span>
+                      <span className="mb-1 block text-xs uppercase tracking-wide text-[#111827] font-bold">{t("ui.pdp.information")}</span>
                       <p className="text-[13.5px] font-medium leading-relaxed text-[#4B5563]">{product.information}</p>
                     </div>
                   )}
                   {product.productCode && (
                     <span className="block text-xs uppercase tracking-wide text-[#111827] font-bold">
-                      Product Code: {product.productCode}
+                      {t("ui.pdp.productCode")} {product.productCode}
                     </span>
                   )}
                   <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -419,8 +427,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     <Truck size={16} />
                   </div>
                   <div>
-                    <span className="font-bold text-[#111827] block text-[13px]">Fast Dispatch & Pan-India Shipping</span>
-                    <span className="text-[12px] text-[#6B7280]">Direct warehouse dispatch within 24-48 hours • Free shipping above ₹3,000</span>
+                    <span className="font-bold text-[#111827] block text-[13px]">{t("ui.pdp.shippingTitle")}</span>
+                    <span className="text-[12px] text-[#6B7280]">{t("ui.pdp.shippingSubtitle")}</span>
                   </div>
                 </div>
               </div>

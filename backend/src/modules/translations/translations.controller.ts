@@ -52,6 +52,7 @@ export const importTranslationsCsv = asyncHandler(async (req: AuthRequest, res: 
 });
 export const createLanguage = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.created(res, "Language added.", await S.createLanguage(req.body)));
 export const updateLanguage = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Language updated.", await S.updateLanguage(String(req.params.id), req.body)));
+export const deleteLanguage = asyncHandler(async (req: AuthRequest, res: Response) => { await S.deleteLanguage(String(req.params.id)); return ApiResponse.success(res, "Language deleted."); });
 export const getProductTranslations = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Translations.", await S.getProductTranslations(String(req.params.productId))));
 export const updateTranslation = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Updated.", await S.updateTranslation(String(req.params.id), req.body)));
 export const upsertProductTranslation = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Saved.", await S.upsertProductTranslation(String(req.params.productId), String(req.params.languageId), req.body)));

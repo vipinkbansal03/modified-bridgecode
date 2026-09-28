@@ -180,6 +180,13 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "highlights.contact_phone":          { group: "highlights", type: "string" },
   "highlights.contact_email":          { group: "highlights", type: "string" },
   // Tax & Compliance
+  "tax.auto_generate_invoice_global": { group: "tax", type: "boolean" },
+  "tax.invoice_title_default":        { group: "tax", type: "string" },
+  "tax.invoice_prefix":               { group: "tax", type: "string" },
+  "tax.bank_name":                    { group: "tax", type: "string" },
+  "tax.bank_account":                 { group: "tax", type: "string" },
+  "tax.bank_ifsc":                    { group: "tax", type: "string" },
+  "tax.invoice_terms_default":        { group: "tax", type: "string" },
   "tax.seller_name":         { group: "tax",      type: "string" },
   "tax.seller_gstin":        { group: "tax",      type: "string" },
   "tax.seller_iec":          { group: "tax",      type: "string" },
@@ -306,6 +313,37 @@ const SETTINGS_META: Record<string, { group: string; type: string; isSecret?: bo
   "uploads.cloudinary_api_secret":  { group: "uploads", type: "secret", isSecret: true },
   // Redis Cache
   "redis.enabled": { group: "redis", type: "boolean" },
+};
+
+const DEFAULT_SETTINGS: Record<string, string> = {
+  // General
+  "general.site_name": "Modern Orthodontics",
+  "general.site_url": "https://modortho.com",
+  "general.company_name": "Modern Orthodontics Pvt Ltd",
+  "general.email": "orders@modortho.com",
+  "general.phone": "+91-98765-43210",
+  "general.address": "Ludhiana, Punjab, India",
+  "general.default_currency": "INR",
+  "general.timezone": "Asia/Kolkata",
+  // Tax & Compliance
+  "tax.auto_generate_invoice_global": "true",
+  "tax.invoice_title_default": "Tax Invoice",
+  "tax.invoice_prefix": "INV-",
+  "tax.seller_name": "Modern Orthodontics Pvt Ltd",
+  "tax.seller_gstin": "03AAAAA1111A1Z1",
+  "tax.seller_iec": "0300000000",
+  "tax.ship_from_state": "Punjab",
+  "tax.bank_name": "HDFC Bank",
+  "tax.bank_account": "50200012345678",
+  "tax.bank_ifsc": "HDFC0001234",
+  "tax.invoice_terms_default": "1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged on overdue payments.",
+  // SEO
+  "seo.default_title": "Modern Orthodontics — Precision Orthodontic Products",
+  "seo.default_description": "Modern Orthodontics manufactures premium orthodontic brackets, wires, and accessories. ISO 13485 certified.",
+  "seo.canonical_domain": "https://modortho.com",
+  "seo.sitemap_include_products": "true",
+  "seo.sitemap_include_categories": "true",
+  "seo.sitemap_include_cms_pages": "true",
 };
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -463,9 +501,10 @@ export default function SettingsPage() {
       const rows: Setting[] = r.data.data ?? [];
       const map: SettingMap = {};
       rows.forEach((s) => { map[s.key] = s.value === "***" ? "" : s.value; });
-      const parsedSlides = parseLoginSlides(map);
-      setSettings(map);
-      setSavedSettings(map);
+      const merged: SettingMap = { ...DEFAULT_SETTINGS, ...map };
+      const parsedSlides = parseLoginSlides(merged);
+      setSettings(merged);
+      setSavedSettings(merged);
       setLoginSlides(parsedSlides);
       savedLoginSlidesRef.current = parsedSlides;
     } catch { showToast("Failed to load settings.", "error"); }
@@ -490,8 +529,8 @@ export default function SettingsPage() {
 
   function set(key: string, value: string) { setSettings((s) => ({ ...s, [key]: value })); }
   function tog(key: string, v: boolean)    { set(key, String(v)); }
-  const g = (key: string) => settings[key] ?? "";
-  const b = (key: string) => settings[key] === "true";
+  const g = (key: string) => settings[key] ?? DEFAULT_SETTINGS[key] ?? "";
+  const b = (key: string) => (settings[key] ?? DEFAULT_SETTINGS[key]) === "true";
   const authSliderEnabled = g("auth.login_slider_enabled") !== "false";
 
   const isLogoDirty = useMemo(() => {
@@ -1660,23 +1699,105 @@ export default function SettingsPage() {
 
             {/* ── Tax & Compliance ── */}
             {currentTab === "tax" && (
-              <div>
-                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
-                  Manage seller legal identity, corporate GSTIN / IEC registrations, and fulfillment warehouse state for dynamic tax invoices.
+              <div className="space-y-6">
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-[12.5px] leading-relaxed text-blue-700">
+                  Manage global invoicing rules, seller legal identity, corporate GSTIN / IEC registrations, and fulfillment warehouse state.
                 </div>
 
-                <FieldRow label="Seller Legal Name">
-                  <AdminInput value={g("tax.seller_name")} onChange={(e) => set("tax.seller_name", e.target.value)} placeholder="Modern Orthodontics Pvt Ltd" />
-                </FieldRow>
-                <FieldRow label="Seller GSTIN" hint="15-character GSTIN format for India domestic operations">
-                  <AdminInput value={g("tax.seller_gstin")} onChange={(e) => set("tax.seller_gstin", e.target.value)} placeholder="03AAAAA1111A1Z1" />
-                </FieldRow>
-                <FieldRow label="Seller Import Export Code (IEC)">
-                  <AdminInput value={g("tax.seller_iec")} onChange={(e) => set("tax.seller_iec", e.target.value)} placeholder="0300000000" />
-                </FieldRow>
-                <FieldRow label="Fulfillment Origin State" hint="Dynamic state code used for CGST/SGST vs IGST split calculations">
-                  <AdminInput value={g("tax.ship_from_state")} onChange={(e) => set("tax.ship_from_state", e.target.value)} placeholder="Punjab" />
-                </FieldRow>
+                <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-[#F0F0F0] pb-3 mb-4">
+                    <div>
+                      <h3 className="text-[14px] font-semibold text-[#111]">Global Auto-Generate Invoice Automation</h3>
+                      <p className="text-[12px] text-[#666] mt-0.5">
+                        Enable or disable automatic invoice generation system-wide. You can also configure specific country rules in{" "}
+                        <Link href="/admin/countries" className="text-brand font-semibold underline hover:text-[#B5151B]">
+                          Regions → Countries
+                        </Link>.
+                      </p>
+                    </div>
+                  </div>
+
+                  <FieldRow
+                    label="Auto-Generate Invoices Globally"
+                    hint="When enabled, orders generate an invoice automatically upon placement (unless turned off for a specific country in Countries Management)."
+                  >
+                    <div className="flex items-center gap-3">
+                      <Toggle
+                        value={g("tax.auto_generate_invoice_global") !== "false"}
+                        onChange={(v) => tog("tax.auto_generate_invoice_global", v)}
+                      />
+                      <span className="text-[13px] font-medium text-[#374151]">
+                        {g("tax.auto_generate_invoice_global") !== "false" ? (
+                          <span className="text-emerald-700 font-semibold">Enabled (Invoices generated automatically)</span>
+                        ) : (
+                          <span className="text-rose-600 font-semibold">Disabled (No automatic invoices)</span>
+                        )}
+                      </span>
+                    </div>
+                  </FieldRow>
+
+                  <FieldRow label="Default Invoice Title" hint="Document header title on generated PDF, e.g. Tax Invoice, Commercial Invoice">
+                    <AdminInput
+                      value={g("tax.invoice_title_default")}
+                      onChange={(e) => set("tax.invoice_title_default", e.target.value)}
+                      placeholder="Tax Invoice"
+                    />
+                  </FieldRow>
+
+                  <FieldRow label="Invoice Number Prefix" hint="Prefix prepended to order numbers, e.g. INV-">
+                    <AdminInput
+                      value={g("tax.invoice_prefix")}
+                      onChange={(e) => set("tax.invoice_prefix", e.target.value)}
+                      placeholder="INV-"
+                    />
+                  </FieldRow>
+                </div>
+
+                <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-xs">
+                  <h3 className="text-[14px] font-semibold text-[#111] mb-1">Seller Identity & Tax Compliance</h3>
+                  <p className="text-[12px] text-[#666] mb-4">
+                    Legal company details and tax registration credentials printed on invoices.
+                  </p>
+
+                  <FieldRow label="Seller Legal Name">
+                    <AdminInput value={g("tax.seller_name")} onChange={(e) => set("tax.seller_name", e.target.value)} placeholder="Modern Orthodontics Pvt Ltd" />
+                  </FieldRow>
+                  <FieldRow label="Seller GSTIN" hint="15-character GSTIN format for India domestic operations">
+                    <AdminInput value={g("tax.seller_gstin")} onChange={(e) => set("tax.seller_gstin", e.target.value)} placeholder="03AAAAA1111A1Z1" />
+                  </FieldRow>
+                  <FieldRow label="Seller Import Export Code (IEC)">
+                    <AdminInput value={g("tax.seller_iec")} onChange={(e) => set("tax.seller_iec", e.target.value)} placeholder="0300000000" />
+                  </FieldRow>
+                  <FieldRow label="Fulfillment Origin State" hint="Dynamic state code used for CGST/SGST vs IGST split calculations">
+                    <AdminInput value={g("tax.ship_from_state")} onChange={(e) => set("tax.ship_from_state", e.target.value)} placeholder="Punjab" />
+                  </FieldRow>
+                </div>
+
+                <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-xs">
+                  <h3 className="text-[14px] font-semibold text-[#111] mb-1">Default Banking & Payment Details on Invoices</h3>
+                  <p className="text-[12px] text-[#666] mb-4">
+                    Bank coordinates and default terms printed at the bottom of customer invoices.
+                  </p>
+
+                  <FieldRow label="Bank Name">
+                    <AdminInput value={g("tax.bank_name")} onChange={(e) => set("tax.bank_name", e.target.value)} placeholder="HDFC Bank" />
+                  </FieldRow>
+                  <FieldRow label="Bank Account Number">
+                    <AdminInput value={g("tax.bank_account")} onChange={(e) => set("tax.bank_account", e.target.value)} placeholder="50200012345678" />
+                  </FieldRow>
+                  <FieldRow label="IFSC / SWIFT Code">
+                    <AdminInput value={g("tax.bank_ifsc")} onChange={(e) => set("tax.bank_ifsc", e.target.value)} placeholder="HDFC0001234" />
+                  </FieldRow>
+                  <FieldRow label="Default Terms & Conditions">
+                    <textarea
+                      value={g("tax.invoice_terms_default")}
+                      onChange={(e) => set("tax.invoice_terms_default", e.target.value)}
+                      placeholder="1. Goods once sold will not be taken back.&#10;2. Interest @ 18% p.a. will be charged on overdue payments."
+                      rows={3}
+                      className="w-full rounded-md border border-[#D1D5DB] px-3 py-2 text-[13px] text-[#111] focus:border-[#E31E24] focus:outline-none"
+                    />
+                  </FieldRow>
+                </div>
               </div>
             )}
 

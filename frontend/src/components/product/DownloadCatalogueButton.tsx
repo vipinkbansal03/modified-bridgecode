@@ -1,6 +1,7 @@
 "use client";
 
 import { FileText } from "lucide-react";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 
 interface DownloadCatalogueButtonProps {
   catalogueUrl?: string | null;
@@ -8,6 +9,7 @@ interface DownloadCatalogueButtonProps {
 }
 
 export function DownloadCatalogueButton({ catalogueUrl, title = "Product" }: DownloadCatalogueButtonProps) {
+  const { t } = useStaticTranslations();
   const rawUrl = catalogueUrl?.trim();
   if (!rawUrl) return null;
 
@@ -24,7 +26,7 @@ export function DownloadCatalogueButton({ catalogueUrl, title = "Product" }: Dow
       className="inline-flex items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#374151] hover:bg-[#F9FAFB] hover:text-[#111827] hover:border-[#9CA3AF] transition-colors shadow-2xs cursor-pointer"
     >
       <FileText size={14} className="text-[#E31E24]" />
-      <span>Download Catalogue</span>
+      <span>{t("ui.pdp.downloadCatalogue")}</span>
     </a>
   );
 }

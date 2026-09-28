@@ -24,6 +24,7 @@ type Country = {
   isDefault: boolean;
   status: "ACTIVE" | "INACTIVE";
   dutyPercentage?: number;
+  autoGenerateInvoice?: boolean;
 };
 
 type CountryFormState = {
@@ -37,6 +38,7 @@ type CountryFormState = {
   status: "ACTIVE" | "INACTIVE";
   isDefault: boolean;
   dutyPercentage: string;
+  autoGenerateInvoice: boolean;
 };
 
 const emptyForm: CountryFormState = {
@@ -50,12 +52,14 @@ const emptyForm: CountryFormState = {
   status: "ACTIVE",
   isDefault: false,
   dutyPercentage: "0",
+  autoGenerateInvoice: true,
 };
 
 const columnDefaults = {
   name: true,
   code: true,
   currency: true,
+  autoGenerateInvoice: true,
   isDefault: true,
   status: true,
 } as const;
@@ -120,6 +124,7 @@ export default function CountriesPage() {
         status: values.status,
         isDefault: values.isDefault,
         dutyPercentage: Number.isFinite(dutyPercentage) && dutyPercentage > 0 ? dutyPercentage : 0,
+        autoGenerateInvoice: values.autoGenerateInvoice,
       };
   
       try {
@@ -310,17 +315,19 @@ export default function CountriesPage() {
 
   function openCreate() {
     setEditing(null);
-    // Set base currency (USD or first active) as default
     const baseCurrency = currencies.find((c: { code: string; isBase?: boolean }) => c.code === "USD" || c.isBase) || currencies[0];
-    if (baseCurrency) {
-      form.setValues({
-        ...form.values,
-        currencyId: baseCurrency.id,
-        currencyCode: baseCurrency.code,
-        currencyName: baseCurrency.name,
-        currencySymbol: baseCurrency.symbol,
-      });
-    }
+    form.setValues({
+      ...emptyForm,
+      ...(baseCurrency
+        ? {
+            currencyId: baseCurrency.id,
+            currencyCode: baseCurrency.code,
+            currencyName: baseCurrency.name,
+            currencySymbol: baseCurrency.symbol,
+          }
+        : {}),
+      autoGenerateInvoice: true,
+    });
     setShowForm(true);
   }
 
@@ -337,6 +344,7 @@ export default function CountriesPage() {
       status: country.status,
       isDefault: country.isDefault,
       dutyPercentage: country.dutyPercentage != null ? String(country.dutyPercentage) : "0",
+      autoGenerateInvoice: country.autoGenerateInvoice !== false,
     });
     setShowForm(true);
   }
@@ -356,6 +364,17 @@ export default function CountriesPage() {
       showToast(getAdminErrorMessage(error, "Failed to delete country."), "error");
     } finally {
       setDeleting(null);
+    }
+  }
+
+  async function handleToggleAutoInvoice(country: Country) {
+    const nextVal = !(country.autoGenerateInvoice !== false);
+    try {
+      await adminApi.put(`/countries/${country.id}`, { autoGenerateInvoice: nextVal });
+      showToast(`Auto-generate invoice ${nextVal ? "enabled" : "disabled"} for ${country.name}.`);
+      await refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to update invoice setting."), "error");
     }
   }
 
@@ -391,6 +410,35 @@ export default function CountriesPage() {
       },
       { key: "code", label: "Code", width: "100px", render: (row: Country) => <span className="font-mono font-semibold text-[#1A1A1A]">{row.code}</span> },
       { key: "currency", label: "Currency", render: (row: Country) => `${row.currency?.name ?? "-"} (${row.currency?.symbol ?? "-"})` },
+      {
+        key: "autoGenerateInvoice",
+        label: "Auto Invoice",
+        width: "140px",
+        render: (row: Country) => {
+          const isEnabled = row.autoGenerateInvoice !== false;
+          return canUpdate ? (
+            <button
+              type="button"
+              onClick={() => handleToggleAutoInvoice(row)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold transition-colors ${
+                isEnabled
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                  : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
+              }`}
+              title="Click to toggle auto-generate invoice for this country"
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${isEnabled ? "bg-emerald-600" : "bg-gray-400"}`} />
+              {isEnabled ? "Auto (ON)" : "Manual (OFF)"}
+            </button>
+          ) : (
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11.5px] font-medium ${
+              isEnabled ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-600"
+            }`}>
+              {isEnabled ? "Enabled" : "Disabled"}
+            </span>
+          );
+        },
+      },
       { key: "isDefault", label: "Default", width: "100px", render: (row: Country) => (row.isDefault ? <span className="font-medium text-green-600">Default</span> : "-") },
       { key: "status", label: "Status", width: "120px" },
       ...(canUpdate || canDelete
@@ -712,7 +760,23 @@ export default function CountriesPage() {
               error={form.errors.dutyPercentage as string}
             />
             
-            <div className="md:col-span-2 pt-1">
+            <div className="md:col-span-2 pt-1 space-y-3">
+              <label className="flex items-start gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="autoGenerateInvoice"
+                  checked={form.values.autoGenerateInvoice}
+                  onChange={form.handleChange}
+                  className="mt-0.5 h-4 w-4 rounded border-[#D1D5DB] accent-[#E31E24]"
+                />
+                <div>
+                  <div>Auto-Generate Invoice for Orders</div>
+                  <p className="text-[12px] font-normal text-[#6B6B6B]">
+                    When enabled, invoices are automatically generated when customers place orders from this country. When disabled, admin can upload or create invoices manually.
+                  </p>
+                </div>
+              </label>
+
               <label className="inline-flex items-center gap-2.5 text-[13.5px] font-medium text-[#1A1A1A] cursor-pointer">
                 <input
                   type="checkbox"

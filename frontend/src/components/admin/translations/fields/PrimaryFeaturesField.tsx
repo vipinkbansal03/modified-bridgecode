@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import PrimaryFeaturesEditor from "../PrimaryFeaturesEditor";
+import { useEffect, useState } from "react";
+import PrimaryFeaturesEditor, {
+  PrimaryFeature,
+  normalizePrimaryFeatures,
+} from "../PrimaryFeaturesEditor";
 
-export interface PrimaryFeature {
-  title: string;
-  description: string;
-}
+export type { PrimaryFeature };
 
 interface PrimaryFeaturesFieldProps {
-  initialValue: PrimaryFeature[];
+  initialValue?: PrimaryFeature[] | Record<string, unknown> | string[] | string | null;
   onSave: (value: PrimaryFeature[]) => Promise<void>;
 }
 
@@ -17,7 +17,14 @@ export default function PrimaryFeaturesField({
   initialValue,
   onSave,
 }: PrimaryFeaturesFieldProps) {
-  const [value, setValue] = useState<PrimaryFeature[]>(initialValue);
+  const [value, setValue] = useState<PrimaryFeature[]>(() =>
+    normalizePrimaryFeatures(initialValue),
+  );
+
+  useEffect(() => {
+    setValue(normalizePrimaryFeatures(initialValue));
+  }, [initialValue]);
+
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {

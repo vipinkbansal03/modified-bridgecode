@@ -32,8 +32,8 @@ export const invoice = asyncHandler(async (req: CustomerAuthRequest, res: Respon
   if (!req.customer) throw new AppError("Customer authentication required.", 401);
   const orderId = String(req.params.id);
   await CustomerOrdersService.assertCustomerInvoiceAccess(req.customer.id, orderId);
-  const { buffer, filename } = await generateInvoice(orderId);
-  res.setHeader("Content-Type", "application/pdf");
+  const { buffer, filename, contentType } = await generateInvoice(orderId);
+  res.setHeader("Content-Type", contentType || "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(buffer);
 });

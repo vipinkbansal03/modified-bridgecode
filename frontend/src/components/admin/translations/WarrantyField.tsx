@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import WarrantyEditor from "./WarrantyEditor";
+import { useEffect, useState } from "react";
+import WarrantyEditor, { normalizeWarranty } from "./WarrantyEditor";
 
 interface WarrantyFieldProps {
-  initialValue: string[];
+  initialValue?: string[] | string | Record<string, unknown> | null;
   onSave: (value: string[]) => Promise<void>;
 }
 
@@ -12,7 +12,14 @@ export default function WarrantyField({
   initialValue,
   onSave,
 }: WarrantyFieldProps) {
-  const [value, setValue] = useState<string[]>(initialValue);
+  const [value, setValue] = useState<string[]>(() =>
+    normalizeWarranty(initialValue),
+  );
+
+  useEffect(() => {
+    setValue(normalizeWarranty(initialValue));
+  }, [initialValue]);
+
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {

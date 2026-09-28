@@ -169,6 +169,19 @@ export async function updateLanguage(id: string, data: LanguageInput) {
   });
 }
 
+export async function deleteLanguage(id: string) {
+  const language = await prisma.language.findUnique({ where: { id } });
+  if (!language) throw new AppError("Language not found.", 404);
+  if (language.isDefault) throw new AppError("Cannot delete the default language.", 400);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.productTranslation.deleteMany({ where: { languageId: id } });
+    await tx.categoryTranslation.deleteMany({ where: { languageId: id } });
+    await tx.translationKeyword.deleteMany({ where: { languageId: id } });
+    return tx.language.delete({ where: { id } });
+  });
+}
+
 export async function getProductTranslations(productId: string) {
   const langs = await prisma.language.findMany({ where: { isEnabled: true } });
   const translations = await prisma.productTranslation.findMany({

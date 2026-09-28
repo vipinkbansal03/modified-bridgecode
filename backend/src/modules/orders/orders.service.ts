@@ -7,6 +7,7 @@ import { reserveOrderInventory, commitOrderReservation, releaseOrderReservation 
 import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
 import { sendOrderConfirmationEmail } from "../../utils/email";
 import Razorpay from "razorpay";
+import { getSettingValue } from "../settings/settings.service";
 
 export async function getAnalytics() {
   const twelveMonthsAgo = new Date();
@@ -351,10 +352,15 @@ export async function createAdminOrder(input: {
   const customerEmail = customer?.email ?? input.customerEmail?.trim();
   if (!customerName || !customerEmail) throw new AppError("Customer name and email are required.", 400);
 
+  const orderNumber = generateOrderNumber();
+  const globalAutoSetting = await getSettingValue("tax.auto_generate_invoice_global").catch(() => "");
+  const isGlobalAuto = globalAutoSetting !== "false";
+  const isAutoInvoice = isGlobalAuto && (country as any).autoGenerateInvoice !== false;
+
   const order = await prisma.$transaction(async (tx) => {
     const createdOrder = await tx.order.create({
       data: {
-        orderNumber: generateOrderNumber(),
+        orderNumber,
         customerId: customer?.id ?? null,
         customerName,
         customerEmail,
@@ -371,6 +377,10 @@ export async function createAdminOrder(input: {
         status: input.isTest ? "PENDING" : "CONFIRMED",
         paymentStatus: "PENDING",
         isTest: Boolean(input.isTest),
+        isInvoiceGenerated: isAutoInvoice,
+        invoiceType: isAutoInvoice ? "AUTO" : "NONE",
+        invoiceNumber: isAutoInvoice ? `INV-${orderNumber}` : null,
+        invoiceDate: isAutoInvoice ? new Date() : null,
         notes: input.notes ? (input.isTest ? `[Test order] ${input.notes}` : `[Manual admin order] ${input.notes}`) : (input.isTest ? "Test order" : "Manual admin order"),
         items: {
           create: orderItems.map((item) => ({

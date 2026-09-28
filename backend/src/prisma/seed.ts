@@ -1725,6 +1725,14 @@ async function main() {
     ],
   });
 
+  // ─── Languages (Default English Only) ──────────────────────
+  console.log("🌱 Seeding languages (English default)…");
+  await prisma.language.upsert({
+    where: { code: "en" },
+    update: { name: "English", isDefault: true, isEnabled: true },
+    create: { name: "English", code: "en", isDefault: true, isEnabled: true },
+  });
+
   // ─── Default Settings ────────────────────────────────────
   console.log("🌱 Seeding default settings…");
 
@@ -1744,10 +1752,17 @@ async function main() {
     { key: "general.default_currency", value: "INR", group: "general", label: "Default Currency", type: "string" },
     { key: "general.timezone", value: "Asia/Kolkata", group: "general", label: "Timezone", type: "string" },
     // Tax & Compliance
+    { key: "tax.auto_generate_invoice_global", value: "true", group: "tax", label: "Auto Generate Invoices", type: "boolean" },
+    { key: "tax.invoice_title_default", value: "Tax Invoice", group: "tax", label: "Default Invoice Title", type: "string" },
+    { key: "tax.invoice_prefix", value: "INV-", group: "tax", label: "Invoice Number Prefix", type: "string" },
     { key: "tax.seller_name", value: "Modern Orthodontics Pvt Ltd", group: "tax", label: "Seller Legal Name", type: "string" },
     { key: "tax.seller_gstin", value: "03AAAAA1111A1Z1", group: "tax", label: "Seller GSTIN (India)", type: "string" },
     { key: "tax.seller_iec", value: "0300000000", group: "tax", label: "Seller Import Export Code (IEC)", type: "string" },
     { key: "tax.ship_from_state", value: "Punjab", group: "tax", label: "Fulfillment Origin State", type: "string" },
+    { key: "tax.bank_name", value: "HDFC Bank", group: "tax", label: "Bank Name", type: "string" },
+    { key: "tax.bank_account", value: "50200012345678", group: "tax", label: "Bank Account Number", type: "string" },
+    { key: "tax.bank_ifsc", value: "HDFC0001234", group: "tax", label: "IFSC / SWIFT Code", type: "string" },
+    { key: "tax.invoice_terms_default", value: "1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged on overdue payments.", group: "tax", label: "Default Terms & Conditions", type: "string" },
     // SEO
     { key: "seo.default_title", value: "Modern Orthodontics — Precision Orthodontic Products", group: "seo", label: "Default Meta Title", type: "string" },
     { key: "seo.default_description", value: "Modern Orthodontics manufactures premium orthodontic brackets, wires, and accessories. ISO 13485 certified.", group: "seo", label: "Default Meta Description", type: "string" },

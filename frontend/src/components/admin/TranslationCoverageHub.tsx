@@ -10,32 +10,49 @@ import {
 import type { ChangeEvent } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { stripHtmlTags } from "@/utils/sanitize";
+import { Modal } from "@/components/ui/Modal";
 import {
+  AdminInput,
   AdminSelect,
+  AdminRichTextEditor,
   useToast,
   toastMessages,
 } from "@/components/admin/AdminComponents";
-import {
-  TranslationBlurField,
-  TranslationBlurInput,
-  filterTranslationLanguages,
-} from "@/components/admin/TranslationEditorUi";
-import { adminApi } from "@/services/adminApi";
+import { filterTranslationLanguages } from "@/components/admin/TranslationEditorUi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
 import {
   AlertCircle,
-  CheckCircle2,
-  ChevronDown,
+  Check,
+  ChevronRight,
   Download,
   ExternalLink,
-  Languages,
+  Layers,
+  Package,
+  Tag,
+  Globe,
+  FileText,
   Search,
   Upload,
+  X,
+  Copy,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
-import TechnicalSpecificationsField from "./translations/fields/TechnicalSpecificationsField";
-import WarrantyField from "./translations/WarrantyField";
-import PrimaryFeaturesField from "./translations/fields/PrimaryFeaturesField";
-import HighlightsField from "./translations/fields/HighlightsField";
+import TechnicalSpecificationsEditor, {
+  TechnicalSpecification,
+  normalizeTechnicalSpecifications,
+} from "./translations/TechnicalSpecificationsEditor";
+import WarrantyEditor, { normalizeWarranty } from "./translations/WarrantyEditor";
+import PrimaryFeaturesEditor, {
+  PrimaryFeature,
+  normalizePrimaryFeatures,
+} from "./translations/PrimaryFeaturesEditor";
+import HighlightsEditor, {
+  Highlight,
+  normalizeHighlights,
+} from "./translations/HighlightsEditor";
 
 type CoverageGapType = "product" | "category" | "static" | "cms";
 type CoveragePriority = "high" | "medium" | "low";
@@ -87,12 +104,16 @@ type AdminLanguage = {
   isDefault?: boolean;
 };
 
-const TYPE_FILTERS: Array<{ value: "all" | CoverageGapType; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "product", label: "Products" },
-  { value: "category", label: "Categories" },
-  { value: "static", label: "Static UI" },
-  { value: "cms", label: "CMS" },
+const CATEGORY_TABS: Array<{
+  value: "all" | CoverageGapType;
+  label: string;
+  icon: typeof Layers;
+}> = [
+  { value: "all", label: "All Items", icon: Layers },
+  { value: "product", label: "Products", icon: Package },
+  { value: "category", label: "Categories", icon: Tag },
+  { value: "static", label: "Website Labels", icon: Globe },
+  { value: "cms", label: "CMS Pages", icon: FileText },
 ];
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -100,24 +121,60 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const TYPE_LABELS: Record<CoverageGapType, string> = {
   product: "Product",
   category: "Category",
-  static: "Static UI",
-  cms: "CMS",
+  static: "Website Label",
+  cms: "CMS Page",
+};
+
+const SUB_TABS: Record<
+  "all" | CoverageGapType,
+  Array<{ value: string; label: string }>
+> = {
+  all: [
+    { value: "all", label: "All Items" },
+  ],
+  product: [
+    { value: "all", label: "All Products" },
+    { value: "info", label: "Titles & Descriptions" },
+    { value: "specs", label: "Specs & Features" },
+    { value: "seo", label: "SEO Metadata" },
+  ],
+  category: [
+    { value: "all", label: "All Categories" },
+    { value: "names", label: "Category Names" },
+    { value: "descriptions", label: "Descriptions" },
+  ],
+  static: [
+    { value: "all", label: "All Labels" },
+    { value: "nav", label: "Navigation & Menus" },
+    { value: "product", label: "Product & Catalog" },
+    { value: "cart", label: "Cart & Checkout" },
+    { value: "account", label: "Account & Auth" },
+    { value: "footer", label: "Footer & Legal" },
+    { value: "general", label: "General & Buttons" },
+  ],
+  cms: [
+    { value: "all", label: "All CMS" },
+    { value: "page", label: "Page Headers & SEO" },
+    { value: "section", label: "Sections & Content" },
+    { value: "menu", label: "Navigation Menus" },
+    { value: "footer", label: "Footer Blocks" },
+  ],
 };
 
 const PRIORITY_FILTERS: Array<{
   value: "all" | CoveragePriority;
   label: string;
 }> = [
-  { value: "all", label: "All priorities" },
+  { value: "all", label: "All Priorities" },
   { value: "high", label: "Needs attention first" },
   { value: "medium", label: "Standard content" },
-  { value: "low", label: "SEO / metadata" },
+  { value: "low", label: "SEO & metadata" },
 ];
 
 const PRIORITY_BADGE_CLASSES: Record<CoveragePriority, string> = {
-  high: "border-[#FAD7D9] bg-[#FFF1F2] text-[#C9151B]",
-  medium: "border-[#E7E7E7] bg-[#F8F8F8] text-[#5F5F5F]",
-  low: "border-[#E9E1C8] bg-[#FFF9E8] text-[#8A6500]",
+  high: "border-red-200 bg-red-50 text-red-700",
+  medium: "border-gray-200 bg-gray-50 text-[#555]",
+  low: "border-amber-200 bg-amber-50 text-amber-800",
 };
 
 function getEditHref(gap: CoverageGap) {
@@ -136,24 +193,6 @@ function getEditHref(gap: CoverageGap) {
     default:
       return "#";
   }
-}
-
-function totalMissing(summary: CoverageResponse["summary"]) {
-  return Object.values(summary).reduce((sum, bucket) => sum + bucket.fields, 0);
-}
-
-function totalTranslatable(summary: CoverageResponse["summary"]) {
-  return Object.values(summary).reduce(
-    (sum, bucket) => sum + bucket.totalFields,
-    0,
-  );
-}
-
-function totalCompleted(summary: CoverageResponse["summary"]) {
-  return Object.values(summary).reduce(
-    (sum, bucket) => sum + bucket.completedFields,
-    0,
-  );
 }
 
 function getPaginationItems(
@@ -180,930 +219,709 @@ function getPaginationItems(
   return items;
 }
 
-function SummaryCard({
-  label,
-  gaps,
-  fields,
-  totalFields,
-  completedFields,
-  completionPercentage,
-  active,
-  onClick,
-}: {
-  label: string;
-  gaps: number;
-  fields: number;
-  totalFields: number;
-  completedFields: number;
-  completionPercentage: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-xl border p-4 text-left transition-colors",
-        active
-          ? "border-[#E31E24] bg-[#FFFBFB]"
-          : "border-[#E6E6E6] bg-white hover:border-[#D8D8D8]",
-      )}
-    >
-      <div className="text-[12px] font-medium uppercase tracking-wide text-[#9A9A9A]">
-        {label}
-      </div>
-      <div className="mt-2 text-[24px] font-semibold text-[#1A1A1A]">
-        {fields}
-      </div>
-      <div className="mt-1 text-[12px] text-[#6B6B6B]">
-        {gaps === 0
-          ? "All complete"
-          : `${gaps} item${gaps === 1 ? "" : "s"} need attention`}
-      </div>
-      <div className="mt-3">
-        <div className="mb-1 flex items-center justify-between text-[11.5px] text-[#9A9A9A]">
-          <span>{completionPercentage}% complete</span>
-          <span>
-            {completedFields}/{totalFields}
-          </span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-[#EEEEEE]">
-          <div
-            className="h-full rounded-full bg-[#E31E24]"
-            style={{ width: `${completionPercentage}%` }}
-          />
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function GapSaveFields({
+/** Common Center-aligned Translation Modal for clean, distraction-free editing */
+function TranslationModal({
   gap,
-  languageId,
+  language,
+  onClose,
   onSaved,
-  canUpdate = false,
 }: {
-  gap: CoverageGap;
-  languageId: string;
+  gap: CoverageGap | null;
+  language: AdminLanguage;
+  onClose: () => void;
   onSaved: () => void;
-  canUpdate?: boolean;
 }) {
   const { showToast } = useToast();
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
-  const saveProductField = async (field: string, value: string) => {
-    await adminApi.put(`/translations/products/${gap.entityId}/${languageId}`, {
-      [field]: value,
-    });
-    showToast(toastMessages.translationSaved);
-    onSaved();
+  useEffect(() => {
+    if (!gap) return;
+    const initial: Record<string, unknown> = {};
+    for (const field of gap.missingFields) {
+      if (field.field === "technicalSpecs") {
+        initial[field.field] = normalizeTechnicalSpecifications(field.englishValue);
+      } else if (field.field === "warranty") {
+        initial[field.field] = normalizeWarranty(field.englishValue);
+      } else if (field.field === "primaryFeatures") {
+        initial[field.field] = normalizePrimaryFeatures(field.englishValue);
+      } else if (field.field === "highlights") {
+        initial[field.field] = normalizeHighlights(field.englishValue);
+      } else {
+        initial[field.field] = "";
+      }
+    }
+    setFormData(initial);
+  }, [gap]);
+
+  if (!gap) return null;
+
+  const handleCopyEnglish = (field: CoverageMissingField) => {
+    let copyText = field.englishValue;
+    if (["technicalSpecs", "warranty", "primaryFeatures", "highlights"].includes(field.field)) {
+      try {
+        const parsed = JSON.parse(field.englishValue);
+        copyText = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
+      } catch {
+        copyText = field.englishValue;
+      }
+    } else if (/<[a-z][\s\S]*>/i.test(field.englishValue)) {
+      copyText = stripHtmlTags(field.englishValue);
+    }
+    navigator.clipboard.writeText(copyText);
+    showToast("English text copied to clipboard.");
   };
 
-  const saveCategoryField = async (field: string, value: string) => {
-    await adminApi.put(
-      `/translations/categories/${gap.entityId}/${languageId}`,
-      { [field]: value },
-    );
-    showToast(toastMessages.translationSaved);
-    onSaved();
-  };
+  const handleSaveAll = async () => {
+    setIsSaving(true);
+    try {
+      if (gap.type === "product") {
+        const payload: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(formData)) {
+          if (["technicalSpecs", "warranty", "primaryFeatures", "highlights"].includes(key)) {
+            payload[key] = value;
+          } else {
+            payload[key] = typeof value === "string" ? value.trim() : value;
+          }
+        }
+        await adminApi.put(`/translations/products/${gap.entityId}/${language.id}`, payload);
+      } else if (gap.type === "category") {
+        await adminApi.put(`/translations/categories/${gap.entityId}/${language.id}`, formData);
+      } else if (gap.type === "static") {
+        for (const [key, value] of Object.entries(formData)) {
+          await adminApi.put("/translations/keywords", {
+            key,
+            languageId: language.id,
+            value: typeof value === "string" ? value.trim() : String(value ?? ""),
+          });
+        }
+      } else if (gap.type === "cms") {
+        for (const [key, value] of Object.entries(formData)) {
+          const cmsKey = `cms.${gap.cmsEntityType || "page"}.${gap.entityId}.${key}`;
+          await adminApi.put("/translations/keywords", {
+            key: cmsKey,
+            languageId: language.id,
+            value: typeof value === "string" ? value.trim() : String(value ?? ""),
+          });
+        }
+      }
 
-  const saveStaticField = async (value: string) => {
-    await adminApi.put("/translations/keywords", {
-      key: gap.entityId,
-      languageId,
-      value,
-    });
-    showToast(toastMessages.staticLabelSaved);
-    onSaved();
-  };
-
-  const saveCmsField = async (field: string, value: string) => {
-    if (!gap.cmsEntityType) return;
-    await adminApi.put(
-      `/cms/translations/${gap.cmsEntityType}/${gap.entityId}/${languageId}`,
-      { [field]: value },
-    );
-    showToast(toastMessages.translationSaved);
-    onSaved();
+      showToast("Translations saved successfully!");
+      onSaved();
+      onClose();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to save translations."), "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="space-y-3 border-t border-[#F0F0F0] pt-3">
-      {gap.missingFields.map((missing) => {
+    <Modal
+      open={Boolean(gap)}
+      onClose={onClose}
+      size="3xl"
+      title={
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-[#F4F4F4] border border-[#E0E0E0] px-2 py-0.5 text-[11px] font-semibold text-[#555] uppercase">
+              {TYPE_LABELS[gap.type]}
+            </span>
+            <span className="rounded-md bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+              Translating to {language.name} ({language.code.toUpperCase()})
+            </span>
+          </div>
+          <h3 className="text-[17px] font-bold text-[#1A1A1A] truncate">{gap.entityLabel}</h3>
+        </div>
+      }
+      onSave={handleSaveAll}
+      saveText="Save All Translations"
+      cancelText="Cancel"
+      isSaving={isSaving}
+      bodyClassName="p-6 space-y-6"
+    >
+      <div className="rounded-lg bg-blue-50/60 border border-blue-100 p-3 text-[12.5px] text-blue-800 leading-relaxed">
+        ℹ️ Enter the translated text below for each missing field. The original English values are displayed for reference.
+      </div>
+
+      {gap.missingFields.map((field) => {
+        const hasHtml = /<[a-z][\s\S]*>/i.test(field.englishValue);
         const isLong =
-          missing.englishValue.length > 80 ||
-          missing.field === "description" ||
-          missing.field === "seoDescription";
-
-        if (gap.type === "product" && missing.field === "technicalSpecs") {
-          const parsedSpecs = (() => {
-            try {
-              return JSON.parse(missing.englishValue);
-            } catch {
-              return [];
-            }
-          })();
-
-          return (
-            <TechnicalSpecificationsField
-              key={`${gap.entityId}-${missing.field}`}
-              initialValue={parsedSpecs}
-              onSave={async (updatedSpecs) => {
-                try {
-                  await saveProductField(
-                    "technicalSpecs",
-                    JSON.stringify(updatedSpecs),
-                  );
-                } catch {
-                  showToast(toastMessages.translationFailed, "error");
-                }
-              }}
-            />
-          );
-        }
-
-        if (gap.type === "product" && missing.field === "warranty") {
-          const parsedWarranty = (() => {
-            try {
-              return JSON.parse(missing.englishValue);
-            } catch {
-              return [];
-            }
-          })();
-
-          return (
-            <WarrantyField
-              key={`${gap.entityId}-${missing.field}`}
-              initialValue={parsedWarranty}
-              onSave={async (updatedWarranty) => {
-                try {
-                  await saveProductField(
-                    "warranty",
-                    JSON.stringify(updatedWarranty),
-                  );
-                } catch {
-                  showToast(toastMessages.translationFailed, "error");
-                }
-              }}
-            />
-          );
-        }
-
-        if (gap.type === "product" && missing.field === "primaryFeatures") {
-          const parsedFeatures = (() => {
-            try {
-              return JSON.parse(missing.englishValue);
-            } catch {
-              return [];
-            }
-          })();
-
-          return (
-            <PrimaryFeaturesField
-              key={`${gap.entityId}-${missing.field}`}
-              initialValue={parsedFeatures}
-              onSave={async (updatedFeatures) => {
-                try {
-                  await saveProductField(
-                    "primaryFeatures",
-                    JSON.stringify(updatedFeatures),
-                  );
-                } catch {
-                  showToast(toastMessages.translationFailed, "error");
-                }
-              }}
-            />
-          );
-        }
-
-        if (gap.type === "product" && missing.field === "highlights") {
-          const parsedHighlights = (() => {
-            try {
-              return JSON.parse(missing.englishValue);
-            } catch {
-              return [];
-            }
-          })();
-
-          return (
-            <HighlightsField
-              key={`${gap.entityId}-${missing.field}`}
-              initialValue={parsedHighlights}
-              onSave={async (updatedHighlights) => {
-                try {
-                  await saveProductField(
-                    "highlights",
-                    JSON.stringify(updatedHighlights),
-                  );
-                } catch {
-                  showToast(toastMessages.translationFailed, "error");
-                }
-              }}
-            />
-          );
-        }
-
-        if (gap.type === "static") {
-          const onStaticSave = async (value: string) => {
-            try {
-              await saveStaticField(value);
-            } catch {
-              showToast(toastMessages.translationFailed, "error");
-            }
-          };
-
-          return (
-            <TranslationBlurInput
-              key={`${gap.entityId}-${missing.field}`}
-              label={missing.fieldLabel}
-              defaultValue=""
-              englishReference={missing.englishValue}
-              onSave={onStaticSave}
-              disabled={!canUpdate}
-            />
-          );
-        }
-
-        const onSave = async (value: string) => {
-          try {
-            if (gap.type === "product")
-              await saveProductField(missing.field, value);
-            else if (gap.type === "category")
-              await saveCategoryField(missing.field, value);
-            else if (gap.type === "cms")
-              await saveCmsField(missing.field, value);
-          } catch {
-            showToast(toastMessages.translationFailed, "error");
-          }
-        };
-
-        if (isLong) {
-          return (
-            <TranslationBlurField
-              key={`${gap.entityId}-${missing.field}`}
-              label={missing.fieldLabel}
-              rows={missing.field === "description" ? 4 : 3}
-              defaultValue=""
-              englishReference={missing.englishValue}
-              onSave={onSave}
-              disabled={!canUpdate}
-            />
-          );
-        }
+          field.englishValue.length > 80 ||
+          field.field === "description" ||
+          field.field === "seoDescription";
 
         return (
-          <TranslationBlurInput
-            key={`${gap.entityId}-${missing.field}`}
-            label={missing.fieldLabel}
-            defaultValue=""
-            englishReference={missing.englishValue}
-            onSave={onSave}
-            disabled={!canUpdate}
-          />
+          <div key={field.field} className="rounded-xl border border-[#E6E6E6] bg-white p-4.5 space-y-3 shadow-2xs">
+            {/* Field Header */}
+            <div className="flex items-center justify-between">
+              <span className="text-[13.5px] font-bold text-[#1A1A1A]">{field.fieldLabel}</span>
+              <button
+                type="button"
+                onClick={() => handleCopyEnglish(field)}
+                className="flex items-center gap-1 text-[11.5px] font-medium text-[#666] hover:text-[#1A1A1A] hover:underline cursor-pointer"
+              >
+                <Copy size={12} /> Copy English
+              </button>
+            </div>
+
+            {/* English Reference Box */}
+            <div className="rounded-lg border border-[#ECECEC] bg-[#FAFAFA] p-3">
+              <span className="text-[10.5px] font-bold uppercase tracking-wider text-[#888]">
+                Original English Content:
+              </span>
+              {hasHtml ? (
+                <div
+                  className="mt-1.5 max-h-48 overflow-y-auto rounded border border-[#E2E2E2] bg-white p-3 text-[12.5px] leading-relaxed text-[#222] select-text prose prose-sm max-w-none [&_a]:text-blue-600 [&_a]:underline"
+                  dangerouslySetInnerHTML={{ __html: field.englishValue }}
+                />
+              ) : (
+                <p className="mt-1 text-[12.5px] text-[#333] font-medium leading-relaxed select-text break-words max-h-40 overflow-y-auto">
+                  {field.englishValue || <em className="text-[#AAA]">Empty in English</em>}
+                </p>
+              )}
+            </div>
+
+            {/* Editor Component for Field */}
+            <div className="pt-1">
+              <label className="block text-[11.5px] font-semibold text-[#444] mb-1.5">
+                {language.name} Translation:
+              </label>
+
+              {field.field === "technicalSpecs" ? (
+                <TechnicalSpecificationsEditor
+                  value={formData[field.field]}
+                  onChange={(specs) => setFormData((prev) => ({ ...prev, [field.field]: specs }))}
+                />
+              ) : field.field === "warranty" ? (
+                <WarrantyEditor
+                  value={formData[field.field] as string[]}
+                  onChange={(lines) => setFormData((prev) => ({ ...prev, [field.field]: lines }))}
+                />
+              ) : field.field === "primaryFeatures" ? (
+                <PrimaryFeaturesEditor
+                  value={formData[field.field] as PrimaryFeature[]}
+                  onChange={(features) => setFormData((prev) => ({ ...prev, [field.field]: features }))}
+                />
+              ) : field.field === "highlights" ? (
+                <HighlightsEditor
+                  value={formData[field.field] as Highlight[]}
+                  onChange={(hls) => setFormData((prev) => ({ ...prev, [field.field]: hls }))}
+                />
+              ) : field.field === "description" ? (
+                <AdminRichTextEditor
+                  value={String(formData[field.field] ?? "")}
+                  onChange={(val) => setFormData((prev) => ({ ...prev, [field.field]: val }))}
+                  placeholder={`Enter ${language.name} description...`}
+                  compact
+                />
+              ) : isLong ? (
+                <textarea
+                  rows={4}
+                  value={String(formData[field.field] ?? "")}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, [field.field]: e.target.value }))}
+                  placeholder={`Enter ${language.name} ${field.fieldLabel.toLowerCase()}...`}
+                  className="w-full rounded-lg border border-[#DCDCDC] p-3 text-[13px] text-[#1A1A1A] outline-none transition focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={String(formData[field.field] ?? "")}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, [field.field]: e.target.value }))}
+                  placeholder={`Enter ${language.name} ${field.fieldLabel.toLowerCase()}...`}
+                  className="h-10 w-full rounded-lg border border-[#DCDCDC] px-3 text-[13px] text-[#1A1A1A] outline-none transition focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
+                />
+              )}
+            </div>
+          </div>
         );
       })}
-    </div>
+    </Modal>
   );
 }
 
 export function TranslationCoverageHub({
-  languages,
+  languages = [],
   canUpdate = false,
   canDelete = false,
   canCreate = false,
 }: {
-  languages: AdminLanguage[];
+  languages?: AdminLanguage[];
   canUpdate?: boolean;
   canDelete?: boolean;
   canCreate?: boolean;
 }) {
-  const translationLanguages = filterTranslationLanguages(languages);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingScrollTopRef = useRef<number | null>(null);
-  const [selectedLanguageId, setSelectedLanguageId] = useState("");
+  const targetLanguages = filterTranslationLanguages(languages);
+  const [selectedLanguageId, setSelectedLanguageId] = useState<string>("");
+
+  useEffect(() => {
+    if (targetLanguages.length > 0 && !selectedLanguageId) {
+      setSelectedLanguageId(targetLanguages[0].id);
+    }
+  }, [targetLanguages, selectedLanguageId]);
+
   const [typeFilter, setTypeFilter] = useState<"all" | CoverageGapType>("all");
-  const [priorityFilter, setPriorityFilter] = useState<
-    "all" | CoveragePriority
-  >("all");
+  const [sectionFilter, setSectionFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | CoveragePriority>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const activeLanguageId =
-    selectedLanguageId || translationLanguages[0]?.id || "";
-  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const [activeDrawerGap, setActiveDrawerGap] = useState<CoverageGap | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const currentLanguage =
+    targetLanguages.find((l) => l.id === selectedLanguageId) || targetLanguages[0];
+
+  const { data, isLoading, refetch } = useQuery<CoverageResponse>({
     queryKey: [
-      "admin-translation-coverage",
-      activeLanguageId,
+      "translation-coverage",
+      selectedLanguageId,
       typeFilter,
+      sectionFilter,
       priorityFilter,
       page,
       pageSize,
-      deferredSearchQuery,
+      deferredSearch,
     ],
-    queryFn: () =>
-      adminApi
-        .get("/translations/coverage", {
-          params: {
-            languageId: activeLanguageId,
-            type: typeFilter,
-            priority: priorityFilter,
-            page,
-            limit: pageSize,
-            search: deferredSearchQuery || undefined,
-          },
-        })
-        .then((response) => response.data.data as CoverageResponse),
-    enabled: !!activeLanguageId,
-    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const response = await adminApi.get("/translations/coverage", {
+        params: {
+          languageId: selectedLanguageId,
+          type: typeFilter,
+          section: sectionFilter !== "all" ? sectionFilter : undefined,
+          priority: priorityFilter,
+          page,
+          limit: pageSize,
+          search: deferredSearch,
+        },
+      });
+      return response.data.data as CoverageResponse;
+    },
+    enabled: !!selectedLanguageId,
   });
 
-  const missingTotal = data ? totalMissing(data.summary) : 0;
-  const completedTotal = data ? totalCompleted(data.summary) : 0;
-  const translatableTotal = data ? totalTranslatable(data.summary) : 0;
-  const overallCompletion =
-    translatableTotal > 0
-      ? Math.round((completedTotal / translatableTotal) * 100)
-      : 100;
-  const totalPages = data ? Math.max(1, data.gaps.totalPages) : 1;
-  const currentPage = data?.gaps.page ?? page;
-  const firstItem =
-    data && data.gaps.total > 0 ? (currentPage - 1) * data.gaps.limit + 1 : 0;
-  const lastItem = data
-    ? Math.min(currentPage * data.gaps.limit, data.gaps.total)
-    : 0;
-  const paginationItems = getPaginationItems(currentPage, totalPages);
-
-  const getAdminScrollContainer = useCallback(
-    () => rootRef.current?.closest("main") as HTMLElement | null,
-    [],
-  );
-
-  const captureAdminScroll = useCallback(() => {
-    const scrollContainer = getAdminScrollContainer();
-    pendingScrollTopRef.current = scrollContainer?.scrollTop ?? window.scrollY;
-  }, [getAdminScrollContainer]);
-
-  const restoreAdminScroll = useCallback(() => {
-    const previousScrollTop = pendingScrollTopRef.current;
-    if (previousScrollTop === null) return;
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const scrollContainer = getAdminScrollContainer();
-        if (scrollContainer) {
-          scrollContainer.scrollTop = previousScrollTop;
-        } else {
-          window.scrollTo({ top: previousScrollTop });
-        }
-        pendingScrollTopRef.current = null;
-      });
-    });
-  }, [getAdminScrollContainer]);
-
-  const preserveAdminScroll = useCallback(
-    (update: () => void) => {
-      captureAdminScroll();
-      update();
-    },
-    [captureAdminScroll],
-  );
-
-  useEffect(() => {
-    if (!isLoading && !isFetching) restoreAdminScroll();
-  }, [data, isLoading, isFetching, restoreAdminScroll]);
-
-  const selectTypeFilter = (value: "all" | CoverageGapType) => {
-    preserveAdminScroll(() => {
-      setTypeFilter(value);
-      setPage(1);
-      setExpandedKey(null);
-    });
-  };
-
-  const selectPriorityFilter = (value: "all" | CoveragePriority) => {
-    preserveAdminScroll(() => {
-      setPriorityFilter(value);
-      setPage(1);
-      setExpandedKey(null);
-    });
-  };
-
-  const goToPage = (targetPage: number) => {
-    const safePage = Math.min(totalPages, Math.max(1, targetPage));
-    setPage(safePage);
-    setExpandedKey(null);
-  };
-
   const handleExportCsv = async () => {
+    if (!selectedLanguageId) return;
     try {
-      setIsExporting(true);
       const response = await adminApi.get("/translations/coverage/export", {
         params: {
-          languageId: activeLanguageId,
-          type: typeFilter,
-          priority: priorityFilter,
-          search: deferredSearchQuery || undefined,
+          languageId: selectedLanguageId,
+          type: typeFilter !== "all" ? typeFilter : undefined,
+          section: sectionFilter !== "all" ? sectionFilter : undefined,
+          priority: priorityFilter !== "all" ? priorityFilter : undefined,
+          search: deferredSearch || undefined,
         },
         responseType: "blob",
       });
 
-      const url = window.URL.createObjectURL(
-        new Blob([response.data], { type: "text/csv;charset=utf-8" }),
-      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.download = `translation-coverage-${Date.now()}.csv`;
+      link.setAttribute(
+        "download",
+        `translations-${currentLanguage?.code || "export"}-${Date.now()}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
+      showToast("Translation CSV downloaded.");
     } catch {
-      showToast("Failed to export translations CSV.", "error");
-    } finally {
-      setIsExporting(false);
+      showToast("Failed to export CSV.", "error");
     }
   };
 
   const handleImportCsv = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || !selectedLanguageId) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
 
     try {
-      setIsImporting(true);
-      const formData = new FormData();
-      formData.append("file", file);
+      const res = await adminApi.post("/translations/coverage/import", formData, {
+        params: { languageId: selectedLanguageId },
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
-      const response = await adminApi.post(
-        "/translations/coverage/import",
-        formData,
-        {
-          params: { languageId: activeLanguageId },
-          
-        },
-      );
-
-      const result = response.data.data as {
-        imported: number;
-        skipped: number;
-        errors?: string[];
-      };
-      showToast(
-        `CSV import complete: ${result.imported} imported, ${result.skipped} skipped.`,
-      );
-      if (result.errors?.length) {
-        showToast(
-          `${result.errors.length} row${result.errors.length === 1 ? "" : "s"} need review after import.`,
-          "error",
-        );
-      }
-      setExpandedKey(null);
+      showToast(res.data.message || "CSV imported successfully!");
       refetch();
-    } catch {
-      showToast("Failed to import translations CSV.", "error");
+    } catch (err) {
+      showToast(getAdminErrorMessage(err, "Failed to import CSV."), "error");
     } finally {
-      setIsImporting(false);
-      event.target.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  if (!translationLanguages.length) {
+  if (targetLanguages.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-[#E6E6E6] bg-white p-10 text-center">
-        <Languages size={28} className="mx-auto mb-3 text-[#E31E24]" />
-        <p className="text-[14px] font-medium text-[#1A1A1A]">
-          Add a translation language to use the coverage hub
-        </p>
-        <p className="mt-1 text-[13px] text-[#9A9A9A]">
-          The default English language is excluded from coverage checks.
+      <div className="rounded-xl border border-dashed border-[#DDD] bg-white p-12 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-[#E31E24]">
+          <Layers size={24} />
+        </div>
+        <h3 className="text-[15px] font-bold text-[#1A1A1A]">No Translation Languages Configured</h3>
+        <p className="mt-1 text-[13px] text-[#666] max-w-md mx-auto">
+          Your store is currently running on English. To track missing translations and export/import spreadsheets, add a target language in the <strong>Languages & Protected Words</strong> tab.
         </p>
       </div>
     );
   }
 
+  const summary = data?.summary;
+  const totalMissingCount = summary ? Object.values(summary).reduce((sum, b) => sum + b.fields, 0) : 0;
+  const totalFieldsCount = summary ? Object.values(summary).reduce((sum, b) => sum + b.totalFields, 0) : 0;
+  const totalCompletedCount = summary ? Object.values(summary).reduce((sum, b) => sum + b.completedFields, 0) : 0;
+  const overallPercentage = totalFieldsCount > 0 ? Math.round((totalCompletedCount / totalFieldsCount) * 100) : 0;
+
   return (
-    <div ref={rootRef} className="space-y-5">
-      <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <h3 className="text-[15px] font-semibold text-[#1A1A1A]">
-              Translation Coverage
-            </h3>
-            <p className="mt-1 text-[13px] text-[#6B6B6B]">
-              Find missing translations across products, categories, CMS
-              content, and static UI labels.
-            </p>
+    <div className="space-y-6">
+      {/* Top Header Card: Language Selector & Overall Progress */}
+      <div className="rounded-xl border border-[#E6E6E6] bg-white p-5 shadow-xs">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="text-[13px] font-semibold text-[#1A1A1A] whitespace-nowrap">
+              Target Language:
+            </label>
+            <div className="w-full sm:w-[260px]">
+              <AdminSelect
+                value={selectedLanguageId}
+                onChange={(e) => {
+                  setSelectedLanguageId(e.target.value);
+                  setPage(1);
+                }}
+                options={targetLanguages.map((l) => ({
+                  value: l.id,
+                  label: `${l.name} (${l.code.toUpperCase()})`,
+                }))}
+              />
+            </div>
+            <span className="text-[12.5px] text-[#666]">
+              Tracking multilingual gaps for <strong>{currentLanguage?.name}</strong>
+            </span>
           </div>
-          <div className="w-full xl:w-[260px]">
-            <AdminSelect
-              label="Language"
-              value={activeLanguageId}
-              onChange={(e) => {
-                setSelectedLanguageId(e.target.value);
-                setPage(1);
-                setExpandedKey(null);
-              }}
-              options={translationLanguages.map((lang) => ({
-                value: lang.id,
-                label: `${lang.name} (${lang.code.toUpperCase()})`,
-              }))}
-            />
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-lg border border-[#ECECEC] bg-[#FAFAFA] px-4 py-2 text-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#888]">Overall Progress</span>
+              <p className="text-[16px] font-bold text-[#1A1A1A]">{overallPercentage}%</p>
+            </div>
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-red-700">Missing Fields</span>
+              <p className="text-[16px] font-bold text-red-700">{totalMissingCount}</p>
+            </div>
           </div>
         </div>
 
-        {data && (
-          <div className="mt-5 flex flex-wrap items-center gap-2 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] px-4 py-3">
-            {missingTotal === 0 ? (
-              <>
-                <CheckCircle2 size={16} className="text-green-600" />
-                <span className="text-[13px] font-medium text-green-700">
-                  {data.language.name} is fully translated across all tracked
-                  content.
+        {/* Simplified Unified Category Tabs */}
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-[#F0F0F0] pt-4">
+          {CATEGORY_TABS.map((tab) => {
+            const isSelected = typeFilter === tab.value;
+            const Icon = tab.icon;
+            const missingCount =
+              tab.value === "all"
+                ? totalMissingCount
+                : summary?.[tab.value]?.fields ?? 0;
+
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => {
+                  setTypeFilter(tab.value);
+                  setSectionFilter("all");
+                  setPage(1);
+                }}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl border px-4 py-2 text-left transition-all cursor-pointer",
+                  isSelected
+                    ? "border-[#E31E24] bg-[#E31E24] text-white shadow-xs font-semibold"
+                    : "border-[#E8E8E8] bg-white text-[#444] hover:border-[#CCC] hover:bg-[#F9FAFB] font-medium",
+                )}
+              >
+                <Icon size={15} className={isSelected ? "text-white" : "text-[#777]"} />
+                <span className="text-[13px]">{tab.label}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                    isSelected
+                      ? "bg-white/20 text-white"
+                      : missingCount > 0
+                        ? "bg-red-50 text-red-700 border border-red-200"
+                        : "bg-green-50 text-green-700 border border-green-200",
+                  )}
+                >
+                  {missingCount}
                 </span>
-              </>
-            ) : (
-              <>
-                <AlertCircle size={16} className="text-amber-600" />
-                <span className="text-[13px] text-[#1A1A1A]">
-                  <span className="font-semibold">{missingTotal}</span> missing
-                  field{missingTotal === 1 ? "" : "s"} for{" "}
-                  <span className="font-semibold">{data.language.name}</span>
-                </span>
-              </>
-            )}
-            <span className="rounded-full border border-[#E6E6E6] bg-white px-2.5 py-1 text-[12px] font-medium text-[#6B6B6B]">
-              {overallCompletion}% complete
-            </span>
-            {isFetching && (
-              <span className="text-[12px] text-[#9A9A9A]">Refreshing…</span>
-            )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Sub-Tabs Dividing the Active Category */}
+        {SUB_TABS[typeFilter] && SUB_TABS[typeFilter].length > 1 && (
+          <div className="mt-3.5 flex flex-wrap items-center gap-1.5 border-t border-[#F0F0F0] pt-3">
+            <span className="text-[11.5px] font-semibold text-[#888] mr-1.5">Sub-section:</span>
+            {SUB_TABS[typeFilter].map((st) => (
+              <button
+                key={st.value}
+                type="button"
+                onClick={() => {
+                  setSectionFilter(st.value);
+                  setPage(1);
+                }}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-[12px] font-medium transition cursor-pointer",
+                  sectionFilter === st.value
+                    ? "border border-[#1A1A1A] bg-[#1A1A1A] text-white font-semibold shadow-2xs"
+                    : "border border-[#E8E8E8] bg-[#FAFAFA] text-[#555] hover:border-[#CCC] hover:bg-white hover:text-[#1A1A1A]",
+                )}
+              >
+                {st.label}
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      {data && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            label="Products"
-            gaps={data.summary.product.gaps}
-            fields={data.summary.product.fields}
-            totalFields={data.summary.product.totalFields}
-            completedFields={data.summary.product.completedFields}
-            completionPercentage={data.summary.product.completionPercentage}
-            active={typeFilter === "product"}
-            onClick={() => selectTypeFilter("product")}
-          />
-          <SummaryCard
-            label="Categories"
-            gaps={data.summary.category.gaps}
-            fields={data.summary.category.fields}
-            totalFields={data.summary.category.totalFields}
-            completedFields={data.summary.category.completedFields}
-            completionPercentage={data.summary.category.completionPercentage}
-            active={typeFilter === "category"}
-            onClick={() => selectTypeFilter("category")}
-          />
-          <SummaryCard
-            label="Static UI"
-            gaps={data.summary.static.gaps}
-            fields={data.summary.static.fields}
-            totalFields={data.summary.static.totalFields}
-            completedFields={data.summary.static.completedFields}
-            completionPercentage={data.summary.static.completionPercentage}
-            active={typeFilter === "static"}
-            onClick={() => selectTypeFilter("static")}
-          />
-          <SummaryCard
-            label="CMS"
-            gaps={data.summary.cms.gaps}
-            fields={data.summary.cms.fields}
-            totalFields={data.summary.cms.totalFields}
-            completedFields={data.summary.cms.completedFields}
-            completionPercentage={data.summary.cms.completionPercentage}
-            active={typeFilter === "cms"}
-            onClick={() => selectTypeFilter("cms")}
-          />
+      {/* Search & Actions Toolbar */}
+      <div className="rounded-xl border border-[#E6E6E6] bg-white p-4 shadow-xs">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative flex-1 lg:max-w-[380px]">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search by title, English text, or key..."
+              className="h-9.5 w-full rounded-lg border border-[#E6E6E6] bg-white pl-9 pr-9 text-[13px] outline-none transition focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setPage(1);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-[#9A9A9A] hover:bg-[#F0F0F0]"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Priority Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-[11.5px] font-semibold text-[#888] mr-1 hidden sm:inline">Priority:</span>
+              {PRIORITY_FILTERS.map((pf) => (
+                <button
+                  key={pf.value}
+                  type="button"
+                  onClick={() => {
+                    setPriorityFilter(pf.value);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    "rounded-lg border px-2.5 py-1 text-[11.5px] font-medium transition cursor-pointer",
+                    priorityFilter === pf.value
+                      ? "border-[#1A1A1A] bg-[#1A1A1A] text-white font-semibold"
+                      : "border-[#E6E6E6] bg-white text-[#666] hover:border-[#CCC]",
+                  )}
+                >
+                  {pf.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="h-5 w-px bg-[#E6E6E6] mx-1 hidden xl:block" />
+
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] hover:bg-[#F7F7F7] shadow-2xs transition cursor-pointer"
+            >
+              <Download size={13} /> Export CSV
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#E31E24] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#B5151B] shadow-2xs transition cursor-pointer"
+            >
+              <Upload size={13} /> Import CSV
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={handleImportCsv}
+            />
+
+            <label className="flex h-8.5 items-center gap-1 rounded-lg border border-[#E6E6E6] bg-white px-2.5 text-[11.5px] text-[#666]">
+              Show
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-transparent font-semibold text-[#1A1A1A] outline-none cursor-pointer"
+              >
+                {PAGE_SIZE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Gap Cards List */}
+      {isLoading ? (
+        <div className="rounded-xl border border-[#E6E6E6] bg-white py-16 text-center text-[13px] text-[#888]">
+          Loading translation coverage data...
+        </div>
+      ) : data && data.gaps.data.length > 0 ? (
+        <div className="space-y-3">
+          {data.gaps.data.map((gap) => {
+            const rowKey = `${gap.type}:${gap.entityId}`;
+            const editHref = getEditHref(gap);
+            const firstSnippet = gap.missingFields.find((f) => f.englishValue)?.englishValue;
+            const cleanSnippet = firstSnippet ? stripHtmlTags(firstSnippet) : null;
+
+            return (
+              <div
+                key={rowKey}
+                className="flex flex-col gap-3 rounded-xl border border-[#E6E6E6] bg-white p-4 transition-all hover:border-[#D0D0D0] sm:flex-row sm:items-center sm:justify-between shadow-2xs"
+              >
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md border border-[#E0E0E0] bg-[#F7F7F7] px-2 py-0.5 text-[11px] font-semibold text-[#555] uppercase">
+                      {TYPE_LABELS[gap.type]}
+                    </span>
+                    <span className={cn("rounded-md border px-2 py-0.5 text-[11px] font-semibold", PRIORITY_BADGE_CLASSES[gap.priority])}>
+                      {gap.priorityLabel}
+                    </span>
+                    <h4 className="text-[14px] font-bold text-[#1A1A1A] truncate">{gap.entityLabel}</h4>
+                  </div>
+
+                  {cleanSnippet && cleanSnippet !== gap.entityLabel && (
+                    <p className="text-[12.5px] text-[#555] line-clamp-1 italic bg-[#F9FAFB] px-2.5 py-1 rounded border border-[#EBEBEB]">
+                      <span className="font-semibold text-[#888] not-italic mr-1.5">Original (EN):</span>
+                      {cleanSnippet}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-[#666]">
+                    <span className="font-semibold text-[#888]">Missing ({gap.missingFields.length}):</span>
+                    {gap.missingFields.map((f, i) => (
+                      <span key={f.field} className="rounded-md bg-[#F4F4F4] px-2 py-0.5 text-[11.5px] font-medium text-[#444]">
+                        {f.fieldLabel}
+                        {i < gap.missingFields.length - 1 ? "" : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href={editHref}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#E0E0E0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#555] hover:bg-[#F5F5F5] transition"
+                  >
+                    Open Page <ExternalLink size={11} />
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveDrawerGap(gap)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#E31E24] px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#B5151B] transition shadow-2xs cursor-pointer"
+                  >
+                    <span>Translate</span>
+                    <ArrowRight size={13} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Pagination Controls */}
+          {data.gaps.totalPages > 1 && (
+            <div className="flex flex-col gap-3 rounded-xl border border-[#E6E6E6] bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[12.5px] text-[#6B6B6B]">
+                Showing page {data.gaps.page} of {data.gaps.totalPages} ({data.gaps.total} total items)
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:border-[#CCC] disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                {getPaginationItems(data.gaps.page, data.gaps.totalPages).map((item, idx) =>
+                  item === "ellipsis" ? (
+                    <span key={`ellipsis-${idx}`} className="px-2 text-[12px] text-[#999]">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setPage(item)}
+                      className={cn(
+                        "h-8 min-w-8 rounded-md border px-2 text-[12px] font-semibold transition",
+                        item === data.gaps.page
+                          ? "border-[#E31E24] bg-[#E31E24] text-white"
+                          : "border-[#E6E6E6] bg-white text-[#666] hover:border-[#CCC]",
+                      )}
+                    >
+                      {item}
+                    </button>
+                  ),
+                )}
+                <button
+                  type="button"
+                  disabled={page >= data.gaps.totalPages}
+                  onClick={() => setPage((p) => Math.min(data.gaps.totalPages, p + 1))}
+                  className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A1A1A] transition hover:border-[#CCC] disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-[#DDD] bg-white py-14 text-center">
+          <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-green-50 text-green-600">
+            <Check size={20} />
+          </div>
+          <h4 className="text-[14px] font-bold text-[#1A1A1A]">100% Translated!</h4>
+          <p className="mt-1 text-[12.5px] text-[#777]">
+            All {typeFilter !== "all" ? typeFilter : ""} items are translated for {currentLanguage?.name}.
+          </p>
         </div>
       )}
 
-      <div className="rounded-xl border border-[#E6E6E6] bg-white p-5">
-        <div className="mb-4 rounded-xl border border-[#ECECEC] bg-[#FCFCFC] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-            <div className="w-full xl:max-w-[460px]">
-              <label className="relative block">
-                <Search
-                  size={15}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9A9A]"
-                />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => {
-                    setSearchQuery(event.target.value);
-                    setPage(1);
-                    setExpandedKey(null);
-                  }}
-                  placeholder="Search missing translations..."
-                  className="h-11 w-full rounded-xl border border-[#E6E6E6] bg-white pl-10 pr-3 text-[13px] outline-none transition focus:border-[#E31E24] focus:ring-4 focus:ring-[#E31E24]/10"
-                />
-              </label>
-
-              <p className="mt-2 text-[12px] text-[#8A8A8A]">
-                Missing translations only · Completed labels are editable in
-                Languages &amp; Tools.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <button
-                type="button"
-                onClick={handleExportCsv}
-                disabled={isExporting || !activeLanguageId}
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#E6E6E6] bg-white px-3.5 text-[12.5px] font-medium text-[#1A1A1A] transition hover:bg-[#FAFAFA] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download size={14} />
-                {isExporting ? "Exporting..." : "Export CSV"}
-              </button>
-
-              {canUpdate && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isImporting || !activeLanguageId}
-                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#E31E24] bg-[#E31E24] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#C9151B] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Upload size={14} />
-                  {isImporting ? "Importing..." : "Import CSV"}
-                </button>
-              )}
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={handleImportCsv}
-              />
-
-              <label className="flex h-10 items-center gap-2 rounded-xl border border-[#E6E6E6] bg-white px-3 text-[12.5px] text-[#6B6B6B]">
-                Show
-                <select
-                  value={pageSize}
-                  onChange={(event) => {
-                    setPageSize(Number(event.target.value));
-                    setPage(1);
-                    setExpandedKey(null);
-                  }}
-                  className="bg-transparent text-[12.5px] font-medium text-[#1A1A1A] outline-none"
-                >
-                  {PAGE_SIZE_OPTIONS.map((option) => (
-                    <option
-                      key={option}
-                      value={option}
-                      className="cursor-pointer"
-                    >
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                items
-              </label>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {TYPE_FILTERS.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                onClick={() => selectTypeFilter(filter.value)}
-                className={cn(
-                  "rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors",
-                  typeFilter === filter.value
-                    ? "border-[#1A1A1A] bg-[#1A1A1A] text-white"
-                    : "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:border-[#CFCFCF]",
-                )}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-[12px] font-medium text-[#8A8A8A]">
-              Priority:
-            </span>
-
-            {PRIORITY_FILTERS.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                onClick={() => selectPriorityFilter(filter.value)}
-                className={cn(
-                  "rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors",
-                  priorityFilter === filter.value
-                    ? "border-[#E31E24] bg-[#E31E24] text-white"
-                    : "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:border-[#CFCFCF]",
-                )}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="py-12 text-center text-[13px] text-[#9A9A9A]">
-            Loading coverage…
-          </div>
-        ) : data && data.gaps.data.length > 0 ? (
-          <div className="space-y-3">
-            {data.gaps.data.map((gap) => {
-              const rowKey = `${gap.type}:${gap.entityId}`;
-              const expanded = expandedKey === rowKey;
-              const editHref = getEditHref(gap);
-
-              return (
-                <div
-                  key={rowKey}
-                  className="rounded-lg border border-[#E6E6E6]"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setExpandedKey(expanded ? null : rowKey)}
-                    className="flex w-full flex-col gap-3 px-4 py-3 text-left hover:bg-[#FAFAFA] md:flex-row md:items-start md:justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-[#E6E6E6] bg-[#F8F8F8] px-2 py-0.5 text-[11px] font-medium uppercase text-[#6B6B6B]">
-                          {TYPE_LABELS[gap.type]}
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                            PRIORITY_BADGE_CLASSES[gap.priority],
-                          )}
-                        >
-                          {gap.priorityLabel}
-                        </span>
-                        <span className="text-[13.5px] font-medium text-[#1A1A1A]">
-                          {gap.entityLabel}
-                        </span>
-                      </div>
-                      {gap.context && (
-                        <p className="mt-1 text-[12px] text-[#9A9A9A]">
-                          {gap.context}
-                        </p>
-                      )}
-                      <p className="mt-1 text-[12px] text-[#6B6B6B]">
-                        Missing:{" "}
-                        {gap.missingFields
-                          .map((field) => field.fieldLabel)
-                          .join(", ")}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Link
-                        href={editHref}
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 rounded-md border border-[#E6E6E6] px-2.5 py-1 text-[12px] text-[#6B6B6B] hover:bg-[#F5F5F5]"
-                      >
-                        Open <ExternalLink size={12} />
-                      </Link>
-                      <ChevronDown
-                        size={16}
-                        className={cn(
-                          "text-[#9A9A9A] transition-transform",
-                          expanded && "rotate-180",
-                        )}
-                      />
-                    </div>
-                  </button>
-
-                  {expanded && (
-                    <div className="px-4 pb-4">
-                      <GapSaveFields
-                        gap={gap}
-                        languageId={activeLanguageId}
-                        onSaved={() => refetch()}
-                        canUpdate={canUpdate}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {totalPages > 1 && (
-              <div className="flex flex-col gap-3 rounded-lg border border-[#F0F0F0] bg-[#FAFAFA] px-3 py-3 xl:flex-row xl:items-center xl:justify-between">
-                <span className="text-[12.5px] text-[#9A9A9A]">
-                  Showing {firstItem}-{lastItem} of {data.gaps.total} missing
-                  items
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={currentPage <= 1}
-                    onClick={() => goToPage(currentPage - 1)}
-                    className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] text-[#1A1A1A] transition hover:border-[#CFCFCF] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {paginationItems.map((item, index) =>
-                      item === "ellipsis" ? (
-                        <span
-                          key={`ellipsis-${index}`}
-                          className="px-2 text-[12.5px] text-[#9A9A9A]"
-                        >
-                          ...
-                        </span>
-                      ) : (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => goToPage(item)}
-                          className={cn(
-                            "h-8 min-w-8 rounded-md border px-2 text-[12.5px] font-medium transition",
-                            item === currentPage
-                              ? "border-[#1A1A1A] bg-[#1A1A1A] text-white"
-                              : "border-[#E6E6E6] bg-white text-[#6B6B6B] hover:border-[#CFCFCF] hover:text-[#1A1A1A]",
-                          )}
-                        >
-                          {item}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => goToPage(currentPage + 1)}
-                    className="rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] text-[#1A1A1A] transition hover:border-[#CFCFCF] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                  <form
-                    className="ml-0 flex items-center gap-2 xl:ml-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const formData = new FormData(event.currentTarget);
-                      const pageValue = Number(formData.get("page"));
-
-                      if (Number.isFinite(pageValue)) {
-                        goToPage(pageValue);
-                      }
-                    }}
-                  >
-                    <span className="text-[12.5px] text-[#9A9A9A]">Go to</span>
-                    <input
-                      key={currentPage}
-                      name="page"
-                      type="number"
-                      min={1}
-                      max={totalPages}
-                      defaultValue={currentPage}
-                      className="h-8 w-16 rounded-md border border-[#E6E6E6] bg-white px-2 text-center text-[12.5px] text-[#1A1A1A] outline-none focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10"
-                    />
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : data && deferredSearchQuery ? (
-          <div className="rounded-lg border border-dashed border-[#E6E6E6] py-10 text-center">
-            <Search size={24} className="mx-auto mb-2 text-[#9A9A9A]" />
-            <p className="text-[14px] font-medium text-[#1A1A1A]">
-              No missing translations found
-            </p>
-            <p className="mt-1 text-[13px] text-[#9A9A9A]">
-              Try another keyword or clear the search.
-            </p>
-          </div>
-        ) : data ? (
-          <div className="rounded-lg border border-dashed border-[#E6E6E6] py-10 text-center">
-            <CheckCircle2 size={24} className="mx-auto mb-2 text-green-600" />
-            <p className="text-[14px] font-medium text-[#1A1A1A]">
-              No missing translations in this view
-            </p>
-            <p className="mt-1 text-[13px] text-[#9A9A9A]">
-              {priorityFilter !== "all"
-                ? `No ${PRIORITY_FILTERS.find((filter) => filter.value === priorityFilter)?.label.toLowerCase()} items found.`
-                : typeFilter === "all"
-                  ? "Everything tracked for this language is complete."
-                  : `All ${TYPE_LABELS[typeFilter as CoverageGapType].toLowerCase()} content is translated.`}
-            </p>
-          </div>
-        ) : null}
-      </div>
+      {/* Common Translation Modal */}
+      {activeDrawerGap && currentLanguage && (
+        <TranslationModal
+          gap={activeDrawerGap}
+          language={currentLanguage}
+          onClose={() => setActiveDrawerGap(null)}
+          onSaved={() => refetch()}
+        />
+      )}
     </div>
   );
 }

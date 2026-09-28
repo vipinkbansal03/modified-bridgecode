@@ -5,6 +5,7 @@ import { Heart } from "lucide-react";
 import { useCustomerAuth } from "@/contexts/CustomerAuthContext";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useToggleWishlist, useWishlist } from "@/hooks/api/useWishlist";
+import { useStaticTranslations } from "@/hooks/api/useStaticTranslations";
 import { cn } from "@/utils/cn";
 
 export interface WishlistButtonProps {
@@ -22,6 +23,7 @@ export function WishlistButton({
 }: WishlistButtonProps) {
   const { currentCustomer } = useCustomerAuth();
   const { showToast } = useToast();
+  const { t } = useStaticTranslations();
   const { data: wishlist = [] } = useWishlist();
   const toggleWishlist = useToggleWishlist();
 
@@ -77,7 +79,7 @@ export function WishlistButton({
       />
       {showText && (
         <span className="whitespace-nowrap">
-          {isInWishlist ? "Saved to Wishlist" : "Add to Wishlist"}
+          {isInWishlist ? t("ui.pdp.savedToWishlist") : t("ui.pdp.addToWishlist")}
         </span>
       )}
     </button>

@@ -29,6 +29,7 @@ export function CartItemWarehouseSelector({ item, updateWarehouse }: CartItemWar
   // Filter warehouses to only show those that have sufficient stock for this item's quantity
   // and prioritize those if multiple exist.
   const eligibleWarehouses = (warehouses || []).filter(w => w.stock >= item.quantity);
+  const defaultSellerName = (warehouses || []).find(w => w.id === "default")?.name || "Modern Orthodontics Pvt Ltd";
 
   const handleChangeSellerClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -38,7 +39,7 @@ export function CartItemWarehouseSelector({ item, updateWarehouse }: CartItemWar
 
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[12px] text-steel">Sold by {item.warehouseName || "Default Seller"}</span>
+      <span className="text-[12px] text-steel">Sold by {item.warehouseName || defaultSellerName}</span>
       <span className="text-[12px] text-emerald-600 font-medium flex items-center gap-2">
         <span>Estimated Delivery: {item.estimatedDeliveryDays || "3-5"} days</span>
         
@@ -61,7 +62,7 @@ export function CartItemWarehouseSelector({ item, updateWarehouse }: CartItemWar
           if (wh) {
             updateWarehouse(item.variantId, wh.id === "default" ? undefined : wh.id, wh.name, wh.estimatedDeliveryDays, wh.isLocal);
           } else {
-            updateWarehouse(item.variantId, undefined, "Default Seller");
+            updateWarehouse(item.variantId, undefined, defaultSellerName);
           }
           setIsModalOpen(false);
         }}

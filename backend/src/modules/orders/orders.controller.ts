@@ -1,8 +1,15 @@
 import { Response } from "express";
-import { asyncHandler, ApiResponse } from "../../utils/apiResponse";
+import { asyncHandler, ApiResponse, AppError } from "../../utils/apiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import * as S from "./orders.service";
-import { generateInvoice } from "./invoice.service";
+import {
+  generateInvoice,
+  getInvoiceData,
+  saveInvoiceData,
+  uploadCustomInvoice,
+  generateSystemInvoice,
+  deleteInvoice,
+} from "./invoice.service";
 import { prisma } from "../../config/database";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => { const r = await S.listOrders(req.query as never); return ApiResponse.paginated(res, "Orders.", r.data, { page: r.page, limit: r.limit, total: r.total }); });
@@ -105,10 +112,81 @@ export const deliver = asyncHandler(async (req: AuthRequest, res: Response) => {
 
 export const analytics = asyncHandler(async (_req: AuthRequest, res: Response) => ApiResponse.success(res, "Analytics.", await S.getAnalytics()));
 
+export const getInvoice = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id);
+  const data = await getInvoiceData(id);
+  return ApiResponse.success(res, "Invoice data retrieved.", data);
+});
+
+export const updateInvoice = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id);
+  const data = await saveInvoiceData(id, req.body);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_INVOICE_UPDATED",
+      entityType: "Order",
+      entityId: id,
+      ipAddress: req.ip,
+      metadata: { invoiceNumber: data.invoiceNumber },
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Invoice updated successfully.", data);
+});
+
+export const uploadInvoice = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id);
+  if (!req.file && !req.body.fileUrl) {
+    throw new AppError("No invoice file uploaded or selected from media library.", 400);
+  }
+  const data = await uploadCustomInvoice(id, req.file, req.body);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_INVOICE_UPLOADED",
+      entityType: "Order",
+      entityId: id,
+      ipAddress: req.ip,
+      metadata: { originalName: req.file?.originalname || req.body.fileName || req.body.fileUrl },
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Custom invoice uploaded successfully.", data);
+});
+
+export const generateInvoiceHandler = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id);
+  const data = await generateSystemInvoice(id);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_INVOICE_GENERATED",
+      entityType: "Order",
+      entityId: id,
+      ipAddress: req.ip,
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "System invoice generated.", data);
+});
+
+export const removeInvoice = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id);
+  const data = await deleteInvoice(id);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDER_INVOICE_REMOVED",
+      entityType: "Order",
+      entityId: id,
+      ipAddress: req.ip,
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, "Invoice removed.", data);
+});
+
 export const invoice = asyncHandler(async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id);
-  const { buffer, filename } = await generateInvoice(id);
-  res.setHeader("Content-Type", "application/pdf");
+  const { buffer, filename, contentType } = await generateInvoice(id);
+  res.setHeader("Content-Type", contentType || "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.send(buffer);
 });

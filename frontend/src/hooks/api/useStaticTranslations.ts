@@ -8,7 +8,7 @@ import { staticMessages, type StaticMessageKey } from "@/i18n/staticMessages";
 type StaticTranslationMap = Partial<Record<StaticMessageKey, string>>;
 
 async function fetchStaticTranslations(language: string): Promise<StaticTranslationMap> {
-  if (!HAS_LIVE_API || language === "en") return {};
+  if (!HAS_LIVE_API || !language) return {};
   try {
     const res = await apiClient.get("/translations/static", { params: { lang: language } });
     return unwrapData<StaticTranslationMap>(res);
@@ -25,7 +25,7 @@ export function useStaticTranslations() {
   useEffect(() => {
     let isActive = true;
 
-    if (!HAS_LIVE_API || selectedLanguage === "en") {
+    if (!HAS_LIVE_API || !selectedLanguage) {
       setTranslations({});
       setIsLoading(false);
       return () => {

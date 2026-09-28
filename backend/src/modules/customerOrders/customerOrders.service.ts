@@ -11,6 +11,7 @@ import { validateCoupon } from "../coupons/coupons.service";
 import type { CreateCustomerOrderInput } from "./customerOrders.validation";
 import { initiatePaymentForOrder, verifyPaymentForOrder } from "../payment/paymentMethods.service";
 import { reconcilePaymentFailure, getPaymentSession } from "../payment/paymentReconciliation.service";
+import { getSettingValue } from "../settings/settings.service";
 
 function generateOrderNumber() {
   const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -484,10 +485,15 @@ export async function createCustomerOrder(
   const resolvedPaymentMethod = (input.paymentMethod || CUSTOMER_CHECKOUT_PAYMENT_METHOD).toUpperCase();
   const isCod = resolvedPaymentMethod === "PAY_ON_DELIVERY" || resolvedPaymentMethod === "COD";
 
+  const orderNumber = generateOrderNumber();
+  const globalAutoSetting = await getSettingValue("tax.auto_generate_invoice_global").catch(() => "");
+  const isGlobalAuto = globalAutoSetting !== "false";
+  const isAutoInvoice = isGlobalAuto && (orderCountry as any).autoGenerateInvoice !== false;
+
   const createdOrder = await prisma.$transaction(async (tx) => {
     const order = await tx.order.create({
       data: {
-        orderNumber: generateOrderNumber(),
+        orderNumber,
         customerName: `${customer.firstName} ${customer.lastName}`.trim(),
         customerEmail: customer.email,
         customerId: customer.id,
@@ -517,6 +523,10 @@ export async function createCustomerOrder(
         status: isCod ? "CONFIRMED" : "PENDING",
         paymentStatus: "PENDING",
         paymentMethod: isCod ? "PAY_ON_DELIVERY" : resolvedPaymentMethod,
+        isInvoiceGenerated: isAutoInvoice,
+        invoiceType: isAutoInvoice ? "AUTO" : "NONE",
+        invoiceNumber: isAutoInvoice ? `INV-${orderNumber}` : null,
+        invoiceDate: isAutoInvoice ? new Date() : null,
         paymentExpiresAt: isCod
           ? null
           : new Date(

@@ -3,10 +3,12 @@
 import { useState, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Download, Truck, Package, ExternalLink, RotateCw, Eye, Pencil } from "lucide-react";
+import { ArrowLeft, Download, Truck, Package, ExternalLink, RotateCw, Eye, Pencil, FileText, Upload, RefreshCw, Trash2, CheckCircle, FileCode } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { StatusBadge, AdminSelect, AdminInput, useToast } from "@/components/admin/AdminComponents";
 import { useQueryClient } from "@tanstack/react-query";
+import { InvoiceEditorModal, type InvoiceFormData } from "@/components/admin/orders/InvoiceEditorModal";
+import { InvoiceUploadModal } from "@/components/admin/orders/InvoiceUploadModal";
 import {
   useAdminOrder,
   useUpdateOrderStatus,
@@ -142,6 +144,14 @@ interface OrderDetail {
   cancelTransactionReference?: string | null;
   deletedAt?: string | null;
   isTest?: boolean;
+  isInvoiceGenerated?: boolean;
+  invoiceType?: string | null;
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  invoiceDueDate?: string | null;
+  invoiceUrl?: string | null;
+  invoiceOriginalName?: string | null;
+  invoiceData?: any;
 }
 
 function OrderDetailPageContent() {
@@ -276,6 +286,14 @@ function OrderDetailPageContent() {
   const [newShipmentNotes, setNewShipmentNotes] = useState("");
   const [newShipmentCallProvider, setNewShipmentCallProvider] = useState(false);
 
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [invoiceEditorData, setInvoiceEditorData] = useState<InvoiceFormData | null>(null);
+  const [invoiceDefaultData, setInvoiceDefaultData] = useState<InvoiceFormData | null>(null);
+  const [isLoadingInvoiceData, setIsLoadingInvoiceData] = useState(false);
+  const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
+  const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
+
   if (isLoading) {
     return (
       <AdminLayout title="Order Detail" breadcrumb={[{ label: "Orders", href: "/admin/orders" }, { label: "Loading…" }]}>
@@ -299,23 +317,127 @@ function OrderDetailPageContent() {
 
   const sym = order.currency?.symbol ?? "$";
 
+  async function handleOpenEditInvoice() {
+    if (!order) return;
+    setIsLoadingInvoiceData(true);
+    try {
+      const res = await adminApi.get(`/orders/${order.id}/invoice-data`);
+      setInvoiceEditorData(res.data?.data?.customData || null);
+      setInvoiceDefaultData(res.data?.data?.defaultData || null);
+      setIsEditorOpen(true);
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to load invoice data."), "error");
+    } finally {
+      setIsLoadingInvoiceData(false);
+    }
+  }
+
+  async function handleSaveInvoice(data: InvoiceFormData) {
+    if (!order) return;
+    try {
+      await adminApi.put(`/orders/${order.id}/invoice-data`, data);
+      showToast("Invoice updated successfully.");
+      qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to save invoice."), "error");
+      throw error;
+    }
+  }
+
+  async function handleUploadInvoice(
+    file: File | null,
+    meta: { invoiceNumber?: string; invoiceDate?: string; invoiceDueDate?: string; notes?: string; fileUrl?: string; fileName?: string }
+  ) {
+    if (!order) return;
+    try {
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        if (meta.invoiceNumber) formData.append("invoiceNumber", meta.invoiceNumber);
+        if (meta.invoiceDate) formData.append("invoiceDate", meta.invoiceDate);
+        if (meta.invoiceDueDate) formData.append("invoiceDueDate", meta.invoiceDueDate);
+        if (meta.notes) formData.append("notes", meta.notes);
+
+        await adminApi.post(`/orders/${order.id}/invoice/upload`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } else if (meta.fileUrl) {
+        await adminApi.post(`/orders/${order.id}/invoice/upload`, {
+          fileUrl: meta.fileUrl,
+          fileName: meta.fileName,
+          invoiceNumber: meta.invoiceNumber,
+          invoiceDate: meta.invoiceDate,
+          invoiceDueDate: meta.invoiceDueDate,
+          notes: meta.notes,
+        });
+      } else {
+        throw new Error("No file or media library document selected.");
+      }
+
+      showToast("Custom invoice attached successfully.");
+      await qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      await qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to upload invoice."), "error");
+      throw error;
+    }
+  }
+
+  async function handleGenerateSystemInvoice() {
+    if (!order) return;
+    setIsGeneratingInvoice(true);
+    try {
+      await adminApi.post(`/orders/${order.id}/invoice/generate`);
+      showToast("System invoice generated.");
+      await qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      await qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to generate invoice."), "error");
+    } finally {
+      setIsGeneratingInvoice(false);
+    }
+  }
+
+  async function handleDeleteInvoice() {
+    if (!order) return;
+    if (!confirm("Are you sure you want to remove/disable the invoice for this order? Customers will not be able to download it.")) return;
+    setIsDeletingInvoice(true);
+    try {
+      await adminApi.delete(`/orders/${order.id}/invoice`);
+      showToast("Invoice removed/disabled.");
+      await qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      await qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to remove invoice."), "error");
+    } finally {
+      setIsDeletingInvoice(false);
+    }
+  }
+
   async function handleDownloadInvoice() {
     if (!order) return;
     setIsDownloadingInvoice(true);
     try {
       const res = await adminApi.get(`/orders/${order.id}/invoice`, { responseType: "blob" });
-      const blob = new Blob([res.data], { type: "application/pdf" });
+      const disposition = (res.headers["content-disposition"] as string | undefined) || "";
+      let filename = order.invoiceOriginalName || `Invoice-${order.invoiceNumber || order.orderNumber || order.id.slice(-8)}.pdf`;
+      if (disposition) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match?.[1]) filename = match[1];
+      }
+      const contentType = (res.headers["content-type"] as string | undefined) || "application/pdf";
+      const blob = new Blob([res.data], { type: contentType });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      const invNumber = order.orderNumber ? order.orderNumber : order.id.slice(-8);
-      link.download = `Invoice-INV-${invNumber}.pdf`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      showToast(getAdminErrorMessage(error, "Invoice generation failed"), "error");
+      showToast(getAdminErrorMessage(error, "Invoice download failed or invoice not generated."), "error");
     } finally {
       setIsDownloadingInvoice(false);
     }
@@ -390,14 +512,56 @@ function OrderDetailPageContent() {
           <ArrowLeft size={14} /> Back to orders
         </Link>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <button
-            onClick={handleDownloadInvoice}
-            disabled={isDownloadingInvoice}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#111] hover:bg-[#F8F8F8] disabled:opacity-50"
-          >
-            <Download size={14} />
-            {isDownloadingInvoice ? "Downloading..." : "Download Invoice"}
-          </button>
+          {(order.isInvoiceGenerated || order.invoiceUrl) ? (
+            <>
+              <button
+                onClick={handleDownloadInvoice}
+                disabled={isDownloadingInvoice}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#111] hover:bg-[#F8F8F8] disabled:opacity-50"
+                title="Download current invoice PDF/document"
+              >
+                <Download size={14} />
+                {isDownloadingInvoice ? "Downloading..." : "Download Invoice"}
+              </button>
+              <button
+                onClick={handleOpenEditInvoice}
+                disabled={isLoadingInvoiceData}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#111] hover:bg-[#F8F8F8] disabled:opacity-50"
+                title="Edit invoice fields, seller/buyer, items table, and terms"
+              >
+                <Pencil size={14} />
+                {isLoadingInvoiceData ? "Loading..." : "Edit Invoice"}
+              </button>
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#111] hover:bg-[#F8F8F8]"
+                title="Upload custom invoice PDF or document"
+              >
+                <Upload size={14} />
+                Upload Custom
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleGenerateSystemInvoice}
+                disabled={isGeneratingInvoice}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+                title="Generate system invoice for this order"
+              >
+                <RefreshCw size={14} className={isGeneratingInvoice ? "animate-spin" : ""} />
+                {isGeneratingInvoice ? "Generating..." : "Generate Invoice"}
+              </button>
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[13px] font-medium text-[#111] hover:bg-[#F8F8F8]"
+                title="Upload custom invoice PDF or document"
+              >
+                <Upload size={14} />
+                Upload Custom
+              </button>
+            </>
+          )}
           {isEdit ? (
             <Link
               href={`/admin/orders/${order.id}`}
@@ -721,7 +885,7 @@ function OrderDetailPageContent() {
                             </span>
                           ) : (
                             <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
-                              Default Seller
+                              Modern Orthodontics Pvt Ltd
                             </span>
                           )}
                         </td>
@@ -963,8 +1127,154 @@ function OrderDetailPageContent() {
               {order.trackingNumber && <InfoRow label="Tracking #" value={<span className="font-mono break-all">{order.trackingNumber}</span>} />}
             </div>
           )}
+
+          {/* Invoice Management Card */}
+          <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-3.5 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[14px] font-semibold text-[#111] flex items-center gap-1.5">
+                <FileText size={15} className="text-brand" /> Invoice Management
+              </h3>
+              {(order.isInvoiceGenerated || order.invoiceUrl) ? (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  order.invoiceUrl
+                    ? "bg-purple-50 text-purple-700 border border-purple-200"
+                    : order.invoiceType === "CUSTOM_EDITED"
+                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    order.invoiceUrl ? "bg-purple-600" : order.invoiceType === "CUSTOM_EDITED" ? "bg-blue-600" : "bg-emerald-600"
+                  }`} />
+                  {order.invoiceUrl
+                    ? "Custom Uploaded"
+                    : order.invoiceType === "CUSTOM_EDITED"
+                    ? "Custom Edited"
+                    : "Auto-Generated"}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                  Not Generated
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-2 text-[13px]">
+              <InfoRow
+                label="Invoice #"
+                value={
+                  <span className="font-mono font-semibold text-[#111]">
+                    {order.invoiceNumber || (order.isInvoiceGenerated ? `INV-${order.orderNumber}` : "—")}
+                  </span>
+                }
+              />
+              <InfoRow
+                label="Invoice Date"
+                value={
+                  order.invoiceDate
+                    ? new Date(order.invoiceDate).toLocaleDateString()
+                    : (order.isInvoiceGenerated ? new Date(order.createdAt).toLocaleDateString() : "—")
+                }
+              />
+              {order.invoiceDueDate && (
+                <InfoRow label="Due Date" value={new Date(order.invoiceDueDate).toLocaleDateString()} />
+              )}
+              {order.invoiceOriginalName && (
+                <InfoRow
+                  label="Document"
+                  value={
+                    <span className="text-[12px] font-mono text-purple-700 font-semibold truncate block max-w-[160px]" title={order.invoiceOriginalName}>
+                      {order.invoiceOriginalName}
+                    </span>
+                  }
+                />
+              )}
+            </div>
+
+            <div className="border-t border-[#E6E6E6] pt-3 flex flex-col gap-2">
+              {(order.isInvoiceGenerated || order.invoiceUrl) ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleDownloadInvoice}
+                    disabled={isDownloadingInvoice}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#111] px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-[#222] transition disabled:opacity-50"
+                  >
+                    <Download size={14} />
+                    {isDownloadingInvoice ? "Downloading..." : "Download Active Invoice"}
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleOpenEditInvoice}
+                      disabled={isLoadingInvoiceData}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2 py-1.5 text-[12px] font-medium text-[#111] hover:bg-[#F8F8F8] disabled:opacity-50"
+                    >
+                      <Pencil size={13} />
+                      {isLoadingInvoiceData ? "Loading..." : "Edit Invoice"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsUploadOpen(true)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-2 py-1.5 text-[12px] font-medium text-[#111] hover:bg-[#F8F8F8]"
+                    >
+                      <Upload size={13} />
+                      {order.invoiceUrl ? "Replace File" : "Upload File"}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDeleteInvoice}
+                    disabled={isDeletingInvoice}
+                    className="w-full text-center text-[11.5px] font-medium text-red-600 hover:underline pt-1"
+                  >
+                    {isDeletingInvoice ? "Removing..." : "Remove / Disable Invoice"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleGenerateSystemInvoice}
+                    disabled={isGeneratingInvoice}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-50 shadow-sm"
+                  >
+                    <RefreshCw size={14} className={isGeneratingInvoice ? "animate-spin" : ""} />
+                    {isGeneratingInvoice ? "Generating..." : "Generate System Invoice"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadOpen(true)}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-[#E6E6E6] bg-white px-3 py-1.5 text-[12.5px] font-medium text-[#111] hover:bg-[#F8F8F8]"
+                  >
+                    <Upload size={14} />
+                    Upload Custom Invoice File
+                  </button>
+                  <p className="text-[11px] text-[#777] text-center pt-1">
+                    Auto-generate was disabled for this country when the order was placed.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
+
+      <InvoiceEditorModal
+        open={isEditorOpen}
+        onClose={() => setIsEditorOpen(false)}
+        initialData={invoiceEditorData}
+        defaultData={invoiceDefaultData}
+        onSave={handleSaveInvoice}
+        currencySymbol={sym}
+      />
+
+      <InvoiceUploadModal
+        open={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        orderNumber={order.orderNumber}
+        onUpload={handleUploadInvoice}
+      />
       <Modal
         open={confirmModal.open}
         onClose={() => setConfirmModal((prev) => ({ ...prev, open: false }))}

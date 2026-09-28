@@ -158,6 +158,11 @@ export interface CustomerOrderSummary {
   shippingAddress?: CustomerOrderAddressPayload;
   items: CustomerOrderLineItem[];
   orderBoxes?: any[];
+  isInvoiceGenerated?: boolean;
+  invoiceType?: string | null;
+  invoiceNumber?: string | null;
+  invoiceUrl?: string | null;
+  invoiceDate?: string | null;
 }
 
 export interface CustomerQuoteItem {

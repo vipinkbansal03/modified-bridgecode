@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import HighlightsEditor from "../HighlightsEditor";
+import { useEffect, useState } from "react";
+import HighlightsEditor, { normalizeHighlights } from "../HighlightsEditor";
 
 export interface Highlight {
   title: string;
@@ -9,7 +9,7 @@ export interface Highlight {
 }
 
 interface HighlightsFieldProps {
-  initialValue: Highlight[];
+  initialValue?: Highlight[] | Record<string, unknown> | string[] | string | null;
   onSave: (value: Highlight[]) => Promise<void>;
 }
 
@@ -17,7 +17,14 @@ export default function HighlightsField({
   initialValue,
   onSave,
 }: HighlightsFieldProps) {
-  const [value, setValue] = useState<Highlight[]>(initialValue);
+  const [value, setValue] = useState<Highlight[]>(() =>
+    normalizeHighlights(initialValue),
+  );
+
+  useEffect(() => {
+    setValue(normalizeHighlights(initialValue));
+  }, [initialValue]);
+
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
