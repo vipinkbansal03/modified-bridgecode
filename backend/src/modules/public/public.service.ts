@@ -188,6 +188,7 @@ export async function publicListProducts(
               { countries: { none: {} } },
             ],
           },
+          take: 1,
           include: {
             prices: {
               where: { status: "ACTIVE", countryId: country.id },
@@ -313,6 +314,7 @@ export async function publicGetProduct(
             { countries: { none: {} } },
           ],
         },
+        take: 2000,
         include: {
           package: true,
           attributeValues: {
