@@ -102,7 +102,7 @@ import {
   usePermanentDeleteDiscount,
   useBulkPermanentDeleteDiscounts,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
 import { formatDate, formatDateTime } from "@/utils/formatDate";
 
@@ -223,6 +223,7 @@ function AdminArchiveContent() {
   const [bulkAction, setBulkAction] = useState<string>("");
   const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [isSelectingAll, setIsSelectingAll] = useState(false);
 
   // Column Visibility State per Tab
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
@@ -485,6 +486,182 @@ function AdminArchiveContent() {
       setRestoringItem(null);
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to restore record."), "error");
+    }
+  };
+
+  const fetchAllArchivedIdsForTab = async (tab: ArchiveTab): Promise<string[]> => {
+    switch (tab) {
+      case "variants": {
+        const res = await adminApi.get("/products/variants", {
+          params: {
+            search: debouncedSearch || undefined,
+            status: "ARCHIVED",
+            idsOnly: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+            sortBy,
+            sortDir,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((v: any) => v.id);
+      }
+      case "products": {
+        const res = await adminApi.get("/products", {
+          params: {
+            search: debouncedSearch || undefined,
+            categoryId: productCategoryId || undefined,
+            status: productStatus || undefined,
+            deleted: "true",
+            idsOnly: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+            sortBy,
+            sortDir,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((p: any) => p.id);
+      }
+      case "orders": {
+        const res = await adminApi.get("/orders", {
+          params: {
+            search: debouncedSearch || undefined,
+            status: orderStatus || undefined,
+            paymentStatus: orderPaymentStatus || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+            sortBy,
+            sortDir,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((o: any) => o.id);
+      }
+      case "customers": {
+        const res = await adminApi.get("/customers", {
+          params: {
+            search: debouncedSearch || undefined,
+            customerType: customerType || undefined,
+            approvalStatus: customerApprovalStatus || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+            sortBy,
+            sortDir,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((c: any) => c.id);
+      }
+      case "quotes": {
+        const res = await adminApi.get("/quotes", {
+          params: {
+            search: debouncedSearch || undefined,
+            status: quoteStatus || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+            sortBy,
+            sortDir,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((q: any) => q.id);
+      }
+      case "reviews": {
+        const res = await adminApi.get("/reviews", {
+          params: {
+            search: debouncedSearch || undefined,
+            status: reviewStatus || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((r: any) => r.id);
+      }
+      case "warehouses": {
+        const res = await adminApi.get("/warehouses", {
+          params: {
+            search: debouncedSearch || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((w: any) => w.id);
+      }
+      case "pricing": {
+        const res = await adminApi.get("/pricing", {
+          params: {
+            search: debouncedSearch || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((p: any) => p.id);
+      }
+      case "tiers": {
+        const res = await adminApi.get("/tiers", {
+          params: {
+            search: debouncedSearch || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((t: any) => t.id);
+      }
+      case "discounts": {
+        const res = await adminApi.get("/discounts", {
+          params: {
+            search: debouncedSearch || undefined,
+            deleted: "true",
+            ignoreMaxLimit: "true",
+            limit: 999999,
+          },
+        });
+        const items = res.data?.data ?? [];
+        return items.map((d: any) => d.id);
+      }
+      case "attributes": {
+        return (attributesQuery.data ?? []).map((a: any) => a.id);
+      }
+      case "categories": {
+        return (categoriesQuery.data ?? []).map((c: any) => c.id);
+      }
+      default:
+        return [];
+    }
+  };
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    setIsSelectingAll(true);
+    try {
+      const allIds = await fetchAllArchivedIdsForTab(activeTab);
+      setSelectedIds(allIds);
+      showToast(
+        `Selected all ${allIds.length} archived ${activeTab} across all pages.`,
+        "success"
+      );
+    } catch (err) {
+      showToast(
+        getAdminErrorMessage(err, `Failed to select all archived ${activeTab}.`),
+        "error"
+      );
+    } finally {
+      setIsSelectingAll(false);
     }
   };
 
@@ -3105,6 +3282,45 @@ function AdminArchiveContent() {
           }
         />
 
+        {/* SELECT ALL ACROSS ALL PAGES HELPER BANNER */}
+        {selectedIds.length > 0 && totalItems > currentData.length && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[#D0E2FF] bg-[#F4F8FF] px-4 py-2.5 text-[13px] text-[#1D39C4] shadow-2xs transition-all">
+            <div className="flex items-center gap-2">
+              {selectedIds.length >= totalItems ? (
+                <span>
+                  All <strong>{selectedIds.length}</strong> archived {activeTab} across all pages are selected.
+                </span>
+              ) : (
+                <span>
+                  <strong>{selectedIds.length}</strong> {activeTab} on this page are selected.
+                </span>
+              )}
+            </div>
+            <div>
+              {selectedIds.length >= totalItems ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  className="font-semibold underline hover:text-[#092b00] cursor-pointer"
+                >
+                  Clear selection
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleSelectAll(true)}
+                  disabled={isSelectingAll}
+                  className="font-semibold underline hover:text-[#092b00] cursor-pointer"
+                >
+                  {isSelectingAll
+                    ? "Selecting all..."
+                    : `Select all ${totalItems} archived ${activeTab} across all pages`}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* FULL-WIDTH DATA TABLE WITH BULK ACTIONS */}
         <DataTable
           columns={currentColumns}
@@ -3125,6 +3341,7 @@ function AdminArchiveContent() {
           enableSelection={true}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
+          onSelectAll={handleSelectAll}
           renderBulkActions={(selectedIds) => (
             <AdminBulkActionsBar
               selectedCount={selectedIds.length}
@@ -3829,7 +4046,7 @@ function AdminArchiveContent() {
           softDeleteDescription="This variant is already archived and stored in the central Archive."
           permanentDeleteDescription={
             deletingVariant
-              ? `Physically and permanently purges variant "${deletingVariant.title}" from the database. Allowed ONLY if this variant has 0 historical orders, 0 quotation items, 0 customer cart items, 0 active/reserved stock, and 0 stock adjustment audit records.`
+              ? `Physically and permanently purges variant "${deletingVariant.title}" from the database. Allowed if this variant has 0 historical orders, 0 quotation items, and 0 active reserved stock.`
               : undefined
           }
           permanentDeleteDisabled={Boolean(deletingVariant && !deletingVariant.canPermanentDelete)}
