@@ -1,0 +1,12 @@
+-- AlterTable Country
+ALTER TABLE "countries" ADD COLUMN IF NOT EXISTS "autoGenerateInvoice" BOOLEAN NOT NULL DEFAULT true;
+
+-- AlterTable Order
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "isInvoiceGenerated" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceType" TEXT DEFAULT 'AUTO';
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceNumber" TEXT;
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceDate" TIMESTAMP(3);
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceDueDate" TIMESTAMP(3);
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceUrl" TEXT;
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceOriginalName" TEXT;
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "invoiceData" JSONB;

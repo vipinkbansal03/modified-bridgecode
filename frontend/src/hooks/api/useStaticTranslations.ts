@@ -7,26 +7,50 @@ import { staticMessages, type StaticMessageKey } from "@/i18n/staticMessages";
 
 type StaticTranslationMap = Partial<Record<StaticMessageKey, string>>;
 
+const translationCache = new Map<string, StaticTranslationMap>();
+const translationPromiseCache = new Map<string, Promise<StaticTranslationMap>>();
+
 async function fetchStaticTranslations(language: string): Promise<StaticTranslationMap> {
   if (!HAS_LIVE_API || !language) return {};
-  try {
-    const res = await apiClient.get("/translations/static", { params: { lang: language } });
-    return unwrapData<StaticTranslationMap>(res);
-  } catch {
-    return {};
-  }
+  if (translationCache.has(language)) return translationCache.get(language)!;
+  if (translationPromiseCache.has(language)) return translationPromiseCache.get(language)!;
+
+  const promise = apiClient
+    .get("/translations/static", { params: { lang: language } })
+    .then((res) => {
+      const data = unwrapData<StaticTranslationMap>(res);
+      translationCache.set(language, data);
+      return data;
+    })
+    .catch(() => ({}))
+    .finally(() => {
+      translationPromiseCache.delete(language);
+    });
+
+  translationPromiseCache.set(language, promise);
+  return promise;
 }
 
 export function useStaticTranslations() {
   const { selectedLanguage } = useLanguageContext();
-  const [translations, setTranslations] = useState<StaticTranslationMap>({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [translations, setTranslations] = useState<StaticTranslationMap>(
+    () => translationCache.get(selectedLanguage) || {}
+  );
+  const [isLoading, setIsLoading] = useState(() => !translationCache.has(selectedLanguage));
 
   useEffect(() => {
     let isActive = true;
 
     if (!HAS_LIVE_API || !selectedLanguage) {
       setTranslations({});
+      setIsLoading(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    if (translationCache.has(selectedLanguage)) {
+      setTranslations(translationCache.get(selectedLanguage)!);
       setIsLoading(false);
       return () => {
         isActive = false;
