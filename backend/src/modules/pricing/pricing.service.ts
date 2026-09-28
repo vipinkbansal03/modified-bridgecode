@@ -2050,27 +2050,37 @@ export async function generateCountryPrices(
     }
   }
 
-  // Bulk update existing prices in chunked transactions
+  // Bulk update existing prices grouped by values using fast updateMany
   if (toUpdate.length > 0) {
-    const UPDATE_BATCH = 100;
-    for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH) {
-      const chunk = toUpdate.slice(i, i + UPDATE_BATCH);
-      await prisma.$transaction(
-        chunk.map((item) =>
-          prisma.productPrice.update({
-            where: { id: item.id },
-            data: {
-              currencyId: item.price.currencyId,
-              mrp: item.price.mrp,
-              sellingPrice: item.price.sellingPrice,
-              dealerPrice: item.price.dealerPrice,
-              distributorPrice: item.price.distributorPrice,
-              status: item.price.status,
-              deletedAt: null,
-            },
-          })
-        )
-      );
+    const updateGroups = new Map<string, { ids: string[]; data: any }>();
+    for (const item of toUpdate) {
+      const key = `${item.price.currencyId}_${item.price.mrp}_${item.price.sellingPrice}_${item.price.dealerPrice}_${item.price.distributorPrice}_${item.price.status}`;
+      let group = updateGroups.get(key);
+      if (!group) {
+        group = {
+          ids: [],
+          data: {
+            currencyId: item.price.currencyId,
+            mrp: item.price.mrp,
+            sellingPrice: item.price.sellingPrice,
+            dealerPrice: item.price.dealerPrice,
+            distributorPrice: item.price.distributorPrice,
+            status: item.price.status,
+            deletedAt: null,
+          },
+        };
+        updateGroups.set(key, group);
+      }
+      group.ids.push(item.id);
+    }
+
+    for (const group of updateGroups.values()) {
+      for (let i = 0; i < group.ids.length; i += 1000) {
+        await prisma.productPrice.updateMany({
+          where: { id: { in: group.ids.slice(i, i + 1000) } },
+          data: group.data,
+        });
+      }
     }
   }
 

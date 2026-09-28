@@ -4895,7 +4895,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         const result = await adminApi.post(`/products/${productId}/generate-variants`, {
           packageIds: manualVariantPackageId ? [manualVariantPackageId] : [],
           attributes: attributesPayload,
-        }, { timeout: 180000 });
+        }, { timeout: 300000 });
         showToast(result.data.message || "Variants created.");
       }
       setManualVariantOpen(false);
@@ -5030,7 +5030,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       if (Number.isFinite(basePrice) && basePrice > 0) {
         payload.basePrice = basePrice;
       }
-      const result = await adminApi.post(`/products/${productId}/generate-variants`, payload, { timeout: 180000 });
+      const result = await adminApi.post(`/products/${productId}/generate-variants`, payload, { timeout: 300000 });
       showToast(result.data.message || "Variants generated.");
       setGenerateVariantOpen(false);
       refetch();
@@ -9070,7 +9070,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 className="rounded-lg bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {generatingVariants
-                  ? "Generating…"
+                  ? `Generating ${estimatedGenerateVariantCount > 0 ? estimatedGenerateVariantCount.toLocaleString() + " " : ""}variants (please wait)…`
                   : estimatedGenerateVariantCount > 0
                   ? `Generate ${estimatedGenerateVariantCount.toLocaleString()} Variants`
                   : "Generate Variants"}

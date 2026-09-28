@@ -113,9 +113,9 @@ async function syncVariantsStorefrontVisibility(variantIds: string[], productId:
     productCountries.map(({ countryId }) => ({ variantId, countryId, enabled: true })),
   );
 
-  for (let i = 0; i < allRows.length; i += 1000) {
+  for (let i = 0; i < allRows.length; i += 2000) {
     await prisma.variantCountry.createMany({
-      data: allRows.slice(i, i + 1000),
+      data: allRows.slice(i, i + 2000),
       skipDuplicates: true,
     });
   }
@@ -3341,6 +3341,16 @@ export async function generateVariants(
 
   const existingVariants = await prisma.productVariant.findMany({
     where: { productId },
+    select: {
+      id: true,
+      productId: true,
+      packageId: true,
+      title: true,
+      variantKey: true,
+      sku: true,
+      status: true,
+      deletedAt: true,
+    },
   });
   const existingVariantMap = new Map(existingVariants.map((v) => [v.variantKey, v]));
 
@@ -3364,9 +3374,9 @@ export async function generateVariants(
     const existingVariantIds = existingTargets.map((e) => e.existing.id);
     const existingInventories: { id: string; variantId: string | null; countryId: string | null }[] = [];
     if (existingVariantIds.length > 0) {
-      for (let i = 0; i < existingVariantIds.length; i += 500) {
+      for (let i = 0; i < existingVariantIds.length; i += 1000) {
         const chunk = await prisma.inventory.findMany({
-          where: { variantId: { in: existingVariantIds.slice(i, i + 500) } },
+          where: { variantId: { in: existingVariantIds.slice(i, i + 1000) } },
           select: { id: true, variantId: true, countryId: true },
         });
         existingInventories.push(...chunk);
@@ -3395,9 +3405,9 @@ export async function generateVariants(
 
     const existingAttrVals: { variantId: string; attributeId: string }[] = [];
     if (existingVariantIds.length > 0) {
-      for (let i = 0; i < existingVariantIds.length; i += 500) {
+      for (let i = 0; i < existingVariantIds.length; i += 1000) {
         const chunk = await prisma.productVariantAttributeValue.findMany({
-          where: { variantId: { in: existingVariantIds.slice(i, i + 500) } },
+          where: { variantId: { in: existingVariantIds.slice(i, i + 1000) } },
           select: { variantId: true, attributeId: true },
         });
         existingAttrVals.push(...chunk);
@@ -3424,9 +3434,9 @@ export async function generateVariants(
     if (toRestoreIds.length > 0 || invToCreate.length > 0 || attrValuesToCreateForExisting.length > 0) {
       await prisma.$transaction(async (tx) => {
         if (toRestoreIds.length > 0) {
-          for (let i = 0; i < toRestoreIds.length; i += 500) {
+          for (let i = 0; i < toRestoreIds.length; i += 1000) {
             await tx.productVariant.updateMany({
-              where: { id: { in: toRestoreIds.slice(i, i + 500) } },
+              where: { id: { in: toRestoreIds.slice(i, i + 1000) } },
               data: {
                 status: "ACTIVE",
                 deletedAt: null,
@@ -3465,39 +3475,62 @@ export async function generateVariants(
   }
 
   const createdVariantsList: any[] = [];
-  const BATCH_SIZE = 100;
+  const BATCH_SIZE = 1000;
 
   for (let i = 0; i < newTargets.length; i += BATCH_SIZE) {
     const chunk = newTargets.slice(i, i + BATCH_SIZE);
     const batchResult = await prisma.$transaction(
       async (tx) => {
-        const createdInBatch: any[] = [];
+        const variantsData = chunk.map((item) => ({
+          productId,
+          packageId: item.pkg?.id ?? null,
+          title: item.title,
+          variantKey: item.variantKey,
+          sku: buildGeneratedVariantSku(product, item.variantKey),
+          weight: product.packageWeight ?? null,
+          length: product.packageLength ?? null,
+          width: product.packageWidth ?? null,
+          height: product.packageHeight ?? null,
+          shippingClass: product.shippingClass ?? null,
+          fragile: product.fragile,
+          hazardous: product.hazardous,
+          status: "ACTIVE" as const,
+        }));
+
+        const insertedVariants = await (tx.productVariant as any).createManyAndReturn({
+          data: variantsData,
+          select: {
+            id: true,
+            productId: true,
+            packageId: true,
+            title: true,
+            variantKey: true,
+            sku: true,
+            weight: true,
+            length: true,
+            width: true,
+            height: true,
+            shippingClass: true,
+            fragile: true,
+            hazardous: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+            deletedAt: true,
+          },
+        });
+
+        const keyToId = new Map(insertedVariants.map((v: any) => [v.variantKey, v.id]));
         const attrValuesToCreate: any[] = [];
         const inventoriesToCreate: any[] = [];
 
         for (const item of chunk) {
-          const variant = await tx.productVariant.create({
-            data: {
-              productId,
-              packageId: item.pkg?.id ?? null,
-              title: item.title,
-              variantKey: item.variantKey,
-              sku: buildGeneratedVariantSku(product, item.variantKey),
-              weight: product.packageWeight ?? null,
-              length: product.packageLength ?? null,
-              width: product.packageWidth ?? null,
-              height: product.packageHeight ?? null,
-              shippingClass: product.shippingClass ?? null,
-              fragile: product.fragile,
-              hazardous: product.hazardous,
-              status: "ACTIVE",
-            },
-          });
-          createdInBatch.push(variant);
+          const variantId = keyToId.get(item.variantKey);
+          if (!variantId) continue;
 
           for (const v of item.combo) {
             attrValuesToCreate.push({
-              variantId: variant.id,
+              variantId,
               attributeId: v.attributeId,
               attributeValueId: v.id,
             });
@@ -3506,29 +3539,33 @@ export async function generateVariants(
           for (const template of inventoryTemplates) {
             inventoriesToCreate.push({
               productId,
-              variantId: variant.id,
+              variantId,
               ...template,
             });
           }
         }
 
         if (attrValuesToCreate.length > 0) {
-          await tx.productVariantAttributeValue.createMany({
-            data: attrValuesToCreate,
-            skipDuplicates: true,
-          });
+          for (let j = 0; j < attrValuesToCreate.length; j += 2000) {
+            await tx.productVariantAttributeValue.createMany({
+              data: attrValuesToCreate.slice(j, j + 2000),
+              skipDuplicates: true,
+            });
+          }
         }
 
         if (inventoriesToCreate.length > 0) {
-          await tx.inventory.createMany({
-            data: inventoriesToCreate,
-            skipDuplicates: true,
-          });
+          for (let j = 0; j < inventoriesToCreate.length; j += 2000) {
+            await tx.inventory.createMany({
+              data: inventoriesToCreate.slice(j, j + 2000),
+              skipDuplicates: true,
+            });
+          }
         }
 
-        return createdInBatch;
+        return insertedVariants;
       },
-      { timeout: 30000 }
+      { timeout: 60000 }
     );
 
     createdVariantsList.push(...batchResult);

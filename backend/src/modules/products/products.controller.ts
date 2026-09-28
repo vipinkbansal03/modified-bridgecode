@@ -347,7 +347,18 @@ export const genVariants = asyncHandler(async (req: AuthRequest, res: Response) 
     message = `${restoredCount} variants restored (${totalCount - restoredCount} already existed).`;
   }
 
-  return ApiResponse.success(res, message, variants);
+  const payloadData =
+    Array.isArray(variants) && variants.length > 500
+      ? {
+          total: totalCount,
+          newCount,
+          restoredCount,
+          alreadyExisted: totalCount - newCount - restoredCount,
+          sample: variants.slice(0, 50),
+        }
+      : variants;
+
+  return ApiResponse.success(res, message, payloadData);
 });
 
 export const getVariants = asyncHandler(async (req: AuthRequest, res: Response) => {
