@@ -341,7 +341,10 @@ export async function getPaymentSession(customerId: string, orderId: string) {
     paymentExpiresAt: order.paymentExpiresAt,
     secondsRemaining,
     isRetryable,
-    isExpired: isExpired || (order.paymentStatus !== "PAID" && secondsRemaining === 0),
+    isExpired:
+      order.status === "CANCELLED" ||
+      isExpired ||
+      (Boolean(order.paymentExpiresAt) && secondsRemaining === 0 && order.paymentStatus !== "PAID"),
     latestTransaction: latestTransaction
       ? {
           id: latestTransaction.id,

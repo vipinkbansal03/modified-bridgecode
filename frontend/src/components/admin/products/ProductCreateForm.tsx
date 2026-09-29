@@ -223,6 +223,7 @@ export function ProductCreateForm({
                     options={countries.map((c: any) => ({ value: c.id, label: `${c.name} (${c.code || c.countryCode || ""})`.trim() }))}
                     placeholder="Select countries"
                     allowSelectAll
+                    emptyMeansAll={false}
                     selectAllLabel="All countries"
                     error={form.errors.activeCountryIds as string}
                   />

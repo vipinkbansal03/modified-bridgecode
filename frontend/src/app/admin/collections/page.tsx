@@ -268,7 +268,7 @@ export default function CollectionsPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [debouncedSearch, statusFilter, sortBy, sortDir, page, limit]);
+  }, [debouncedSearch, statusFilter, sortBy, sortDir]);
 
   useEffect(() => {
     if (!selectedCollectionId) {
@@ -555,11 +555,27 @@ export default function CollectionsPage() {
     }
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(collections.map((c) => c.id));
-    } else {
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
       setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/collections", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: statusFilter || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data?.data ?? []).map((c: any) => c.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} collections across all pages.`, "success");
+    } catch {
+      setSelectedIds(collections.map((c) => c.id));
     }
   };
 

@@ -314,7 +314,7 @@ export default function AdminTiersPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, limit, debouncedSearch, statusFilter, countryFilter, sortBy, sortDir]);
+  }, [debouncedSearch, statusFilter, countryFilter, sortBy, sortDir]);
 
   useEffect(() => {
     setCountryOverrides({});

@@ -45,12 +45,22 @@ export const useAdminArchivedProducts = (params?: {
     placeholderData: keepPreviousData,
   });
 
-export const useAdminProductVariants = (productId: string, enabled: boolean = true) =>
-  useQuery({
-    queryKey: ["admin-product-variants", productId],
-    queryFn: () => adminApi.get(`/products/${productId}/variants`).then((r) => r.data),
-    enabled: enabled && !!productId,
+export const useAdminProductVariants = (
+  productId: string,
+  paramsOrEnabled?: { page?: number; limit?: number; search?: string } | boolean,
+  enabledArg: boolean = true
+) => {
+  const isParams = typeof paramsOrEnabled === "object" && paramsOrEnabled !== null;
+  const params = isParams ? paramsOrEnabled : undefined;
+  const isEnabled = typeof paramsOrEnabled === "boolean" ? paramsOrEnabled : enabledArg;
+
+  return useQuery({
+    queryKey: ["admin-product-variants", productId, params],
+    queryFn: () => adminApi.get(`/products/${productId}/variants`, { params }).then((r) => r.data),
+    enabled: isEnabled && !!productId,
+    placeholderData: keepPreviousData,
   });
+};
 
 export const useAdminProductsInfinite = (params?: {
   search?: string;

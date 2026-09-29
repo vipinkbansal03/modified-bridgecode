@@ -577,6 +577,7 @@ export default function ShippingBoxesPage() {
                   setPage(1);
                 }}
                 pageSizeOptions={[10, 25, 50, 100]}
+                onSelectAll={(checked) => setSelectedIds(checked ? filteredBoxes.map((b) => b.id) : [])}
                 renderBulkActions={(selectedIds) => (
                   <AdminBulkActionsBar
                     selectedCount={selectedIds.length}

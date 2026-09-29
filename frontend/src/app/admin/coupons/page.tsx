@@ -209,7 +209,7 @@ export default function CouponsPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, limit, debouncedSearch, status, sortBy, sortDir]);
+  }, [debouncedSearch, status, sortBy, sortDir]);
 
   const stats = useMemo(() => {
     return {

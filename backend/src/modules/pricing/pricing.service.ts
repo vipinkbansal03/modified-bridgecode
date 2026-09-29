@@ -713,13 +713,6 @@ function validatePricingFields(
     if (distributorPrice == null) {
       throw new AppError("Doctor / Retailer Price is required for Doctor / Retailer rules.", 400);
     }
-  } else if (roleKey === "GUEST") {
-    // Guest only requires MRP and Selling Price (already checked outside)
-  } else {
-    // None / Any case: all four are required
-    if (dealerPrice == null || distributorPrice == null) {
-      throw new AppError("Dealer Price and Doctor / Retailer Price are required for standard pricing rules.", 400);
-    }
   }
 }
 
@@ -727,7 +720,7 @@ async function createProductPrice(data: {
   productId: string;
   variantId?: string | null;
   countryId: string;
-  currencyId: string;
+  currencyId?: string;
   mrp: number | string;
   sellingPrice: number | string;
   dealerPrice?: number | string | null;
@@ -738,14 +731,19 @@ async function createProductPrice(data: {
   const product = await assertActiveProduct(data.productId);
   const variant = await assertActiveVariant(data.productId, data.variantId ?? null);
   const country = await assertActiveCountry(data.countryId);
-  const currency = await prisma.currency.findUnique({ where: { id: data.currencyId }, select: { id: true, code: true, status: true } });
+  const countryRecord = await prisma.country.findUnique({ where: { id: country.id }, select: { currencyId: true } });
+  const currencyId = data.currencyId || countryRecord?.currencyId;
+  let currency = currencyId ? await prisma.currency.findUnique({ where: { id: currencyId }, select: { id: true, code: true, status: true } }) : null;
+  if (!currency) {
+    currency = (await prisma.currency.findFirst({ where: { status: "ACTIVE", isBase: true } })) || (await prisma.currency.findFirst({ where: { status: "ACTIVE" } }));
+  }
   if (!currency) throw new AppError("Currency not found.", 404);
   if (currency.status !== "ACTIVE") throw new AppError("Inactive currencies cannot be used in pricing.", 400);
 
   const mrp = toDecimal(data.mrp);
   const sellingPrice = toDecimal(data.sellingPrice);
-  const dealerPrice = toDecimal(data.dealerPrice);
-  const distributorPrice = toDecimal(data.distributorPrice);
+  const dealerPrice = data.dealerPrice !== undefined ? toDecimal(data.dealerPrice) : null;
+  const distributorPrice = data.distributorPrice !== undefined ? toDecimal(data.distributorPrice) : null;
 
   if (mrp == null || sellingPrice == null) {
     throw new AppError("MRP and selling price are required.", 400);

@@ -627,7 +627,7 @@ export default function CountriesPage() {
             enableSelection={canUpdate}
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
-            onSelectAll={(checked) => setSelectedIds(checked ? paginatedCountries.map((c) => c.id) : [])}
+            onSelectAll={(checked) => setSelectedIds(checked ? filteredCountries.map((c) => c.id) : [])}
             totalItems={filteredCountries.length}
             currentPage={safePage}
             pageSize={limit}

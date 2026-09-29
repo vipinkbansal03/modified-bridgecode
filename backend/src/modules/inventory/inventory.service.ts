@@ -239,6 +239,15 @@ export async function listInventory(query: InventoryListQuery) {
   const where = await buildInventoryWhere(query);
   const orderBy = buildInventoryOrder(query);
 
+  if ((query as any).idsOnly === "true" || (query as any).idsOnly === true) {
+    const ids = await prisma.inventory.findMany({
+      where,
+      select: { id: true },
+      orderBy,
+    });
+    return { data: ids, total: ids.length, page: 1, limit: ids.length };
+  }
+
   const [data, total] = await Promise.all([
     prisma.inventory.findMany({
       where,

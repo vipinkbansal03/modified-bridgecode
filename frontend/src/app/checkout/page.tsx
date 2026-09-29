@@ -354,7 +354,7 @@ export default function CheckoutPage() {
             items: session.items,
           } as any);
           clearCart();
-        } else if (session.isExpired || session.status === "CANCELLED" || session.secondsRemaining <= 0) {
+        } else if (session.isExpired || session.status === "CANCELLED" || (Boolean(session.paymentExpiresAt) && session.secondsRemaining <= 0)) {
           setError("Payment window has expired. Reserved warehouse inventory has been released.");
           setPendingOrder(null);
           setPendingPaymentCode("COD");

@@ -192,152 +192,203 @@ export async function upsertFooter(body: FooterBody & Record<string, unknown>) {
   return prisma.cMSFooter.create({ data });
 }
 
-async function syncHeaderProductsMegaMenu() {
-  const [menu, products] = await Promise.all([
-    prisma.cMSMenu.upsert({
-      where: { location: HEADER_PRODUCTS_MEGA_LOCATION },
-      create: {
-        name: "Header Products Mega Menu",
-        location: HEADER_PRODUCTS_MEGA_LOCATION,
-        status: "ACTIVE",
-      },
-      update: {},
-      include: { items: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
-    }),
-    prisma.product.findMany({
-      where: {
-        status: "ACTIVE",
-        deletedAt: null,
-        category: {
-          status: "ACTIVE",
-          deletedAt: null,
-        },
-      },
-      select: {
-        title: true,
-        slug: true,
-        sortOrder: true,
-        category: {
+let megaMenuSyncPromise: Promise<void> | null = null;
+let lastMegaMenuSyncTime = 0;
+const MEGA_MENU_SYNC_INTERVAL_MS = 60_000;
+
+async function syncHeaderProductsMegaMenu(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && now - lastMegaMenuSyncTime < MEGA_MENU_SYNC_INTERVAL_MS) {
+    return;
+  }
+  if (megaMenuSyncPromise) {
+    return megaMenuSyncPromise;
+  }
+
+  megaMenuSyncPromise = (async () => {
+    try {
+      const [menu, products] = await Promise.all([
+        prisma.cMSMenu.upsert({
+          where: { location: HEADER_PRODUCTS_MEGA_LOCATION },
+          create: {
+            name: "Header Products Mega Menu",
+            location: HEADER_PRODUCTS_MEGA_LOCATION,
+            status: "ACTIVE",
+          },
+          update: {},
+          include: { items: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
+        }),
+        prisma.product.findMany({
+          where: {
+            status: "ACTIVE",
+            deletedAt: null,
+            category: {
+              status: "ACTIVE",
+              deletedAt: null,
+            },
+          },
           select: {
-            name: true,
+            title: true,
             slug: true,
             sortOrder: true,
+            category: {
+              select: {
+                name: true,
+                slug: true,
+                sortOrder: true,
+              },
+            },
           },
-        },
-      },
-      orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
-    }),
-  ]);
+          orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
+        }),
+      ]);
 
-  const categoryGroups = new Map<
-    string,
-    {
-      name: string;
-      slug: string;
-      sortOrder: number;
-      products: Array<{ title: string; slug: string; sortOrder: number }>;
-    }
-  >();
+      const categoryGroups = new Map<
+        string,
+        {
+          name: string;
+          slug: string;
+          sortOrder: number;
+          products: Array<{ title: string; slug: string; sortOrder: number }>;
+        }
+      >();
 
-  for (const product of products) {
-    const category = product.category;
-    const group =
-      categoryGroups.get(category.slug) ??
-      {
-        name: category.name,
-        slug: category.slug,
-        sortOrder: category.sortOrder,
-        products: [],
-      };
+      for (const product of products) {
+        const category = product.category;
+        const group =
+          categoryGroups.get(category.slug) ??
+          {
+            name: category.name,
+            slug: category.slug,
+            sortOrder: category.sortOrder,
+            products: [],
+          };
 
-    group.products.push({
-      title: product.title,
-      slug: product.slug,
-      sortOrder: product.sortOrder,
-    });
-    categoryGroups.set(category.slug, group);
-  }
-
-  const groups = Array.from(categoryGroups.values()).sort((a, b) => {
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-    return a.name.localeCompare(b.name);
-  });
-
-  for (const group of groups) {
-    group.products.sort((a, b) => {
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      return a.title.localeCompare(b.title);
-    });
-  }
-
-  const existingByUrl = new Map<string, (typeof menu.items)[number]>();
-  const duplicateIds: string[] = [];
-
-  for (const item of menu.items) {
-    const existing = existingByUrl.get(item.url);
-    if (existing) duplicateIds.push(item.id);
-    else existingByUrl.set(item.url, item);
-  }
-
-  await prisma.$transaction(async (tx) => {
-    if (duplicateIds.length) {
-      await tx.cMSMenuItem.deleteMany({ where: { id: { in: duplicateIds } } });
-    }
-
-    const touchedIds = new Set<string>();
-
-    for (const [categoryIndex, group] of groups.entries()) {
-      const categoryUrl = `/products?category=${group.slug}`;
-      const existingCategory = existingByUrl.get(categoryUrl);
-      const categoryData = {
-        menuId: menu.id,
-        parentId: null,
-        label: group.name,
-        url: categoryUrl,
-        sortOrder: categoryIndex * 100,
-        openInNewTab: false,
-      };
-      const categoryItem = existingCategory
-        ? await tx.cMSMenuItem.update({
-            where: { id: existingCategory.id },
-            data: categoryData,
-          })
-        : await tx.cMSMenuItem.create({
-            data: { ...categoryData, status: "ACTIVE" },
-          });
-
-      touchedIds.add(categoryItem.id);
-
-      for (const [productIndex, product] of group.products.entries()) {
-        const productUrl = `/products/${product.slug}`;
-        const existingProduct = existingByUrl.get(productUrl);
-        const productData = {
-          menuId: menu.id,
-          parentId: categoryItem.id,
-          label: product.title,
-          url: productUrl,
-          sortOrder: categoryIndex * 100 + productIndex + 1,
-          openInNewTab: false,
-        };
-        const productItem = existingProduct
-          ? await tx.cMSMenuItem.update({
-              where: { id: existingProduct.id },
-              data: productData,
-            })
-          : await tx.cMSMenuItem.create({
-              data: { ...productData, status: "ACTIVE" },
-            });
-
-        touchedIds.add(productItem.id);
+        group.products.push({
+          title: product.title,
+          slug: product.slug,
+          sortOrder: product.sortOrder,
+        });
+        categoryGroups.set(category.slug, group);
       }
-    }
 
-    await tx.cMSMenuItem.deleteMany({
-      where: touchedIds.size
-        ? { menuId: menu.id, id: { notIn: Array.from(touchedIds) } }
-        : { menuId: menu.id },
-    });
-  });
+      const groups = Array.from(categoryGroups.values()).sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.name.localeCompare(b.name);
+      });
+
+      for (const group of groups) {
+        group.products.sort((a, b) => {
+          if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+          return a.title.localeCompare(b.title);
+        });
+      }
+
+      const existingByUrl = new Map<string, (typeof menu.items)[number]>();
+      const duplicateIds: string[] = [];
+
+      for (const item of menu.items) {
+        const existing = existingByUrl.get(item.url);
+        if (existing) duplicateIds.push(item.id);
+        else existingByUrl.set(item.url, item);
+      }
+
+      await prisma.$transaction(
+        async (tx) => {
+          if (duplicateIds.length) {
+            await tx.cMSMenuItem.deleteMany({ where: { id: { in: duplicateIds } } });
+          }
+
+          const touchedIds = new Set<string>();
+
+          for (const [categoryIndex, group] of groups.entries()) {
+            const categoryUrl = `/products?category=${group.slug}`;
+            const existingCategory = existingByUrl.get(categoryUrl);
+            const categoryData = {
+              menuId: menu.id,
+              parentId: null,
+              label: group.name,
+              url: categoryUrl,
+              sortOrder: categoryIndex * 100,
+              openInNewTab: false,
+            };
+
+            let categoryItem = existingCategory;
+            if (!existingCategory) {
+              categoryItem = await tx.cMSMenuItem.create({
+                data: { ...categoryData, status: "ACTIVE" },
+              });
+            } else if (
+              existingCategory.label !== categoryData.label ||
+              existingCategory.sortOrder !== categoryData.sortOrder ||
+              existingCategory.parentId !== categoryData.parentId ||
+              existingCategory.openInNewTab !== categoryData.openInNewTab ||
+              existingCategory.status !== "ACTIVE"
+            ) {
+              categoryItem = await tx.cMSMenuItem.update({
+                where: { id: existingCategory.id },
+                data: categoryData,
+              });
+            }
+
+            if (categoryItem) {
+              touchedIds.add(categoryItem.id);
+            }
+
+            for (const [productIndex, product] of group.products.entries()) {
+              const productUrl = `/products/${product.slug}`;
+              const existingProduct = existingByUrl.get(productUrl);
+              const productData = {
+                menuId: menu.id,
+                parentId: categoryItem?.id ?? null,
+                label: product.title,
+                url: productUrl,
+                sortOrder: categoryIndex * 100 + productIndex + 1,
+                openInNewTab: false,
+              };
+
+              let productItem = existingProduct;
+              if (!existingProduct) {
+                productItem = await tx.cMSMenuItem.create({
+                  data: { ...productData, status: "ACTIVE" },
+                });
+              } else if (
+                existingProduct.label !== productData.label ||
+                existingProduct.sortOrder !== productData.sortOrder ||
+                existingProduct.parentId !== productData.parentId ||
+                existingProduct.openInNewTab !== productData.openInNewTab ||
+                existingProduct.status !== "ACTIVE"
+              ) {
+                productItem = await tx.cMSMenuItem.update({
+                  where: { id: existingProduct.id },
+                  data: productData,
+                });
+              }
+
+              if (productItem) {
+                touchedIds.add(productItem.id);
+              }
+            }
+          }
+
+          await tx.cMSMenuItem.deleteMany({
+            where: touchedIds.size
+              ? { menuId: menu.id, id: { notIn: Array.from(touchedIds) } }
+              : { menuId: menu.id },
+          });
+        },
+        { timeout: 30000, maxWait: 10000 }
+      );
+
+      lastMegaMenuSyncTime = Date.now();
+    } catch (error) {
+      console.error("[cms.service] Failed to sync header products mega menu:", error);
+    } finally {
+      megaMenuSyncPromise = null;
+    }
+  })();
+
+  return megaMenuSyncPromise;
 }
 
 // ─── Menus ────────────────────────────────────────────────────────────────────

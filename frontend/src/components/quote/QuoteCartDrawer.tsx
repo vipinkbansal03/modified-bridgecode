@@ -51,11 +51,16 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
-    return () => {
-      document.body.style.overflow = "";
-    };
+    if (open) {
+      const originalBodyOverflow = document.body.style.overflow;
+      const originalHtmlOverflow = document.documentElement.style.overflow;
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalBodyOverflow;
+        document.documentElement.style.overflow = originalHtmlOverflow;
+      };
+    }
   }, [open]);
 
   useEffect(() => {
@@ -142,7 +147,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
         onClick={onClose}
       />
       {/* Drawer */}
-      <div className="fixed right-0 top-0 z-[61] flex h-full w-full max-w-[520px] sm:max-w-[540px] flex-col bg-white shadow-2xl">
+      <div className="fixed right-0 top-0 z-[61] flex h-full w-full max-w-[520px] sm:max-w-[540px] flex-col bg-white shadow-2xl overscroll-contain">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E6E6E6] px-5 py-4">
           <div className="flex items-center gap-2">
@@ -158,7 +163,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="rounded p-1 text-[#9A9A9A] hover:bg-[#F5F5F5] hover:text-ink"
+            className="rounded p-1 text-[#9A9A9A] hover:bg-[#F5F5F5] hover:text-ink cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -180,7 +185,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
                 setSubmitted(false);
                 onClose();
               }}
-              className="mt-2 rounded bg-[#E31E24] px-6 py-2.5 text-[14px] font-semibold text-white hover:bg-[#B5151B]"
+              className="mt-2 rounded bg-[#E31E24] px-6 py-2.5 text-[14px] font-semibold text-white hover:bg-[#B5151B] cursor-pointer"
             >
               {t("ui.quote.close")}
             </button>
@@ -188,7 +193,7 @@ export function QuoteCartDrawer({ open, onClose }: Props) {
         ) : (
           <>
             {/* Cart items */}
-            <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-4">
+            <div className="custom-scrollbar flex-1 overflow-y-auto overscroll-contain px-5 py-4">
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <p className="text-[14px] text-[#9A9A9A]">

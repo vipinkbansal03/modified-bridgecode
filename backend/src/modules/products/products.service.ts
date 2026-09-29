@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { prisma } from "../../config/database";
 import { AppError, getPagination, slugify } from "../../utils/apiResponse";
 import { uploadFile, deleteFile } from "../../config/storage";
@@ -16,11 +17,8 @@ function buildVariantKey(attributeValueIds: string[], packageId?: string | null)
 }
 
 function buildGeneratedVariantSku(product: { id: string; sku?: string | null }, variantKey: string) {
-  let hash = 0;
-  for (let i = 0; i < variantKey.length; i += 1) {
-    hash = (hash * 31 + variantKey.charCodeAt(i)) >>> 0;
-  }
-  return `${product.sku || product.id}-${hash.toString(36)}`;
+  const hash = crypto.createHash("sha256").update(variantKey).digest("hex").slice(0, 10).toUpperCase();
+  return `${product.sku || product.id}-${hash}`;
 }
 
 async function assertActiveCategory(categoryId: string) {
@@ -1024,56 +1022,10 @@ export async function getProduct(id: string) {
           },
         },
       },
-      variants: {
-        where: { status: { not: "INACTIVE" }, deletedAt: null },
+      _count: {
         select: {
-          id: true,
-          title: true,
-          sku: true,
-          variantKey: true,
-          status: true,
-          packageId: true,
-          moq: true,
-          weight: true,
-          length: true,
-          width: true,
-          height: true,
-          shippingClass: true,
-          fragile: true,
-          hazardous: true,
-          package: {
-            select: { id: true, title: true, slug: true, status: true, sortOrder: true },
-          },
-          attributeValues: {
-            include: {
-              attribute: { select: { id: true, name: true, slug: true, role: true } },
-              attributeValue: { select: { id: true, value: true, slug: true, sortOrder: true } },
-            },
-          },
-          prices: {
-            where: { deletedAt: null },
-            include: {
-              country: { select: { id: true, name: true, code: true } },
-              currency: { select: { id: true, code: true, symbol: true, isBase: true } },
-            },
-          },
-          inventories: {
-            include: {
-              country: { select: { id: true, name: true, code: true } },
-              warehouse: {
-                select: {
-                  id: true,
-                  name: true,
-                  countryId: true,
-                  state: true,
-                  country: { select: { id: true, name: true, code: true } },
-                },
-              },
-            },
-            orderBy: [{ countryId: "asc" }],
-          },
+          variants: { where: { status: { not: "INACTIVE" }, deletedAt: null } },
         },
-        orderBy: [{ createdAt: "asc" }],
       },
       inventories: {
         where: { variantId: null },
@@ -1104,10 +1056,13 @@ export async function getProduct(id: string) {
   if (!product) throw new AppError("Product not found.", 404);
 
   const durationMs = (performance.now() - startTime).toFixed(2);
-  const variantsCount = product.variants?.length ?? 0;
+  const variantsCount = product._count?.variants ?? 0;
   console.log(`[PERF] getProduct(${id}) executed in ${durationMs}ms | ${variantsCount} variants`);
 
-  return product;
+  return {
+    ...product,
+    variants: [],
+  };
 }
 
 export async function getProductVariants(
@@ -1284,16 +1239,22 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });
     await syncStorefrontVisibility(tx, product.id, product.status, existing.status);
 
-    if (data.activeCountryIds && Array.isArray(data.activeCountryIds) && data.activeCountryIds.length > 0) {
+    if (data.activeCountryIds !== undefined && Array.isArray(data.activeCountryIds)) {
       const activeIds = data.activeCountryIds;
       await tx.productCountry.updateMany({
-        where: { productId: product.id, countryId: { in: activeIds } },
-        data: { enabled: true },
+        where: { productId: product.id, countryId: { notIn: activeIds } },
+        data: { enabled: false },
       });
-      await tx.productCountry.createMany({
-        data: activeIds.map((countryId) => ({ productId: product.id, countryId, enabled: true })),
-        skipDuplicates: true,
-      });
+      if (activeIds.length > 0) {
+        await tx.productCountry.updateMany({
+          where: { productId: product.id, countryId: { in: activeIds } },
+          data: { enabled: true },
+        });
+        await tx.productCountry.createMany({
+          data: activeIds.map((countryId) => ({ productId: product.id, countryId, enabled: true })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     return product;
@@ -3339,7 +3300,8 @@ export async function generateVariants(
     : [null];
 
   const totalCombosCount = attrValueSets.reduce((acc, set) => acc * set.length, 1) * (packages.length || 1);
-  const MAX_GENERATE_VARIANTS = 10000;
+  const MAX_GENERATE_VARIANTS = 5000;
+  const MAX_CUMULATIVE_VARIANTS = 5000;
   if (totalCombosCount > MAX_GENERATE_VARIANTS) {
     throw new AppError(
       `Cannot generate ${totalCombosCount.toLocaleString()} variants at once. The maximum allowed is ${MAX_GENERATE_VARIANTS.toLocaleString()} variants per batch. Please select fewer attribute values.`,
@@ -3383,6 +3345,14 @@ export async function generateVariants(
     } else {
       newTargets.push(t);
     }
+  }
+
+  const currentActiveCount = existingVariants.filter((v) => v.status !== "INACTIVE" && v.deletedAt === null).length;
+  if (currentActiveCount + newTargets.length > MAX_CUMULATIVE_VARIANTS) {
+    throw new AppError(
+      `This product already has ${currentActiveCount.toLocaleString()} variants. Adding ${newTargets.length.toLocaleString()} more would exceed the maximum limit of ${MAX_CUMULATIVE_VARIANTS.toLocaleString()} total variants per product.`,
+      400,
+    );
   }
 
   const toRestoreIds = existingTargets

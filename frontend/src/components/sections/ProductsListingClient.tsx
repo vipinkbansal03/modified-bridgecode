@@ -490,7 +490,9 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
             >
               {displayedSidebarProducts.length === 0 ? (
                 <div className="py-4 text-center text-[12px] text-steel">
-                  No products found matching &ldquo;{sidebarSearch}&rdquo;
+                  {sidebarSearch.trim()
+                    ? `No products found matching "${sidebarSearch.trim()}"`
+                    : "No products found"}
                 </div>
               ) : (
                 displayedSidebarProducts.map((p) => (

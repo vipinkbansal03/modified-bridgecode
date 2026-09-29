@@ -652,15 +652,20 @@ export default function InventoryPage() {
             warehouseId: warehouseFilterId || undefined,
             productId: productFilterId || undefined,
             variantId: variantFilterId || undefined,
+            fromDate: fromDate || undefined,
+            toDate: toDate || undefined,
             limit: 999999,
             ignoreMaxLimit: "true",
+            idsOnly: "true",
           },
         });
         const allIds = (res.data.data ?? []).map((row: any) => row.id);
-        setSelectedIds(allIds);
-        showToast(`Selected all ${allIds.length} inventory items across all pages.`, "success");
+        const finalIds = allIds.length > 0 ? allIds : visibleIds;
+        setSelectedIds(finalIds);
+        showToast(`Selected all ${finalIds.length} inventory items across all pages.`, "success");
       } catch {
         setSelectedIds(visibleIds);
+        showToast(`Selected ${visibleIds.length} inventory items on current page.`, "info");
       }
     } else {
       setSelectedIds([]);

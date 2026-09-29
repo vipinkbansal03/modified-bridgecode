@@ -222,7 +222,31 @@ export default function CurrenciesPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, limit, debouncedSearch, statusFilter, sortBy, sortDir]);
+  }, [debouncedSearch, statusFilter, sortBy, sortDir]);
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/currencies", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: statusFilter || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data?.data ?? []).map((c: any) => c.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} currencies across all pages.`, "success");
+    } catch {
+      setSelectedIds(currencies.map((c) => c.id));
+    }
+  };
 
   const showSyncReminder = !!dashboard?.ratesNeedSync && dashboard?.lastBaseChangedAt !== dismissedSyncAt;
   const form = useAdminForm<CurrencyFormState>({
@@ -851,7 +875,7 @@ export default function CurrenciesPage() {
               setPage(1);
             }}
             pageSizeOptions={[10, 20, 50, 100]}
-            onSelectAll={(checked) => setSelectedIds(checked ? currencies.map((c) => c.id) : [])}
+            onSelectAll={handleSelectAll}
             renderBulkActions={(selectedIds) => (
               <AdminBulkActionsBar
                 selectedCount={selectedIds.length}

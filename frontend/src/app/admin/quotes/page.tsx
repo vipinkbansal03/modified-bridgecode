@@ -39,7 +39,7 @@ import {
   useDeleteAdminQuote,
   usePermanentDeleteAdminQuote,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { cn } from "@/utils/cn";
 import { formatDate } from "@/utils/formatDate";
 
@@ -164,6 +164,30 @@ export default function QuotesPage() {
     }
     if (failCount > 0) {
       showToast(`Failed to archive ${failCount} quote${failCount > 1 ? "s" : ""}.`, "error");
+    }
+  };
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/quotes", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: status || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data?.data ?? []).map((q: any) => q.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} quotes across all pages.`, "success");
+    } catch {
+      setSelectedIds(quotes.map((q) => q.id));
     }
   };
 
@@ -454,6 +478,7 @@ export default function QuotesPage() {
           enableSelection={canDelete}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
+          onSelectAll={handleSelectAll}
           renderBulkActions={(selectedIds) => (
             <AdminBulkActionsBar
               selectedCount={selectedIds.length}

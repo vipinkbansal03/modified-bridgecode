@@ -396,7 +396,33 @@ export default function AdminTaxPage() {
 
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, limit, search, statusFilter, countryFilter, typeFilter, sortBy, sortDir]);
+  }, [search, statusFilter, countryFilter, typeFilter, sortBy, sortDir]);
+
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/tax", {
+        params: {
+          search: search || undefined,
+          status: statusFilter || undefined,
+          countryId: countryFilter || undefined,
+          type: typeFilter || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data?.data ?? []).map((r: any) => r.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} tax rules across all pages.`, "success");
+    } catch {
+      setSelectedIds(rules.map((r) => r.id));
+    }
+  };
 
   const countryOptions = [
     { value: "", label: "All countries" },
@@ -899,7 +925,7 @@ export default function AdminTaxPage() {
               setPage(1);
             }}
             pageSizeOptions={[10, 20, 50, 100]}
-            onSelectAll={(checked) => setSelectedIds(checked ? rules.map((r) => r.id) : [])}
+            onSelectAll={handleSelectAll}
             renderBulkActions={(selectedIds) => (
               <AdminBulkActionsBar
                 selectedCount={selectedIds.length}

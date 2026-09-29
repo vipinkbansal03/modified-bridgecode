@@ -553,6 +553,7 @@ export default function ShippingZonesPage() {
               setPage(1);
             }}
             pageSizeOptions={[10, 25, 50, 100]}
+            onSelectAll={(checked) => setSelectedIds(checked ? filteredZones.map((z) => z.id) : [])}
             renderBulkActions={(selectedIds) => (
               <AdminBulkActionsBar
                 selectedCount={selectedIds.length}

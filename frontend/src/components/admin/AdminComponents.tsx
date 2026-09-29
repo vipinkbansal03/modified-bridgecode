@@ -349,9 +349,13 @@ export function DataTable<T>({
                           aria-label="Select all"
                           checked={
                             data.length > 0 &&
-                            (selectedIds.length === data.length ||
-                              (totalItems !== undefined &&
-                                selectedIds.length >= totalItems))
+                            (totalItems !== undefined
+                              ? totalItems > 0 && selectedIds.length >= totalItems
+                              : selectedIds.length === data.length ||
+                                (data.length > 0 &&
+                                  data.every((item) =>
+                                    selectedIds.includes(String(item[rowKey])),
+                                  )))
                           }
                           onChange={(e) => {
                             if (onSelectAll) {

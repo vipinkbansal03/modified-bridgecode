@@ -42,6 +42,7 @@ const ProductPaymentOverridesTab = dynamic(
 import { RefreshButton } from "@/components/admin/RefreshButton";
 import {
   useAdminProduct,
+  useAdminProductVariants,
   useUpdateProduct,
   useAdminCategories,
   useAdminAttributes,
@@ -298,6 +299,12 @@ function ProductBaseInventoryEditor({
   const [reservedStock, setReservedStock] = useState(inventory?.reservedStock ?? 0);
   const [lowStockThreshold, setLowStockThreshold] = useState(inventory?.lowStockThreshold ?? 10);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setStock(inventory?.stock ?? 0);
+    setReservedStock(inventory?.reservedStock ?? 0);
+    setLowStockThreshold(inventory?.lowStockThreshold ?? 10);
+  }, [inventory?.stock, inventory?.reservedStock, inventory?.lowStockThreshold]);
 
   const save = async () => {
     if (reservedStock > stock) {
@@ -1205,6 +1212,16 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const queryClient = useQueryClient();
 
   const { data: product, isLoading, isFetching, refetch } = useAdminProduct(productId);
+  const { data: variantsResponse, isLoading: isLoadingVariants, refetch: refetchVariants } = useAdminProductVariants(
+    productId,
+    { page: currentPage, limit: pageSize, search: variantTabSearchQuery || filterSku || filterVariantName || undefined },
+    !!productId
+  );
+  const { data: allVariantsResponse, refetch: refetchAllVariants } = useAdminProductVariants(
+    productId,
+    { limit: 10000 },
+    !!productId
+  );
   const { data: adminCurrencies = [] } = useAdminCurrencies();
   const baseCurrency = useMemo(() => {
     const list = Array.isArray(adminCurrencies) ? adminCurrencies : [];
@@ -1736,7 +1753,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setSelectedVPIds([]);
       setVpBulkActionType("Bulk Action");
       setDeletingBulkVariantPrices(false);
-      refetch();
+      await refetch();
+      await refetchVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to delete variant prices."), "error");
     }
@@ -1773,6 +1793,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setSelectedVPIds([]);
       setVpBulkActionType("Bulk Action");
       await refetch();
+      await refetchVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
     } finally {
@@ -2125,11 +2148,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       return { ...pkg, sortOrder: order };
     });
   }, [product?.packages]);
-  const variantRows = useMemo(() => (product?.variants ?? []) as VariantRow[], [product?.variants]);
+  const allVariantRows = useMemo(() => {
+    const list = allVariantsResponse?.data ?? (Array.isArray(allVariantsResponse) ? allVariantsResponse : product?.variants ?? []);
+    return Array.isArray(list) ? (list as VariantRow[]) : [];
+  }, [allVariantsResponse, product?.variants]);
+
+  const variantRows = useMemo(() => {
+    const list = variantsResponse?.data ?? (Array.isArray(variantsResponse) ? variantsResponse : allVariantRows);
+    return Array.isArray(list) ? (list as VariantRow[]) : [];
+  }, [variantsResponse, allVariantRows]);
 
   const productVariantPrices = useMemo(() => {
     const enabledCountries = (productCountries as CountryAvailability[]).filter((c) => c.enabled);
-    if (!enabledCountries.length || !variantRows.length) return [];
+    if (!enabledCountries.length || !allVariantRows.length) return [];
 
     const basePriceByCountryId = new Map<string, any>();
     (product?.prices || []).forEach((p: any) => {
@@ -2139,7 +2170,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     });
 
     const rows: any[] = [];
-    variantRows.forEach((variant) => {
+    allVariantRows.forEach((variant) => {
       const variantPriceByCountryId = new Map<string, any>();
       (variant.prices || []).forEach((p: any) => {
         variantPriceByCountryId.set(p.countryId, p);
@@ -2176,7 +2207,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     });
 
     return rows;
-  }, [product?.prices, variantRows, productCountries]);
+  }, [product?.prices, allVariantRows, productCountries]);
 
   const filteredVariantPrices = useMemo(() => {
     let rows = productVariantPrices;
@@ -2409,7 +2440,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       });
     });
 
-    variantRows.forEach((variant) => {
+    allVariantRows.forEach((variant) => {
       const base = getBaseInventory(variant.inventories);
       if (base) {
         list.push({
@@ -2455,7 +2486,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       });
     });
     return list;
-  }, [variantRows, product]);
+  }, [allVariantRows, product]);
 
   const filteredVariantInventories = useMemo(() => {
     let rows = allVariantInventories;
@@ -2721,7 +2752,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     variantTableDisplayCountryId
   ]);
 
-  const totalItems = filteredVariantRows.length;
+  const totalItems = variantsResponse?.pagination?.total ?? variantsResponse?.total ?? product?._count?.variants ?? filteredVariantRows.length;
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   useEffect(() => {
@@ -2731,10 +2762,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   }, [totalPages, currentPage]);
 
   const paginatedVariantRows = useMemo(() => {
+    if (variantsResponse?.pagination?.total !== undefined || variantsResponse?.total !== undefined) {
+      return filteredVariantRows;
+    }
     const start = (currentPage - 1) * pageSize;
     const end = start + pageSize;
     return filteredVariantRows.slice(start, end);
-  }, [filteredVariantRows, currentPage, pageSize]);
+  }, [filteredVariantRows, currentPage, pageSize, variantsResponse]);
   const bulkCountryOptions = useMemo(() => {
     const countries = new Map<string, BulkCountryOption>();
     (productCountries as CountryAvailability[]).forEach((country) => {
@@ -2935,6 +2969,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         resetForm(values);
         showToast("Product saved.");
         await refetch();
+        await refetchCountries();
+        queryClient.invalidateQueries({ queryKey: ["admin-product-countries", productId] });
       } catch (error) {
         // Log full error for debugging
         // eslint-disable-next-line no-console
@@ -4634,7 +4670,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const usedAttributeValueCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    (variantRows || []).forEach((variant) => {
+    (allVariantRows || []).forEach((variant) => {
       if (variant.status === "INACTIVE") return;
       const seen = new Set<string>();
       (variant.attributeValues ?? []).forEach((av) => {
@@ -4656,7 +4692,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       });
     });
     return counts;
-  }, [variantRows]);
+  }, [allVariantRows]);
 
   const combinationBreakdown = useMemo(() => {
     if (estimatedGenerateVariantCount === 0 || estimatedGenerateVariantCount > 5000) {
@@ -4668,7 +4704,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     if (activeAttributeIds.length === 0) return null;
 
     const existingKeySet = new Set(
-      (variantRows || [])
+      (allVariantRows || [])
         .filter((v) => v.status !== "INACTIVE")
         .map((v) => v.variantKey)
         .filter(Boolean)
@@ -4700,7 +4736,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
     const newCount = Math.max(0, estimatedGenerateVariantCount - existingCount);
     return { existingCount, newCount };
-  }, [estimatedGenerateVariantCount, generateAttributeIds, generateSelectionMap, generatePackageIds, variantRows]);
+  }, [estimatedGenerateVariantCount, generateAttributeIds, generateSelectionMap, generatePackageIds, allVariantRows]);
 
   const openGenerateVariantModal = () => {
     const seedAttributeIds = hasMappedProductAttributes
@@ -5104,7 +5140,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       const result = await adminApi.post(`/products/${productId}/generate-variants`, payload, { timeout: 300000 });
       showToast(result.data.message || "Variants generated.");
       setGenerateVariantOpen(false);
-      refetch();
+      await refetch();
+      await refetchVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to generate variants."), "error");
     } finally {
@@ -5609,6 +5648,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   }))}
                   placeholder="Select countries"
                   allowSelectAll
+                  emptyMeansAll={false}
                   selectAllLabel="All countries"
                   error={form.errors.activeCountryIds as string}
                 />
@@ -6760,14 +6800,29 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
                         <input
                           type="checkbox"
-                          checked={filteredVariantRows.length > 0 && filteredVariantRows.every((r) => selectedVariantIds.includes(r.id))}
-                          onChange={(e) => {
+                          checked={
+                            totalItems > 0
+                              ? selectedVariantIds.length >= totalItems
+                              : filteredVariantRows.length > 0 && filteredVariantRows.every((r) => selectedVariantIds.includes(r.id))
+                          }
+                          onChange={async (e) => {
                             if (e.target.checked) {
-                              const allIds = filteredVariantRows.map((r) => r.id);
-                              setSelectedVariantIds((prev) => Array.from(new Set([...prev, ...allIds])));
+                              try {
+                                const res = await adminApi.get(`/products/${productId}/variants`, {
+                                  params: {
+                                    limit: 10000,
+                                    search: variantTabSearchQuery || filterSku || filterVariantName || undefined,
+                                  },
+                                });
+                                const allData = res.data?.data || (Array.isArray(res.data) ? res.data : []);
+                                const allIds = allData.map((v: any) => v.id);
+                                setSelectedVariantIds(allIds);
+                              } catch {
+                                const allIds = filteredVariantRows.map((r) => r.id);
+                                setSelectedVariantIds((prev) => Array.from(new Set([...prev, ...allIds])));
+                              }
                             } else {
-                              const allIds = new Set(filteredVariantRows.map((r) => r.id));
-                              setSelectedVariantIds((prev) => prev.filter((id) => !allIds.has(id)));
+                              setSelectedVariantIds([]);
                             }
                           }}
                           className="h-4 w-4 accent-[#E31E24]"
@@ -7251,14 +7306,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
                               <input
                                 type="checkbox"
-                                checked={paginatedBasePrices.length > 0 && paginatedBasePrices.every((r: any) => selectedPriceIds.includes(r.id))}
+                                checked={filteredBasePrices.length > 0 && filteredBasePrices.every((r: any) => selectedPriceIds.includes(r.id))}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    const pageIds = paginatedBasePrices.map((r: any) => r.id);
-                                    setSelectedPriceIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                                    const allIds = filteredBasePrices.map((r: any) => r.id);
+                                    setSelectedPriceIds((prev) => Array.from(new Set([...prev, ...allIds])));
                                   } else {
-                                    const pageIds = new Set(paginatedBasePrices.map((r: any) => r.id));
-                                    setSelectedPriceIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                                    const allIds = new Set(filteredBasePrices.map((r: any) => r.id));
+                                    setSelectedPriceIds((prev) => prev.filter((id) => !allIds.has(id)));
                                   }
                                 }}
                                 className="h-4 w-4 accent-[#E31E24]"
@@ -7610,14 +7665,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         <th className="border-b border-[#E6E6E6] px-4 py-3 w-12 text-center">
                           <input
                             type="checkbox"
-                            checked={paginatedVariantPrices.length > 0 && paginatedVariantPrices.every((r: any) => selectedVPIds.includes(r.id))}
+                            checked={filteredVariantPrices.length > 0 && filteredVariantPrices.every((r: any) => selectedVPIds.includes(r.id))}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                const pageIds = paginatedVariantPrices.map((r: any) => r.id);
-                                setSelectedVPIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                                const allIds = filteredVariantPrices.map((r: any) => r.id);
+                                setSelectedVPIds((prev) => Array.from(new Set([...prev, ...allIds])));
                               } else {
-                                const pageIds = new Set(paginatedVariantPrices.map((r: any) => r.id));
-                                setSelectedVPIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                                const allIds = new Set(filteredVariantPrices.map((r: any) => r.id));
+                                setSelectedVPIds((prev) => prev.filter((id) => !allIds.has(id)));
                               }
                             }}
                             className="h-4 w-4 accent-[#E31E24]"
@@ -7936,7 +7991,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </div>
                   <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                 </div>
-                <div className={`grid gap-3 ${variantRows.length > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
+                <div className={`grid gap-3 ${allVariantRows.length > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
                   <AdminSelect label="Tier" value={tierRuleDraft.tierId} onChange={(e) => setTierRuleDraft((d) => ({ ...d, tierId: e.target.value }))} options={[{ value: "", label: "Select tier" }, ...tierRows.map((tier) => ({ value: tier.id, label: tier.name }))]} />
                   <AdminMultiSearchableSelect
                     label="Countries"
@@ -7948,12 +8003,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     selectAllLabel="All countries"
                     emptyMeansAll={false}
                   />
-                  {variantRows.length > 0 && (
+                  {allVariantRows.length > 0 && (
                     <AdminMultiSearchableSelect
                       label="Variants"
                       values={tierRuleDraft.variantIds ?? (tierRuleDraft.variantId ? [tierRuleDraft.variantId] : [])}
                       onValuesChange={(values) => setTierRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
-                      options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                      options={[{ value: "", label: "All Variants" }, ...allVariantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
                       placeholder="Select variants"
                       isInfinite={true}
                     />
@@ -7997,7 +8052,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   </div>
                   <RefreshButton onRefresh={handleRefreshAll} isRefreshing={isRefreshingProduct} className="shrink-0" />
                 </div>
-                <div className={`grid gap-3 ${variantRows.length > 0 ? "lg:grid-cols-7" : "lg:grid-cols-6"}`}>
+                <div className={`grid gap-3 ${allVariantRows.length > 0 ? "lg:grid-cols-7" : "lg:grid-cols-6"}`}>
                   <AdminMultiSearchableSelect
                     label="Countries"
                     values={moqRuleDraft.countryIds ?? (moqRuleDraft.countryId ? [moqRuleDraft.countryId] : [])}
@@ -8008,12 +8063,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     selectAllLabel="All countries"
                     emptyMeansAll={false}
                   />
-                  {variantRows.length > 0 && (
+                  {allVariantRows.length > 0 && (
                     <AdminMultiSearchableSelect
                       label="Variants"
                       values={moqRuleDraft.variantIds ?? (moqRuleDraft.variantId ? [moqRuleDraft.variantId] : [])}
                       onValuesChange={(values) => setMoqRuleDraft((d) => ({ ...d, variantIds: values, variantId: values[0] ?? "" }))}
-                      options={[{ value: "", label: "All Variants" }, ...variantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
+                      options={[{ value: "", label: "All Variants" }, ...allVariantRows.map((variant) => ({ value: variant.id, label: variant.sku ? `${variant.title} (${variant.sku})` : variant.title }))]}
                       placeholder="Select variants"
                       isInfinite={true}
                     />
@@ -8195,18 +8250,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                             type="checkbox"
                             checked={
                               (() => {
-                                const selectable = paginatedVariantInventories.filter((r: any) => !product?.hasVariants || r.variantId !== null);
+                                const selectable = filteredVariantInventories.filter((r: any) => !product?.hasVariants || r.variantId !== null);
                                 return selectable.length > 0 && selectable.every((r: any) => selectedInvIds.includes(r.id));
                               })()
                             }
                             onChange={(e) => {
-                              const selectable = paginatedVariantInventories.filter((r: any) => !product?.hasVariants || r.variantId !== null);
+                              const selectable = filteredVariantInventories.filter((r: any) => !product?.hasVariants || r.variantId !== null);
                               if (e.target.checked) {
-                                const pageIds = selectable.map((r: any) => r.id);
-                                setSelectedInvIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+                                const allIds = selectable.map((r: any) => r.id);
+                                setSelectedInvIds((prev) => Array.from(new Set([...prev, ...allIds])));
                               } else {
-                                const pageIds = new Set(selectable.map((r: any) => r.id));
-                                setSelectedInvIds((prev) => prev.filter((id) => !pageIds.has(id)));
+                                const allIds = new Set(selectable.map((r: any) => r.id));
+                                setSelectedInvIds((prev) => prev.filter((id) => !allIds.has(id)));
                               }
                             }}
                             className="h-4 w-4 accent-[#E31E24]"
@@ -9157,13 +9212,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         size="3xl"
         footer={
           <div className="flex flex-wrap items-center justify-between gap-3 w-full">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="text-[12.5px] text-[#6B6B6B]">
+                <span className="mr-3">
+                  Current variants: <span className="font-semibold text-slate-800">{(product?._count?.variants ?? product?.variants?.length ?? 0).toLocaleString()}</span>
+                </span>
                 Combinations to create:{" "}
                 <span
                   className={cn(
                     "font-bold",
-                    estimatedGenerateVariantCount > 10000
+                    estimatedGenerateVariantCount > 5000 ||
+                      (product?._count?.variants ?? product?.variants?.length ?? 0) + estimatedGenerateVariantCount > 5000
                       ? "text-red-600"
                       : estimatedGenerateVariantCount > 0
                       ? "text-emerald-600"
@@ -9178,11 +9237,17 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <span className="text-slate-500">, {combinationBreakdown.existingCount.toLocaleString()} already exist</span>)
                   </span>
                 )}
-                {estimatedGenerateVariantCount > 10000 && (
+                {estimatedGenerateVariantCount > 5000 && (
                   <span className="ml-2 text-[12px] font-medium text-red-600">
-                    (Max limit is 10,000. Please select fewer options.)
+                    (Max limit is 5,000 per batch. Please select fewer options.)
                   </span>
                 )}
+                {estimatedGenerateVariantCount <= 5000 &&
+                  (product?._count?.variants ?? product?.variants?.length ?? 0) + estimatedGenerateVariantCount > 5000 && (
+                    <span className="ml-2 text-[12px] font-medium text-red-600">
+                      (Exceeds maximum limit of 5,000 total variants: Currently {(product?._count?.variants ?? product?.variants?.length ?? 0).toLocaleString()} + {estimatedGenerateVariantCount.toLocaleString()} new = {((product?._count?.variants ?? product?.variants?.length ?? 0) + estimatedGenerateVariantCount).toLocaleString()}. Please select fewer options.)
+                    </span>
+                  )}
               </p>
             </div>
             <div className="flex items-center gap-2.5">
@@ -9196,7 +9261,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               <button
                 type="button"
                 onClick={handleGenerateVariants}
-                disabled={generatingVariants || estimatedGenerateVariantCount === 0 || estimatedGenerateVariantCount > 10000}
+                disabled={
+                  generatingVariants ||
+                  estimatedGenerateVariantCount === 0 ||
+                  estimatedGenerateVariantCount > 5000 ||
+                  (product?._count?.variants ?? product?.variants?.length ?? 0) + estimatedGenerateVariantCount > 5000
+                }
                 className="rounded-lg bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {generatingVariants
@@ -9228,7 +9298,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             />
           </div>
 
-          {variantRows.length > 0 && (
+          {allVariantRows.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -9237,7 +9307,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       i
                     </span>
                     <p className="text-[13px] font-semibold text-slate-800">
-                      Product has {variantRows.length.toLocaleString()} existing {variantRows.length === 1 ? "variant" : "variants"}
+                      Product has {allVariantRows.length.toLocaleString()} existing {allVariantRows.length === 1 ? "variant" : "variants"}
                     </p>
                   </div>
                   <p className="mt-1 text-[12px] text-slate-600">
@@ -9287,7 +9357,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="h-2 w-2 rounded-full bg-[#E31E24]"></span>
                       <span className="text-[14px] font-bold text-[#1A1A1A]">{attribute.name}</span>
-                      {variantRows.length > 0 && (
+                      {allVariantRows.length > 0 && (
                         <span className="text-[11.5px] font-normal text-[#6B6B6B]">
                           ({usedValues.length} in existing variants • <span className="font-semibold text-emerald-700">{unusedValues.length} unused</span>)
                         </span>
@@ -9313,7 +9383,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       >
                         Select All ({values.length})
                       </button>
-                      {variantRows.length > 0 && unusedValues.length > 0 && unusedValues.length < values.length && (
+                      {allVariantRows.length > 0 && unusedValues.length > 0 && unusedValues.length < values.length && (
                         <>
                           <span className="text-[#D1D5DB] text-[10px]">|</span>
                           <button
@@ -9325,7 +9395,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                           </button>
                         </>
                       )}
-                      {variantRows.length > 0 && usedValues.length > 0 && usedValues.length < values.length && (
+                      {allVariantRows.length > 0 && usedValues.length > 0 && usedValues.length < values.length && (
                         <>
                           <span className="text-[#D1D5DB] text-[10px]">|</span>
                           <button
@@ -10890,17 +10960,8 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           <div className="w-[480px] rounded-xl bg-white p-6 shadow-2xl">
             <h2 className="mb-4 text-lg font-semibold text-[#1A1A1A]">Bulk Update Prices</h2>
             <p className="mb-6 text-[13px] text-[#6B6B6B]">
-              {bulkPriceUpdateModalContext === "variants" ? (
-                <>
-                  Enter the base prices in <strong>{baseCurrency.name} ({baseCurrency.code} {baseCurrency.symbol})</strong> for the selected {selectedVariantIds.length} variant(s).<br/>
-                  They will be automatically converted for your selected countries using active exchange rates. Leave fields blank to keep current values.
-                </>
-              ) : (
-                <>
-                  Enter the prices for the selected {bulkPriceUpdateModalContext === "base" ? selectedPriceIds.length : selectedVPIds.length} price row(s).<br/>
-                  Leave fields blank to keep current values.
-                </>
-              )}
+              Enter the base prices in <strong>{baseCurrency.name} ({baseCurrency.code} {baseCurrency.symbol})</strong> for the selected {bulkPriceUpdateModalContext === "variants" ? selectedVariantIds.length : (bulkPriceUpdateModalContext === "base" ? selectedPriceIds.length : selectedVPIds.length)} {bulkPriceUpdateModalContext === "variants" ? "variant(s)" : "price row(s)"}.<br/>
+              They will be automatically converted for your selected countries using active exchange rates. Leave fields blank to keep current values.
             </p>
 
             {bulkPriceUpdateModalContext === "variants" && (
@@ -10962,16 +11023,44 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                       if (id.startsWith("base-")) {
                         const row = productVariantPrices.find((p: any) => p.id === id);
                         if (row) {
+                          const countryObj = (productCountries as CountryAvailability[]).find((c) => c.id === row.countryId);
+                          const exRate = countryObj?.currency?.exchangeRate ? parseFloat(String(countryObj.currency.exchangeRate)) : 1;
+                          const safeExRate = !isNaN(exRate) && exRate > 0 ? exRate : 1;
+
+                          const baseMrp = payload.mrp !== undefined ? parseFloat((payload.mrp * safeExRate).toFixed(2)) : (row.mrp ? parseFloat(row.mrp) : 0);
+                          const baseSellingPrice = payload.sellingPrice !== undefined ? parseFloat((payload.sellingPrice * safeExRate).toFixed(2)) : (row.sellingPrice ? parseFloat(row.sellingPrice) : 0);
+                          const baseDealerPrice = payload.dealerPrice !== undefined ? parseFloat((payload.dealerPrice * safeExRate).toFixed(2)) : (row.dealerPrice != null ? parseFloat(row.dealerPrice) : null);
+                          const baseDistributorPrice = payload.distributorPrice !== undefined ? parseFloat((payload.distributorPrice * safeExRate).toFixed(2)) : (row.distributorPrice != null ? parseFloat(row.distributorPrice) : null);
+                          const rowCurrencyId = row.currencyId || row.country?.currencyId || baseCurrency?.id;
+
                           return adminApi.post('/pricing', {
                             productId: productId,
                             variantId: row.variantId,
                             countryId: row.countryId,
+                            currencyId: rowCurrencyId,
                             status: "ACTIVE",
-                            ...payload
+                            mrp: baseMrp,
+                            sellingPrice: baseSellingPrice,
+                            ...(baseDealerPrice !== null ? { dealerPrice: baseDealerPrice } : {}),
+                            ...(baseDistributorPrice !== null ? { distributorPrice: baseDistributorPrice } : {}),
                           });
                         }
                       } else {
-                        return adminApi.put(`/pricing/${id}`, payload);
+                        const row = bulkPriceUpdateModalContext === "base"
+                          ? (product?.prices || []).find((p: any) => p.id === id)
+                          : productVariantPrices.find((p: any) => p.id === id);
+                        const countryId = row?.countryId;
+                        const countryObj = (productCountries as CountryAvailability[]).find((c) => c.id === countryId);
+                        const exRate = countryObj?.currency?.exchangeRate ? parseFloat(String(countryObj.currency.exchangeRate)) : 1;
+                        const safeExRate = !isNaN(exRate) && exRate > 0 ? exRate : 1;
+
+                        const rowPayload: any = {};
+                        if (payload.mrp !== undefined) rowPayload.mrp = parseFloat((payload.mrp * safeExRate).toFixed(2));
+                        if (payload.sellingPrice !== undefined) rowPayload.sellingPrice = parseFloat((payload.sellingPrice * safeExRate).toFixed(2));
+                        if (payload.dealerPrice !== undefined) rowPayload.dealerPrice = parseFloat((payload.dealerPrice * safeExRate).toFixed(2));
+                        if (payload.distributorPrice !== undefined) rowPayload.distributorPrice = parseFloat((payload.distributorPrice * safeExRate).toFixed(2));
+
+                        return adminApi.put(`/pricing/${id}`, rowPayload);
                       }
                     })
                   );
@@ -10987,7 +11076,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                   
                   setBulkPriceUpdateModalContext(null);
                   setBulkPriceUpdateDraft({ mrp: "", sellingPrice: "", dealerPrice: "", doctorRetailerPrice: "" });
-                  refetch();
+                  await refetch();
+                  await refetchVariants();
+                  queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+                  queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
                   return;
                 }
 
@@ -11057,7 +11149,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 setModalCountryIds(["ALL_COUNTRIES"]);
                 setSelectedVariantIds([]);
                 setBulkActionValue("");
-                refetch();
+                await refetch();
+                await refetchVariants();
+                queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+                queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
               } catch (error) {
                 showToast(getAdminErrorMessage(error, "Failed to perform bulk price action."), "error");
               } finally {

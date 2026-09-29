@@ -27,7 +27,7 @@ import {
   useDeleteBlog,
   useUpdateBlog,
 } from "@/hooks/admin/useAdminHooks";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { slugify } from "@/utils/slugify";
 import { uploadMediaFiles } from "@/utils/uploadMedia";
 import { MediaSelectorModal } from "@/components/admin/media/MediaSelectorModal";
@@ -250,6 +250,28 @@ export function BlogPostsTab() {
     }
   };
 
+  const handleSelectAll = async (checked: boolean) => {
+    if (!checked) {
+      setSelected([]);
+      return;
+    }
+    try {
+      const res = await adminApi.get("/blogs", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: status || undefined,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data?.data ?? []).map((b: any) => b.id);
+      setSelected(allIds);
+      showToast(`Selected all ${allIds.length} blog posts across all pages.`, "success");
+    } catch {
+      setSelected(blogs.map((b) => b.id));
+    }
+  };
+
   const columns: Column<Blog>[] = [
     {
       key: "featuredImage",
@@ -402,6 +424,12 @@ export function BlogPostsTab() {
         enableSelection={true}
         selectedIds={selected}
         onSelectionChange={setSelected}
+        totalItems={data?.pagination?.total ?? 0}
+        currentPage={page}
+        pageSize={20}
+        totalPages={data?.pagination?.totalPages || 1}
+        onPageChange={setPage}
+        onSelectAll={handleSelectAll}
         renderBulkActions={(selectedIds) => (
           <AdminBulkActionsBar
             selectedCount={selectedIds.length}

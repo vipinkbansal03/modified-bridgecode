@@ -72,10 +72,13 @@ export function CartDrawer() {
   // Lock body scroll when Cart Drawer is open
   useEffect(() => {
     if (isOpen) {
-      const originalStyle = window.getComputedStyle(document.body).overflow;
+      const originalBodyOverflow = document.body.style.overflow;
+      const originalHtmlOverflow = document.documentElement.style.overflow;
       document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
       return () => {
-        document.body.style.overflow = originalStyle;
+        document.body.style.overflow = originalBodyOverflow;
+        document.documentElement.style.overflow = originalHtmlOverflow;
       };
     }
   }, [isOpen]);
@@ -104,7 +107,7 @@ export function CartDrawer() {
 
       {/* Slide-out Drawer Panel with smooth slide transition */}
       <aside
-        className={`fixed right-0 top-0 z-[80] flex h-screen w-full max-w-full sm:max-w-[520px] md:max-w-[560px] flex-col bg-white shadow-[0_24px_80px_rgba(0,0,0,0.22)] transition-transform duration-300 ease-in-out ${
+        className={`fixed right-0 top-0 z-[80] flex h-screen w-full max-w-full sm:max-w-[520px] md:max-w-[560px] flex-col bg-white shadow-[0_24px_80px_rgba(0,0,0,0.22)] overscroll-contain transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -127,13 +130,13 @@ export function CartDrawer() {
             type="button"
             aria-label={t("ui.cart.close")}
             onClick={closeCart}
-            className="rounded-full border border-line p-2 text-ink hover:border-brand hover:text-brand"
+            className="rounded-full border border-line p-2 text-ink hover:border-brand hover:text-brand cursor-pointer"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-5">
+        <div className="custom-scrollbar flex-1 overflow-y-auto overscroll-contain px-5 py-5">
           {hasUnavailableItems && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3">
               <p className="text-sm font-semibold text-red-700">

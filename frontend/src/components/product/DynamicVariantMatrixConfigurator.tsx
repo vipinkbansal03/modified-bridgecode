@@ -7,6 +7,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Layers3,
+  Plus,
   ShoppingBag,
   Sparkles,
   Trash2,
@@ -703,7 +704,9 @@ export function DynamicVariantMatrixConfigurator({
     }
 
     setDropdownSelections(nextSelections);
-    setQuantityMap({});
+    if (matrixEnabled) {
+      setQuantityMap({});
+    }
     setFeedback(null);
   };
 
@@ -1080,7 +1083,7 @@ export function DynamicVariantMatrixConfigurator({
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[13px] font-bold text-[#111827]">Qty:</span>
                       <QuantityInput
                         size="sm"
@@ -1090,6 +1093,28 @@ export function DynamicVariantMatrixConfigurator({
                         max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : 0}
                         disabled={isSingleOutOfStock}
                       />
+                      {!matrixEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!singleResolvedVariant || isSingleOutOfStock) return;
+                            handleQuantityChange(
+                              singleResolvedVariant.id,
+                              (quantityMap[singleResolvedVariant.id] || 0) + dropdownQuantity,
+                            );
+                            showToast({
+                              title: "Variant Added",
+                              message: `${singleResolvedVariant.title} added to selection.`,
+                              type: "success",
+                            });
+                          }}
+                          disabled={isSingleOutOfStock}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#E31E24] bg-red-50 hover:bg-[#E31E24] hover:text-white px-3 py-1.5 text-[12.5px] font-bold text-[#E31E24] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Plus size={14} />
+                          Add to Selection
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1302,17 +1327,32 @@ export function DynamicVariantMatrixConfigurator({
                                 </span>
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleQuantityChange(entry.variant.id, 0)
-                              }
-                              aria-label={`Remove ${entry.variant.title}`}
-                              title="Remove variant"
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 text-brand transition hover:border-brand hover:bg-red-50 cursor-pointer"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <QuantityInput
+                                size="xs"
+                                value={entry.quantity}
+                                onChange={(next) =>
+                                  handleQuantityChange(entry.variant.id, next)
+                                }
+                                min={1}
+                                max={
+                                  entry.variant.warehouseInventories?.length
+                                    ? entry.variant.warehouseInventories.reduce((sum, inv) => sum + inv.available, 0)
+                                    : (entry.variant.inventory?.available ?? 0)
+                                }
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleQuantityChange(entry.variant.id, 0)
+                                }
+                                aria-label={`Remove ${entry.variant.title}`}
+                                title="Remove variant"
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 text-brand transition hover:border-brand hover:bg-red-50 cursor-pointer"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ))}

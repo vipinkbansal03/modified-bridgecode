@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Star, CheckCircle2, Trash2, MessageSquare, ExternalLink, Clock, XCircle, Eye } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
-import { getAdminErrorMessage } from "@/services/adminApi";
+import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { formatDate } from "@/utils/formatDate";
 import { cn } from "@/utils/cn";
@@ -109,10 +109,10 @@ export default function AdminReviewsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Clear selections on filter or pagination changes
+  // Clear selections on filter changes
   useEffect(() => {
     setSelectedIds([]);
-  }, [page, limit, debouncedSearch, statusFilter, ratingFilter, productFilter, categoryFilter, dateFrom, dateTo, sortBy, sortDir]);
+  }, [debouncedSearch, statusFilter, ratingFilter, productFilter, categoryFilter, dateFrom, dateTo, sortBy, sortDir]);
 
   // Data queries
   const { data, isLoading, isFetching, refetch } = useAdminReviews({
@@ -189,12 +189,33 @@ export default function AdminReviewsPage() {
     setPage(1);
   };
 
-  const handleSelectAll = (checked: boolean) => {
+  const handleSelectAll = async (checked: boolean) => {
     if (!checked) {
       setSelectedIds([]);
       return;
     }
-    setSelectedIds(reviews.map((r) => r.id));
+    try {
+      const res = await adminApi.get("/reviews", {
+        params: {
+          search: debouncedSearch || undefined,
+          status: statusFilter || undefined,
+          rating: ratingFilter || undefined,
+          productId: productFilter || undefined,
+          categoryId: categoryFilter || undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          sortBy,
+          sortDir,
+          limit: 999999,
+          ignoreMaxLimit: "true",
+        },
+      });
+      const allIds = (res.data?.data ?? []).map((r: any) => r.id);
+      setSelectedIds(allIds);
+      showToast(`Selected all ${allIds.length} reviews across all pages.`, "success");
+    } catch {
+      setSelectedIds(reviews.map((r) => r.id));
+    }
   };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
