@@ -4106,6 +4106,11 @@ export async function permanentDeleteVariant(productId: string, variantId: strin
   }
 
   return prisma.$transaction(async (tx) => {
+    try {
+      await tx.$executeRawUnsafe('DELETE FROM "_VariantTaxRules" WHERE "A" = $1', variantId);
+    } catch {
+      // Ignore if table does not exist or empty
+    }
     await tx.inventoryAdjustment.deleteMany({ where: { variantId } });
     await tx.productVariantAttributeValue.deleteMany({ where: { variantId } });
     await tx.variantCountry.deleteMany({ where: { variantId } });
@@ -6564,12 +6569,12 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
     prisma.orderItem.groupBy({
       by: ["variantId"],
       where: { variantId: { in: ids } },
-      _count: true,
+      _count: { _all: true },
     }),
     prisma.quoteItem.groupBy({
       by: ["variantId"],
       where: { variantId: { in: ids } },
-      _count: true,
+      _count: { _all: true },
     }),
     prisma.inventory.groupBy({
       by: ["variantId"],
@@ -6578,12 +6583,20 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
     }),
   ]);
 
-  const orderBlockedMap = new Map(orderItems.map((o) => [o.variantId, o._count]));
-  const quoteBlockedMap = new Map(quoteItems.map((q) => [q.variantId, q._count]));
+  const orderBlockedMap = new Map(
+    orderItems
+      .filter((o) => o.variantId)
+      .map((o) => [o.variantId!, typeof o._count === "object" ? o._count._all : (o._count as number)])
+  );
+  const quoteBlockedMap = new Map(
+    quoteItems
+      .filter((q) => q.variantId)
+      .map((q) => [q.variantId!, typeof q._count === "object" ? q._count._all : (q._count as number)])
+  );
   const reservedBlockedMap = new Map(
     reservedInventories
-      .filter((i) => (i._sum.reservedStock || 0) > 0)
-      .map((i) => [i.variantId, i._sum.reservedStock || 0])
+      .filter((i) => i.variantId && (i._sum.reservedStock || 0) > 0)
+      .map((i) => [i.variantId!, i._sum.reservedStock || 0])
   );
 
   const toDeleteIds: string[] = [];
@@ -6625,22 +6638,30 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
     toDeleteIds.push(id);
   }
 
-  // 3. Batch delete unblocked variants in chunks of 500
-  const CHUNK_SIZE = 500;
+  // 3. Batch delete unblocked variants in chunks of 250 with 30s timeout
+  const CHUNK_SIZE = 250;
   for (let i = 0; i < toDeleteIds.length; i += CHUNK_SIZE) {
     const chunk = toDeleteIds.slice(i, i + CHUNK_SIZE);
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.inventoryAdjustment.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.productVariantAttributeValue.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.variantCountry.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.variantPaymentMethod.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.productPrice.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.moqPricing.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.tierPricing.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.inventory.deleteMany({ where: { variantId: { in: chunk } } });
-        await tx.productVariant.deleteMany({ where: { id: { in: chunk } } });
-      });
+      await prisma.$transaction(
+        async (tx) => {
+          try {
+            await tx.$executeRawUnsafe('DELETE FROM "_VariantTaxRules" WHERE "A" = ANY($1::text[])', chunk);
+          } catch {
+            // Ignore if join table does not exist or is empty
+          }
+          await tx.inventoryAdjustment.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.productVariantAttributeValue.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.variantCountry.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.variantPaymentMethod.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.productPrice.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.moqPricing.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.tierPricing.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.inventory.deleteMany({ where: { variantId: { in: chunk } } });
+          await tx.productVariant.deleteMany({ where: { id: { in: chunk } } });
+        },
+        { timeout: 30000 }
+      );
       deletedIds.push(...chunk);
     } catch {
       // If batch fails, fallback to individual for this chunk to isolate any error

@@ -11,7 +11,7 @@ declare global {
 // Ensure connection pool settings if not explicitly specified in DATABASE_URL
 if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes("connection_limit=")) {
   const separator = process.env.DATABASE_URL.includes("?") ? "&" : "?";
-  process.env.DATABASE_URL = `${process.env.DATABASE_URL}${separator}connection_limit=15&pool_timeout=30`;
+  process.env.DATABASE_URL = `${process.env.DATABASE_URL}${separator}connection_limit=35&pool_timeout=45`;
 }
 
 export const prisma =
@@ -31,9 +31,7 @@ export const prisma =
     ],
   });
 
-if (process.env.NODE_ENV !== "production") {
-  global.prisma = prisma;
-}
+global.prisma = prisma;
 
 prisma.$on("query" as never, (e: { query: string; duration: number }) => {
   if (process.env.NODE_ENV === "development") {
