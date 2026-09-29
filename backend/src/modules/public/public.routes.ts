@@ -37,8 +37,8 @@ router.get("/languages", C.getLanguages);
 router.get("/translations/static", C.getStaticTranslations);
 router.get("/search", C.search);
 router.get("/currencies", C.getCurrencies);
-router.get("/countries", C.getCountries);
 router.get("/inventory", C.checkInventory);
+router.post("/inventory", C.checkInventory);
 
 // ─── Write endpoints (form submissions) ──────────────────
 router.post("/quotes", formLimiter, C.submitQuote);

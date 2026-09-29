@@ -71,8 +71,10 @@ export const getCountries = asyncHandler(async (_req: Request, res: Response) =>
 });
 
 export const checkInventory = asyncHandler(async (req: Request, res: Response) => {
-  const ids = (req.query.variantIds as string || "").split(",").filter(Boolean);
-  const countryCode = typeof req.query.countryCode === "string" ? req.query.countryCode : undefined;
+  const queryIds = (req.query.variantIds as string || "").split(",").filter(Boolean);
+  const bodyIds = Array.isArray(req.body?.variantIds) ? req.body.variantIds : [];
+  const ids = Array.from(new Set([...queryIds, ...bodyIds]));
+  const countryCode = (typeof req.query.countryCode === "string" ? req.query.countryCode : req.body?.countryCode) as string | undefined;
   return AR.success(res, "Inventory.", await S.checkInventory(ids, countryCode));
 });
 

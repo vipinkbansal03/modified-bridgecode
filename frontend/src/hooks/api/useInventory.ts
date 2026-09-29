@@ -5,9 +5,9 @@ import { apiClient, HAS_LIVE_API, unwrapData } from "@/lib/apiClient";
 import { qk, STALE } from "@/lib/queryConfig";
 import type { ApiInventoryCheck } from "@/types/api.types";
 
-async function fetchInventory(variantIds: string[]): Promise<ApiInventoryCheck[]> {
+async function fetchInventory(variantIds: string[], countryCode?: string): Promise<ApiInventoryCheck[]> {
   if (!HAS_LIVE_API || !variantIds.length) return [];
-  const res = await apiClient.get("/inventory", { params: { variantIds: variantIds.join(",") } });
+  const res = await apiClient.post("/inventory", { variantIds, countryCode });
   return unwrapData<ApiInventoryCheck[]>(res);
 }
 

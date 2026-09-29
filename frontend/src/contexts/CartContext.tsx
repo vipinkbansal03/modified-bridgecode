@@ -240,11 +240,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const variantIds = updatedItems.map((item) => item.variantId);
         if (variantIds.length > 0) {
           try {
-            const invRes = await apiClient.get("/inventory", {
-              params: {
-                variantIds: variantIds.join(","),
-                countryCode: selectedCountryCode,
-              },
+            const invRes = await apiClient.post("/inventory", {
+              variantIds,
+              countryCode: selectedCountryCode,
             });
 
             const inventoryRecords: Array<{
