@@ -331,18 +331,16 @@ export function DynamicVariantMatrixConfigurator({
   const xAxisAttributes = useMemo(
     () =>
       attributes.filter((attribute) =>
-        hasConfiguredGridAxis
-          ? attribute.gridAxis === "COLUMN"
-          : getAttributeDisplayType(attribute) === "X_GRID",
+        attribute.gridAxis === "COLUMN" ||
+        (!hasConfiguredGridAxis && attribute.gridAxis === undefined && getAttributeDisplayType(attribute) === "X_GRID"),
       ),
     [attributes, hasConfiguredGridAxis],
   );
   const yAxisAttributes = useMemo(
     () =>
       attributes.filter((attribute) =>
-        hasConfiguredGridAxis
-          ? attribute.gridAxis === "ROW"
-          : getAttributeDisplayType(attribute) === "Y_GRID",
+        attribute.gridAxis === "ROW" ||
+        (!hasConfiguredGridAxis && attribute.gridAxis === undefined && getAttributeDisplayType(attribute) === "Y_GRID"),
       ),
     [attributes, hasConfiguredGridAxis],
   );

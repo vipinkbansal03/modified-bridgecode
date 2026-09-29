@@ -1757,9 +1757,7 @@ async function toPublicProductDetail(
           ? "X_GRID"
           : pa.gridAxis === "ROW"
             ? "Y_GRID"
-            : hasConfiguredMatrix
-              ? "DROPDOWN"
-              : (pa.attribute.role ?? "DROPDOWN");
+            : "DROPDOWN";
 
       return {
         id: pa.attribute.id,
