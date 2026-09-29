@@ -2083,12 +2083,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             id: mapping.attributeId,
             name: mapping.attribute.name,
             role: mapping.attribute.role,
-            values: (mapping.allowedValues.length ? mapping.allowedValues.map((allowedValue) => allowedValue.attributeValue) : mapping.attribute.values).map(
-              (value) => ({
-                id: value.id,
-                value: value.value,
-              }),
-            ),
+            values: mapping.allowedValues.map((allowedValue) => ({
+              id: allowedValue.attributeValue.id,
+              value: allowedValue.attributeValue.value,
+            })),
           }))
         : attributeCatalog,
     [attributeCatalog, hasMappedProductAttributes, mappedAttributeRows]
@@ -8771,7 +8769,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-[12px] text-[#9A9A9A]">All values allowed</span>
+                                <span className="text-[12px] text-amber-600 font-medium">No values assigned (click Edit to select allowed values)</span>
                               )}
                             </div>
                           </div>
@@ -9420,7 +9418,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
                   {/* Chips grid */}
                   {values.length === 0 ? (
-                    <p className="text-[12px] text-[#9A9A9A] italic">No values found for this attribute. Add values in Admin → Attributes first.</p>
+                    <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 italic">
+                      No values assigned to this product attribute. Click &quot;Edit&quot; on Product Attributes to select allowed values.
+                    </p>
                   ) : (
                     <div>
                       <div className="flex flex-wrap gap-2.5">
