@@ -24,7 +24,7 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  const isAdminRoute = pathname.startsWith("/admin");
+  const isAdminRoute = Boolean(pathname?.startsWith("/admin"));
   const isAuthRoute = pathname === "/login" || pathname === "/register";
 
   if (isAdminRoute || isAuthRoute) {
