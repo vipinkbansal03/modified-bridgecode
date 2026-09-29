@@ -3421,37 +3421,38 @@ export async function generateVariants(
     }
 
     if (toRestoreIds.length > 0 || invToCreate.length > 0 || attrValuesToCreateForExisting.length > 0) {
-      await prisma.$transaction(async (tx) => {
-        if (toRestoreIds.length > 0) {
-          for (let i = 0; i < toRestoreIds.length; i += 1000) {
-            await tx.productVariant.updateMany({
-              where: { id: { in: toRestoreIds.slice(i, i + 1000) } },
-              data: {
-                status: "ACTIVE",
-                deletedAt: null,
-              },
-            });
-          }
+      if (toRestoreIds.length > 0) {
+        for (let i = 0; i < toRestoreIds.length; i += 500) {
+          const restoreChunk = toRestoreIds.slice(i, i + 500);
+          await prisma.productVariant.updateMany({
+            where: { id: { in: restoreChunk } },
+            data: {
+              status: "ACTIVE",
+              deletedAt: null,
+            },
+          });
         }
+      }
 
-        if (invToCreate.length > 0) {
-          for (let i = 0; i < invToCreate.length; i += 1000) {
-            await tx.inventory.createMany({
-              data: invToCreate.slice(i, i + 1000),
-              skipDuplicates: true,
-            });
-          }
+      if (invToCreate.length > 0) {
+        for (let i = 0; i < invToCreate.length; i += 500) {
+          const invChunk = invToCreate.slice(i, i + 500);
+          await prisma.inventory.createMany({
+            data: invChunk,
+            skipDuplicates: true,
+          });
         }
+      }
 
-        if (attrValuesToCreateForExisting.length > 0) {
-          for (let i = 0; i < attrValuesToCreateForExisting.length; i += 1000) {
-            await tx.productVariantAttributeValue.createMany({
-              data: attrValuesToCreateForExisting.slice(i, i + 1000),
-              skipDuplicates: true,
-            });
-          }
+      if (attrValuesToCreateForExisting.length > 0) {
+        for (let i = 0; i < attrValuesToCreateForExisting.length; i += 500) {
+          const attrChunk = attrValuesToCreateForExisting.slice(i, i + 500);
+          await prisma.productVariantAttributeValue.createMany({
+            data: attrChunk,
+            skipDuplicates: true,
+          });
         }
-      });
+      }
 
       // Update local existing state to ACTIVE
       for (const e of existingTargets) {
@@ -3464,7 +3465,7 @@ export async function generateVariants(
   }
 
   const createdVariantsList: any[] = [];
-  const BATCH_SIZE = 1000;
+  const BATCH_SIZE = 250;
 
   for (let i = 0; i < newTargets.length; i += BATCH_SIZE) {
     const chunk = newTargets.slice(i, i + BATCH_SIZE);
@@ -3535,26 +3536,22 @@ export async function generateVariants(
         }
 
         if (attrValuesToCreate.length > 0) {
-          for (let j = 0; j < attrValuesToCreate.length; j += 2000) {
-            await tx.productVariantAttributeValue.createMany({
-              data: attrValuesToCreate.slice(j, j + 2000),
-              skipDuplicates: true,
-            });
-          }
+          await tx.productVariantAttributeValue.createMany({
+            data: attrValuesToCreate,
+            skipDuplicates: true,
+          });
         }
 
         if (inventoriesToCreate.length > 0) {
-          for (let j = 0; j < inventoriesToCreate.length; j += 2000) {
-            await tx.inventory.createMany({
-              data: inventoriesToCreate.slice(j, j + 2000),
-              skipDuplicates: true,
-            });
-          }
+          await tx.inventory.createMany({
+            data: inventoriesToCreate,
+            skipDuplicates: true,
+          });
         }
 
         return insertedVariants;
       },
-      { timeout: 60000 }
+      { timeout: 30000 }
     );
 
     createdVariantsList.push(...batchResult);
