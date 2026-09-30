@@ -87,7 +87,7 @@ interface TabConfig {
 
 const ALL_TABS: TabConfig[] = [
   { id: 0, label: "Basic Info" },
-  { id: 1, label: "Product Info" },
+  { id: 1, label: "Product Details & Specs" },
   { id: 2, label: "Media" },
   { id: 4, label: "Variants", permission: "variants.view" },
   { id: 5, label: "Pricing", permission: "pricing.view" },
@@ -5563,7 +5563,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       </div>
 
       {/* ── Sticky Action Bar & Status Header ── */}
-      <div className="sticky -top-6 z-20 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E6E6E6] bg-white/95 px-5 py-3 shadow-[0_10px_25px_rgba(0,0,0,0.05)] backdrop-blur relative transition-all">
+      <div className="sticky top-0 z-20 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E6E6E6] bg-white/95 px-4 py-3 sm:px-5 sm:py-3 shadow-[0_10px_25px_rgba(0,0,0,0.05)] backdrop-blur relative transition-all">
         <div className="flex items-center gap-3 min-w-0">
           <div>
             <div className="flex items-center gap-2">
@@ -5588,7 +5588,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {form.dirty && !isReadOnly && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200 shadow-2xs">
               <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
@@ -5626,7 +5626,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       <fieldset disabled={isReadOnly} className="disabled:opacity-100 flex-1 min-w-0">
         <div className="rounded-xl border border-[#E6E6E6] bg-white">
         {activeTab === 0 && (
-          <div className="p-6 space-y-5">
+          <div className="p-4 sm:p-6 space-y-5">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <AdminInput label="Product Title" {...form.getFieldProps("title")} error={form.errors.title as string} />
@@ -5726,24 +5726,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               onChange={(value) => form.setFieldValue("description", value)}
               className="min-h-[220px]"
             />
-
-            <AdminSectionTable
-              title="Product Data & Clinical Guidelines (Images & Instructions)"
-              description='Add demonstration images with rich descriptions (e.g. de-bonding steps, plier instruments, clinical protocols) to display side-by-side with Description on the product page.'
-              addButtonLabel="Add Product Data / Image"
-              onAdd={() => openDirectionModal()}
-              columns={directionCols}
-              data={(form.values.primaryFeatures || []).map((item: any, index: number) => ({ ...item, index }))}
-              rowKey="index"
-              onRowClick={(row) => openDirectionModal(row.index)}
-              rowTooltip="Click row or edit icon to edit product data item"
-              emptyMessage="No product data items added yet."
-            />
           </div>
         )}
 
         {activeTab === 1 && (
-          <div className="p-6 space-y-8">
+          <div className="p-4 sm:p-6 space-y-8">
             <AdminSectionTable
               title="Features"
               description="Add title/description pairs to display in the product Features tab on the frontend."
@@ -5851,9 +5838,9 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </div>
 
             <AdminSectionTable
-              title="Product Data & Clinical Guidelines (Images & Instructions)"
+              title="Clinical Guidelines & Directions for Use (Images & Instructions)"
               description='Add demonstration images with rich descriptions (e.g. de-bonding steps, plier instruments, clinical protocols) to display in the "Direction To Use" tab on the product page.'
-              addButtonLabel="Add Guideline / Image"
+              addButtonLabel="Add Clinical Guideline"
               onAdd={() => openDirectionModal()}
               columns={directionCols}
               data={(form.values.primaryFeatures || []).map((item: any, index: number) => ({ ...item, index }))}
@@ -6388,7 +6375,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         })()}
 
         {activeTab === 4 && (
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="mb-4">
               <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Variants</h3>
               <p className="mt-0.5 text-[12.5px] text-[#9A9A9A]">Variants are created from package + selected attribute values.</p>
@@ -7093,7 +7080,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         )}
 
         {activeTab === 5 && (
-          <div className="space-y-6 p-6">
+          <div className="space-y-6 p-4 sm:p-6">
             {/* Global Base Currency Informational Card */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-[#E0E7FF] bg-[#F8FAFC] p-3.5 shadow-sm">
               <div className="flex items-start sm:items-center gap-3">
@@ -8106,7 +8093,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         )}
 
         {activeTab === 6 && (
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Inventory</h3>
@@ -8517,15 +8504,15 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         )}
 
         {activeTab === 8 && (
-          <div className="p-6">
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div className="p-4 sm:p-6">
+            <div className="mb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <h3 className="text-[14px] font-semibold text-[#1A1A1A]">Product Attributes</h3>
                 <p className="mt-1 max-w-[760px] text-[12.5px] leading-relaxed text-[#6B6B6B]">
                   Mapping attributes here defines which values are valid for this product. Future variant generation uses these mapped attributes by default; products with no mappings can still use the global catalog.
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
                 {canManageAttributes && (
                   <button
                     type="button"
