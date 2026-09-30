@@ -40,18 +40,22 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const faviconHref = settings?.general?.faviconUrl?.trim() || "/favicon.ico";
+    updateFaviconLinks(faviconHref);
+  }, [settings?.general?.faviconUrl]);
+
+  function updateFaviconLinks(href: string) {
     const links = document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']");
     if (links.length > 0) {
       links.forEach((l) => {
-        l.href = faviconHref;
+        l.href = href;
       });
     } else {
       const link = document.createElement("link");
       link.rel = "shortcut icon";
-      link.href = faviconHref;
+      link.href = href;
       document.head.appendChild(link);
     }
-  }, [settings?.general?.faviconUrl]);
+  }
 
   function accept() {
     localStorage.setItem(COOKIE_KEY, "accepted");
