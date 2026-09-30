@@ -76,6 +76,11 @@ export function buildMetadata(entry: SeoEntry, path = "", globalSettings?: any):
     keywords,
     alternates: { canonical },
     robots: entry.robots || "index,follow",
+    icons: {
+      icon: "/favicon.ico",
+      shortcut: "/favicon.ico",
+      apple: "/favicon.ico",
+    },
     openGraph: {
       title,
       description,
@@ -180,8 +185,8 @@ export async function buildCmsMetadata(pageKey: string, fallback: SeoEntry, path
       rawOgImage;
     const twitterImage = resolveAbsoluteUrl(rawTwitterImage, baseUrl);
 
-    const favicon = page?.favicon?.trim() || globalFavicon;
-    const resolvedFavicon = resolveAbsoluteUrl(favicon, baseUrl);
+    const favicon = page?.favicon?.trim() || globalFavicon || "/favicon.ico";
+    const resolvedFavicon = resolveAbsoluteUrl(favicon, baseUrl) || "/favicon.ico";
 
     return {
       title,
@@ -189,7 +194,11 @@ export async function buildCmsMetadata(pageKey: string, fallback: SeoEntry, path
       keywords: rawKeywords,
       alternates: { canonical },
       robots: page?.robotsTag?.trim() || fallback?.robots || "index,follow",
-      icons: resolvedFavicon ? { icon: resolvedFavicon, shortcut: resolvedFavicon, apple: resolvedFavicon } : undefined,
+      icons: {
+        icon: resolvedFavicon,
+        shortcut: resolvedFavicon,
+        apple: resolvedFavicon,
+      },
       openGraph: {
         title: ogTitle,
         description: ogDescription,

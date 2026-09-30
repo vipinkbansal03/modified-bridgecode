@@ -39,14 +39,17 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (settings?.general?.faviconUrl) {
-      let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
-      if (!link) {
-        link = document.createElement("link");
-        link.rel = "shortcut icon";
-        document.head.appendChild(link);
-      }
-      link.href = settings.general.faviconUrl;
+    const faviconHref = settings?.general?.faviconUrl?.trim() || "/favicon.ico";
+    const links = document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']");
+    if (links.length > 0) {
+      links.forEach((l) => {
+        l.href = faviconHref;
+      });
+    } else {
+      const link = document.createElement("link");
+      link.rel = "shortcut icon";
+      link.href = faviconHref;
+      document.head.appendChild(link);
     }
   }, [settings?.general?.faviconUrl]);
 

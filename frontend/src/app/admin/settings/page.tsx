@@ -890,7 +890,7 @@ export default function SettingsPage() {
                       <AdminInput
                         value={g("general.favicon")}
                         onChange={(e) => set("general.favicon", e.target.value)}
-                        placeholder="Default: Standard MO Icon (/icon)"
+                        placeholder="Default: Standard Favicon (/favicon.ico)"
                       />
                       {g("general.favicon") && (
                         <button
