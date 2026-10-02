@@ -217,6 +217,7 @@ export function createActionsColumn<T>(options: {
   label?: ReactNode;
   width?: string;
   align?: "left" | "center" | "right";
+  sticky?: "left" | "right";
   render: (row: T) => ReactNode;
 }) {
   return {
@@ -224,6 +225,7 @@ export function createActionsColumn<T>(options: {
     label: options.label ?? "Actions",
     width: options.width || "100px",
     align: options.align || "right",
+    sticky: options.sticky ?? "right",
     render: options.render,
   };
 }

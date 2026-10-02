@@ -396,6 +396,7 @@ function ProductThumbnail({ url, title }: { url?: string | null; title: string }
         key: "product",
         label: "Product",
         width: "280px",
+        sticky: "left",
         render: (product) => (
           <div className="flex items-center gap-3 min-w-0">
             <ProductThumbnail url={product.media?.[0]?.url} title={product.title} />
@@ -423,7 +424,7 @@ function ProductThumbnail({ url, title }: { url?: string | null; title: string }
       cols.push({
         key: "sku",
         label: "SKU",
-        width: "120px",
+        width: "150px",
         render: (product) => <span className="truncate text-[13px] text-[#555]">{product.sku || "—"}</span>,
       });
     }
@@ -432,7 +433,7 @@ function ProductThumbnail({ url, title }: { url?: string | null; title: string }
       cols.push({
         key: "brand",
         label: "Brand",
-        width: "130px",
+        width: "150px",
         render: (product) => <span className="truncate text-[13px] text-[#555]">{product.brand || "—"}</span>,
       });
     }

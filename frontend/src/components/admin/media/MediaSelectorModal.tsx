@@ -15,6 +15,10 @@ export type MediaSelectorModalProps = {
   title?: string;
   initialType?: "all" | "image" | "document" | "video";
   acceptTypes?: string[];
+  initialEntityType?: string;
+  initialEntityId?: string;
+  initialPurpose?: string;
+  initialFolderName?: string;
 };
 
 export function MediaSelectorModal({
@@ -28,6 +32,10 @@ export function MediaSelectorModal({
   title = "Media Library",
   initialType = "all",
   acceptTypes,
+  initialEntityType,
+  initialEntityId,
+  initialPurpose,
+  initialFolderName,
 }: MediaSelectorModalProps) {
   const isModalOpen = Boolean(open ?? isOpen);
 
@@ -78,6 +86,10 @@ export function MediaSelectorModal({
         mode="select"
         value={value}
         initialType={resolvedInitialType}
+        initialEntityType={initialEntityType}
+        initialEntityId={initialEntityId}
+        initialPurpose={initialPurpose}
+        initialFolderName={initialFolderName}
         onSelect={handleSelect}
         multiple={multiple}
         onSelectMultiple={handleSelectMultiple}

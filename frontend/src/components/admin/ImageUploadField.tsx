@@ -14,6 +14,10 @@ interface Props {
   type?: "image" | "document" | "all";
   title?: string;
   hint?: string;
+  entityType?: string;
+  entityId?: string;
+  purpose?: string;
+  folderName?: string;
 }
 
 function getReadableAssetName(url: string): string {
@@ -47,6 +51,10 @@ export default function ImageUploadField({
   type = "image",
   title = "Media Library",
   hint,
+  entityType,
+  entityId,
+  purpose,
+  folderName,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -165,6 +173,10 @@ export default function ImageUploadField({
         value={value}
         title={title}
         initialType={type}
+        initialEntityType={entityType}
+        initialEntityId={entityId}
+        initialPurpose={purpose}
+        initialFolderName={folderName}
         onClose={() => setOpen(false)}
         onSelect={handleSelect}
       />

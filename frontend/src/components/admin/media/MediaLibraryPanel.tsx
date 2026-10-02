@@ -18,16 +18,32 @@ import {
   ChevronRight,
   AlertCircle,
   X,
+  Folder,
+  FolderOpen,
+  ArrowLeft,
+  Layers,
+  Box,
+  Tag,
+  Users,
+  ShoppingCart,
+  Layout,
+  BookOpen,
+  Info,
+  CornerLeftUp,
 } from "lucide-react";
 import { ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { mediaService, type MediaItem } from "@/services/mediaService";
+import { mediaService, type MediaItem, type MediaFolderItem } from "@/services/mediaService";
 import { getAdminErrorMessage } from "@/services/adminApi";
 
 type Props = {
   mode?: "select" | "manage";
   value?: string;
   initialType?: "all" | "image" | "document" | "video";
+  initialEntityType?: string;
+  initialEntityId?: string;
+  initialPurpose?: string;
+  initialFolderName?: string;
   onSelect?: (media: MediaItem) => void;
   multiple?: boolean;
   onSelectMultiple?: (mediaList: MediaItem[]) => void;
@@ -82,6 +98,10 @@ export default function MediaLibraryPanel({
   mode = "select",
   value = "",
   initialType,
+  initialEntityType,
+  initialEntityId,
+  initialPurpose,
+  initialFolderName,
   onSelect,
   multiple = false,
   onSelectMultiple,
@@ -103,7 +123,13 @@ export default function MediaLibraryPanel({
   const [type, setType] = useState<"all" | "image" | "document" | "video">(
     initialType || (mode === "select" ? "all" : "all")
   );
-  const [entityType, setEntityType] = useState<string>("ALL");
+  // Folder Hierarchy States
+  const [currentEntityType, setCurrentEntityType] = useState<string | undefined>(initialEntityType);
+  const [currentEntityId, setCurrentEntityId] = useState<string | undefined>(initialEntityId);
+  const [currentEntityName, setCurrentEntityName] = useState<string | undefined>(initialFolderName);
+  const [currentPurpose, setCurrentPurpose] = useState<string | undefined>(initialPurpose);
+  const [subfolders, setSubfolders] = useState<MediaFolderItem[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -205,6 +231,37 @@ export default function MediaLibraryPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [carouselItems, currentIndex]);
 
+  // Sync initial props if they change
+  useEffect(() => {
+    if (initialEntityType !== undefined) setCurrentEntityType(initialEntityType);
+    if (initialEntityId !== undefined) setCurrentEntityId(initialEntityId);
+    if (initialPurpose !== undefined) setCurrentPurpose(initialPurpose);
+    if (initialFolderName !== undefined) setCurrentEntityName(initialFolderName);
+  }, [initialEntityType, initialEntityId, initialPurpose, initialFolderName]);
+
+  const loadSubfolders = async () => {
+    if (currentEntityType && currentEntityId && currentPurpose) {
+      setSubfolders([]);
+      return;
+    }
+    try {
+      setFoldersLoading(true);
+      const res = await mediaService.getFolders({
+        entityType: currentEntityType && currentEntityType !== "ALL" ? currentEntityType : undefined,
+        entityId: currentEntityId || undefined,
+      });
+      setSubfolders(res || []);
+    } catch {
+      setSubfolders([]);
+    } finally {
+      setFoldersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSubfolders();
+  }, [currentEntityType, currentEntityId, currentPurpose]);
+
   const loadMedia = async (targetPage = page) => {
     try {
       setLoading(true);
@@ -214,7 +271,9 @@ export default function MediaLibraryPanel({
         limit: 24,
         search: deferredSearch,
         type: type === "all" ? undefined : type,
-        entityType: entityType === "ALL" ? undefined : entityType,
+        entityType: currentEntityType && currentEntityType !== "ALL" ? currentEntityType : undefined,
+        entityId: currentEntityId || undefined,
+        purpose: currentPurpose || undefined,
       });
 
       setItems(res.items);
@@ -266,7 +325,7 @@ export default function MediaLibraryPanel({
 
   useEffect(() => {
     void loadMedia(1);
-  }, [deferredSearch, type, entityType]);
+  }, [deferredSearch, type, currentEntityType, currentEntityId, currentPurpose]);
 
   useEffect(() => {
     if (!selectedMedia) {
@@ -289,7 +348,9 @@ export default function MediaLibraryPanel({
       setSuccess("");
       const fileArray = Array.from(files);
       const res = await mediaService.upload(fileArray, {
-        entityType: entityType !== "ALL" ? entityType : undefined,
+        entityType: currentEntityType && currentEntityType !== "ALL" && currentEntityType !== "UNCATEGORIZED" ? currentEntityType : undefined,
+        entityId: currentEntityId || undefined,
+        purpose: currentPurpose || undefined,
       });
 
       const count = res.length;
@@ -380,6 +441,55 @@ export default function MediaLibraryPanel({
     setMenuOpenId(null);
   };
 
+  const getFolderIcon = (iconName?: string) => {
+    switch (iconName) {
+      case "box": return <Box size={14} className="text-amber-600" />;
+      case "layers": return <Layers size={14} className="text-indigo-600" />;
+      case "folder": return <Folder size={14} className="text-blue-600" />;
+      case "tag": return <Tag size={14} className="text-emerald-600" />;
+      case "users": return <Users size={14} className="text-purple-600" />;
+      case "shopping-cart": return <ShoppingCart size={14} className="text-cyan-600" />;
+      case "video": return <Video size={14} className="text-rose-600" />;
+      case "layout": return <Layout size={14} className="text-teal-600" />;
+      case "book-open": return <BookOpen size={14} className="text-orange-600" />;
+      case "info": return <Info size={14} className="text-sky-600" />;
+      case "image": return <ImageIcon size={14} className="text-pink-600" />;
+      case "file-text":
+      case "file": return <FileText size={14} className="text-slate-600" />;
+      default: return <Folder size={14} className="text-amber-500" />;
+    }
+  };
+
+  const getModuleLabel = (typeKey?: string) => {
+    switch (typeKey?.toUpperCase()) {
+      case "PRODUCT": return "Products";
+      case "VARIANT": return "Variants";
+      case "CATEGORY": return "Categories";
+      case "BRAND": return "Brands";
+      case "CUSTOMER": return "Customers";
+      case "ORDER": return "Orders";
+      case "VIDEO": return "Videos";
+      case "SYSTEM": return "System";
+      case "CMS": return "CMS Pages";
+      case "BLOG": return "Blogs";
+      case "AUTHOR": return "Authors";
+      case "BANNER": return "Banners";
+      case "UNCATEGORIZED": return "Uncategorized";
+      default: return typeKey || "Root";
+    }
+  };
+
+  const getPurposeLabel = (purp?: string) => {
+    switch (purp?.toLowerCase()) {
+      case "gallery": return "Gallery Images";
+      case "specifications": return "Specifications & Diagrams";
+      case "catalogs": return "Catalogs & Brochures";
+      case "basic-info": return "Basic Info Image";
+      case "clinical-guidelines": return "Clinical Guidelines";
+      default: return purp ? purp.charAt(0).toUpperCase() + purp.slice(1) : "General";
+    }
+  };
+
   return (
     <div className={`flex flex-col gap-4 font-sans text-[#1A1A1A] ${mode === "select" ? "h-full min-h-0 flex-1 overflow-hidden" : ""}`}>
       {/* ─── Top Toolbar ─── */}
@@ -429,8 +539,14 @@ export default function MediaLibraryPanel({
           {/* Source Filter Dropdown (Manage mode only) */}
           {mode === "manage" && (
             <select
-              value={entityType}
-              onChange={(e) => setEntityType(e.target.value)}
+              value={currentEntityType || "ALL"}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCurrentEntityType(val === "ALL" ? undefined : val);
+                setCurrentEntityId(undefined);
+                setCurrentEntityName(undefined);
+                setCurrentPurpose(undefined);
+              }}
               className="h-10 px-3 rounded-lg border border-[#E6E6E6] bg-white text-[12.5px] font-medium text-[#1A1A1A] focus:border-[#E31E24] focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Sources</option>
@@ -471,14 +587,154 @@ export default function MediaLibraryPanel({
           <button
             type="button"
             disabled={loading}
-            onClick={() => void loadMedia(page)}
+            onClick={() => {
+              void loadMedia(page);
+              void loadSubfolders();
+            }}
             className="inline-flex items-center gap-1.5 h-10 px-3 rounded-lg border border-[#E6E6E6] bg-white hover:bg-[#F9F9F9] text-[#6B6B6B] hover:text-[#1A1A1A] text-[13px] font-medium transition-colors disabled:opacity-50"
             title="Refresh"
           >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={14} className={loading || foldersLoading ? "animate-spin" : ""} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
+      </div>
+
+      {/* ─── Breadcrumb & Subfolder Navigation Bar ─── */}
+      <div className="shrink-0 flex flex-col gap-2.5 bg-[#FBFBFB] p-3 rounded-xl border border-[#E6E6E6]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Breadcrumb Path */}
+          <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
+            {/* Level 0: Media Root */}
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentEntityType(undefined);
+                setCurrentEntityId(undefined);
+                setCurrentEntityName(undefined);
+                setCurrentPurpose(undefined);
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                !currentEntityType
+                  ? "bg-white text-[#1A1A1A] font-bold shadow-2xs border border-[#E0E0E0]"
+                  : "text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white/80"
+              }`}
+            >
+              <FolderOpen size={14} className="text-[#E31E24]" />
+              <span>Media Library</span>
+            </button>
+
+            {/* Level 1: Module */}
+            {currentEntityType && (
+              <>
+                <span className="text-[#9A9A9A]">/</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentEntityId(undefined);
+                    setCurrentEntityName(undefined);
+                    setCurrentPurpose(undefined);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    !currentEntityId
+                      ? "bg-white text-[#1A1A1A] font-bold shadow-2xs border border-[#E0E0E0]"
+                      : "text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white/80"
+                  }`}
+                >
+                  <span>{getModuleLabel(currentEntityType)}</span>
+                </button>
+              </>
+            )}
+
+            {/* Level 2: Entity */}
+            {currentEntityType && currentEntityId && (
+              <>
+                <span className="text-[#9A9A9A]">/</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentPurpose(undefined);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    !currentPurpose
+                      ? "bg-white text-[#1A1A1A] font-bold shadow-2xs border border-[#E0E0E0]"
+                      : "text-[#6B6B6B] hover:text-[#1A1A1A] hover:bg-white/80"
+                  }`}
+                >
+                  <span className="max-w-[180px] truncate">{currentEntityName || currentEntityId}</span>
+                </button>
+              </>
+            )}
+
+            {/* Level 3: Purpose */}
+            {currentEntityType && currentEntityId && currentPurpose && (
+              <>
+                <span className="text-[#9A9A9A]">/</span>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white text-[#E31E24] font-bold shadow-2xs border border-[#E0E0E0]">
+                  <span>{getPurposeLabel(currentPurpose)}</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Up One Level button if not at root */}
+          {Boolean(currentEntityType) && (
+            <button
+              type="button"
+              onClick={() => {
+                if (currentPurpose) {
+                  setCurrentPurpose(undefined);
+                } else if (currentEntityId) {
+                  setCurrentEntityId(undefined);
+                  setCurrentEntityName(undefined);
+                } else if (currentEntityType) {
+                  setCurrentEntityType(undefined);
+                }
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white hover:bg-[#F0F0F0] text-[#4A4A4A] hover:text-[#1A1A1A] text-[11.5px] font-semibold border border-[#E0E0E0] transition-colors cursor-pointer shadow-2xs ml-auto"
+            >
+              <CornerLeftUp size={13} />
+              <span>Up Level</span>
+            </button>
+          )}
+        </div>
+
+        {/* Subfolder Chips */}
+        {subfolders.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#EDEDED]">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9A9A9A] mr-1">
+              Folders:
+            </span>
+            {subfolders.map((folder) => (
+              <button
+                key={folder.id}
+                type="button"
+                onClick={() => {
+                  if (!currentEntityType) {
+                    // Clicking module folder
+                    setCurrentEntityType(folder.id);
+                  } else if (!currentEntityId) {
+                    // Clicking entity folder
+                    setCurrentEntityId(folder.id);
+                    setCurrentEntityName(folder.name);
+                  } else {
+                    // Clicking purpose folder
+                    setCurrentPurpose(folder.id);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white hover:bg-[#F2F4F8] hover:border-[#1E5AF9]/40 border border-[#E6E6E6] text-[12px] font-medium text-[#1A1A1A] transition-all cursor-pointer shadow-2xs hover:shadow-xs group"
+              >
+                {getFolderIcon(folder.icon)}
+                <span className="group-hover:text-[#1E5AF9] transition-colors font-medium">
+                  {folder.name}
+                </span>
+                <span className="px-1.5 py-0.2 rounded-full bg-[#F0F0F0] group-hover:bg-blue-50 group-hover:text-[#1E5AF9] text-[#6B6B6B] text-[10.5px] font-bold">
+                  {folder.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Alerts */}

@@ -85,6 +85,7 @@ export interface Column<T> {
   label: React.ReactNode;
   width?: string;
   align?: "left" | "center" | "right";
+  sticky?: "left" | "right";
   render?: (row: T) => ReactNode;
   enableStatusToggle?: boolean;
   getStatus?: (row: T) => string | boolean;
@@ -180,6 +181,9 @@ export function DataTable<T>({
 
   const totalColumns =
     columns.length + (enableReorder ? 1 : 0) + (enableSelection ? 1 : 0);
+  const hasStickyLeft = columns.some((c) => c.sticky === "left");
+  const stickyLeftPrefixWidth =
+    (enableReorder ? 36 : 0) + (enableSelection ? 36 : 0);
   const hasBulkActionsActive = enableSelection && !!renderBulkActions;
   const isUnifiedToolbar = totalItems !== undefined;
   const hasMetaCard = Boolean(
@@ -339,10 +343,33 @@ export function DataTable<T>({
               <thead className="bg-[#F8F8F8] border-b border-[#E6E6E6]">
                 <tr>
                   {enableReorder && (
-                    <th className="px-2 py-3 w-9 text-center" />
+                    <th
+                      className={cn(
+                        "px-2 py-3 w-9 text-center",
+                        hasStickyLeft && "sticky left-0 z-20 bg-[#F8F8F8]",
+                      )}
+                      style={{
+                        width: "36px",
+                        minWidth: "36px",
+                        maxWidth: "36px",
+                      }}
+                    />
                   )}
                   {enableSelection && (
-                    <th className="px-2 py-3 w-9 text-center">
+                    <th
+                      className={cn(
+                        "px-2 py-3 w-9 text-center",
+                        hasStickyLeft && "sticky z-20 bg-[#F8F8F8]",
+                      )}
+                      style={{
+                        width: "36px",
+                        minWidth: "36px",
+                        maxWidth: "36px",
+                        ...(hasStickyLeft
+                          ? { left: enableReorder ? 36 : 0 }
+                          : {}),
+                      }}
+                    >
                       <Tooltip content="Select all" side="top">
                         <input
                           type="checkbox"
@@ -382,14 +409,30 @@ export function DataTable<T>({
                         : col.align === "center"
                           ? "text-center"
                           : "text-left";
+                    const isStickyRight =
+                      col.sticky === "right" ||
+                      col.key === "actions" ||
+                      col.key === "action";
+                    const isStickyLeft = col.sticky === "left";
                     return (
                       <th
                         key={String(col.key)}
                         className={cn(
                           "px-4 py-3 text-[11.5px] font-semibold uppercase tracking-wide text-[#9A9A9A]",
                           alignClass,
+                          isStickyRight &&
+                            "sticky right-0 z-20 bg-[#F8F8F8] shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-[#E6E6E6]",
+                          isStickyLeft &&
+                            "sticky z-20 bg-[#F8F8F8] shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)] border-r border-[#E6E6E6]",
                         )}
-                        style={col.width ? { width: col.width } : undefined}
+                        style={{
+                          ...(col.width
+                            ? { width: col.width, minWidth: col.width }
+                            : {}),
+                          ...(isStickyLeft
+                            ? { left: stickyLeftPrefixWidth }
+                            : {}),
+                        }}
                       >
                         {col.label}
                       </th>
@@ -402,12 +445,35 @@ export function DataTable<T>({
                   Array.from({ length: Math.min(pageSize || 5, 5) }).map((_, i) => (
                     <tr key={i} className="h-[53px]">
                       {enableReorder && (
-                        <td className="px-2 py-3 w-9 text-center">
+                        <td
+                          className={cn(
+                            "px-2 py-3 w-9 text-center",
+                            hasStickyLeft && "sticky left-0 z-10 bg-white",
+                          )}
+                          style={{
+                            width: "36px",
+                            minWidth: "36px",
+                            maxWidth: "36px",
+                          }}
+                        >
                           <div className="h-4 w-4 animate-pulse rounded bg-[#E6E6E6] mx-auto" />
                         </td>
                       )}
                       {enableSelection && (
-                        <td className="px-2 py-3 w-9 text-center">
+                        <td
+                          className={cn(
+                            "px-2 py-3 w-9 text-center",
+                            hasStickyLeft && "sticky z-10 bg-white",
+                          )}
+                          style={{
+                            width: "36px",
+                            minWidth: "36px",
+                            maxWidth: "36px",
+                            ...(hasStickyLeft
+                              ? { left: enableReorder ? 36 : 0 }
+                              : {}),
+                          }}
+                        >
                           <div className="h-4 w-4 animate-pulse rounded bg-[#E6E6E6] mx-auto" />
                         </td>
                       )}
@@ -418,11 +484,30 @@ export function DataTable<T>({
                             : col.align === "center"
                               ? "text-center"
                               : "text-left";
+                        const isStickyRight =
+                          col.sticky === "right" ||
+                          col.key === "actions" ||
+                          col.key === "action";
+                        const isStickyLeft = col.sticky === "left";
                         return (
                           <td
                             key={String(col.key || j)}
-                            className={cn("px-4 py-3.5", alignClass)}
-                            style={col.width ? { width: col.width } : undefined}
+                            className={cn(
+                              "px-4 py-3.5",
+                              alignClass,
+                              isStickyRight &&
+                                "sticky right-0 z-10 bg-white shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-[#E6E6E6]",
+                              isStickyLeft &&
+                                "sticky z-10 bg-white shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)] border-r border-[#E6E6E6]",
+                            )}
+                            style={{
+                              ...(col.width
+                                ? { width: col.width, minWidth: col.width }
+                                : {}),
+                              ...(isStickyLeft
+                                ? { left: stickyLeftPrefixWidth }
+                                : {}),
+                            }}
                           >
                             <div
                               className={cn(
@@ -498,7 +583,7 @@ export function DataTable<T>({
                         onClick={() => onRowClick?.(row)}
                         title={tooltip}
                         className={cn(
-                          "transition-colors",
+                          "group transition-colors",
                           onRowClick
                             ? "cursor-pointer hover:bg-[#FFF8F8]"
                             : "hover:bg-[#FAFAFA]",
@@ -510,7 +595,25 @@ export function DataTable<T>({
                         )}
                       >
                         {enableReorder && (
-                          <td className="px-2 py-3 w-9 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-center">
+                          <td
+                            className={cn(
+                              "px-2 py-3 w-9 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-center",
+                              hasStickyLeft &&
+                                cn(
+                                  "sticky left-0 z-10 bg-white",
+                                  onRowClick
+                                    ? "group-hover:bg-[#FFF8F8]"
+                                    : "group-hover:bg-[#FAFAFA]",
+                                  selectedIds.includes(rowId) &&
+                                    "bg-[#FFFBFB] group-hover:bg-[#FFF5F5]",
+                                ),
+                            )}
+                            style={{
+                              width: "36px",
+                              minWidth: "36px",
+                              maxWidth: "36px",
+                            }}
+                          >
                             <div className="flex justify-center items-center">
                               <Tooltip content="Drag to reorder" side="top">
                                 <span className="inline-flex cursor-grab active:cursor-grabbing">
@@ -522,7 +625,26 @@ export function DataTable<T>({
                         )}
                         {enableSelection && (
                           <td
-                            className="px-2 py-3 w-9 text-center"
+                            className={cn(
+                              "px-2 py-3 w-9 text-center",
+                              hasStickyLeft &&
+                                cn(
+                                  "sticky z-10 bg-white",
+                                  onRowClick
+                                    ? "group-hover:bg-[#FFF8F8]"
+                                    : "group-hover:bg-[#FAFAFA]",
+                                  selectedIds.includes(rowId) &&
+                                    "bg-[#FFFBFB] group-hover:bg-[#FFF5F5]",
+                                ),
+                            )}
+                            style={{
+                              width: "36px",
+                              minWidth: "36px",
+                              maxWidth: "36px",
+                              ...(hasStickyLeft
+                                ? { left: enableReorder ? 36 : 0 }
+                                : {}),
+                            }}
                             onClick={(e) => e.stopPropagation()}
                           >
                             <div className="flex justify-center items-center">
@@ -661,6 +783,11 @@ export function DataTable<T>({
                               : col.align === "center"
                                 ? "text-center"
                                 : "text-left";
+                          const isStickyRight =
+                            col.sticky === "right" ||
+                            col.key === "actions" ||
+                            col.key === "action";
+                          const isStickyLeft = col.sticky === "left";
 
                           return (
                             <td
@@ -668,10 +795,33 @@ export function DataTable<T>({
                               className={cn(
                                 "px-4 py-3 text-[13.5px] text-[#1A1A1A]",
                                 alignClass,
+                                isStickyRight &&
+                                  cn(
+                                    "sticky right-0 z-10 bg-white shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] border-l border-[#E6E6E6]",
+                                    onRowClick
+                                      ? "group-hover:bg-[#FFF8F8]"
+                                      : "group-hover:bg-[#FAFAFA]",
+                                    selectedIds.includes(rowId) &&
+                                      "bg-[#FFFBFB] group-hover:bg-[#FFF5F5]",
+                                  ),
+                                isStickyLeft &&
+                                  cn(
+                                    "sticky z-10 bg-white shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)] border-r border-[#E6E6E6]",
+                                    onRowClick
+                                      ? "group-hover:bg-[#FFF8F8]"
+                                      : "group-hover:bg-[#FAFAFA]",
+                                    selectedIds.includes(rowId) &&
+                                      "bg-[#FFFBFB] group-hover:bg-[#FFF5F5]",
+                                  ),
                               )}
-                              style={
-                                col.width ? { width: col.width } : undefined
-                              }
+                              style={{
+                                ...(col.width
+                                  ? { width: col.width, minWidth: col.width }
+                                  : {}),
+                                ...(isStickyLeft
+                                  ? { left: stickyLeftPrefixWidth }
+                                  : {}),
+                              }}
                             >
                               {cellContent}
                             </td>
@@ -2178,7 +2328,7 @@ interface AdminRichTextEditorProps {
   className?: string;
   error?: string;
   label?: string;
-  mediaContext?: { entityType: string; entityId?: string };
+  mediaContext?: { entityType: string; entityId?: string; purpose?: string; folderName?: string };
   maxLength?: number;
   showCharCount?: boolean;
   hideImageUpload?: boolean;
@@ -3234,6 +3384,10 @@ export function AdminRichTextEditor({
           setMediaSelectorOpen(false);
         }}
         initialType="image"
+        initialEntityType={mediaContext?.entityType}
+        initialEntityId={mediaContext?.entityId}
+        initialPurpose={mediaContext?.purpose}
+        initialFolderName={mediaContext?.folderName}
         title="Select Image from Media Library"
       />
 

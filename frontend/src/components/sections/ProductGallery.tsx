@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, ImageOff, Maximize2, X } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -20,6 +20,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
 
   const [index, setIndex] = useState(0);
   const [zoomed, setZoomed] = useState(false);
+  const thumbScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!zoomed) return;
@@ -33,6 +34,16 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
       document.body.style.overflow = "";
     };
   }, [zoomed]);
+
+  // Keep thumbnail in view when navigating
+  useEffect(() => {
+    if (thumbScrollRef.current) {
+      const activeBtn = thumbScrollRef.current.children[index] as HTMLElement | undefined;
+      if (activeBtn) {
+        activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      }
+    }
+  }, [index]);
 
   const go = (delta: number) => {
     if (!safeImages.length) return;
@@ -51,9 +62,9 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
 
   return (
     <>
-      <div className="flex flex-col gap-3.5 w-full">
+      <div className="flex flex-col gap-3.5 w-full min-w-0 max-w-full overflow-hidden">
         {/* Main Image Box */}
-        <div className="relative flex min-h-[280px] sm:min-h-[340px] lg:min-h-[380px] w-full items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4">
+        <div className="relative flex min-h-[320px] sm:min-h-[400px] lg:min-h-[460px] aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:p-6">
           {/* Previous Arrow */}
           {safeImages.length > 1 && (
             <button
@@ -75,7 +86,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") setZoomed(true);
             }}
-            className="relative h-[240px] sm:h-[300px] lg:h-[340px] w-full max-w-[90%] cursor-zoom-in"
+            className="relative h-full w-full max-h-[420px] max-w-[95%] cursor-zoom-in flex items-center justify-center"
           >
             {safeImages[index]?.startsWith("data:") ? (
               <img src={safeImages[index]} alt={title} className="h-full w-full object-contain transition-all duration-300" />
@@ -84,7 +95,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
                 src={safeImages[index]}
                 alt={title}
                 fill
-                sizes="(max-width: 768px) 90vw, 550px"
+                sizes="(max-width: 768px) 90vw, 600px"
                 className="object-contain transition-all duration-300"
                 priority
                 unoptimized={safeImages[index]?.startsWith("http://") || safeImages[index]?.startsWith("https://")}
@@ -107,33 +118,68 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
 
         {/* Thumbnail Strip - Downside (Horizontal underneath main image) */}
         {safeImages.length > 1 && (
-          <div className="flex items-center gap-2.5 overflow-x-auto py-1 [scrollbar-width:thin]">
-            {safeImages.map((img: string, i: number) => (
-              <button
-                key={`${img}-${i}`}
-                type="button"
-                onClick={() => setIndex(i)}
-                className={cn(
-                  "relative flex h-[68px] w-[68px] sm:h-[72px] sm:w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border bg-[#FAFAFA] p-1 transition-all cursor-pointer",
-                  index === i
-                    ? "border-[#E31E24] shadow-xs ring-1 ring-[#E31E24]/30 scale-102 bg-white"
-                    : "border-[#E5E7EB] opacity-75 hover:opacity-100 hover:border-slate-300"
-                )}
-              >
-                {img.startsWith("data:") ? (
-                  <img src={img} alt={`${title} thumbnail ${i + 1}`} className="h-full w-full object-contain p-0.5" />
-                ) : (
-                  <Image
-                    src={img}
-                    alt={`${title} thumbnail ${i + 1}`}
-                    fill
-                    sizes="72px"
-                    className="object-contain p-0.5"
-                    unoptimized={img?.startsWith("http://") || img?.startsWith("https://")}
-                  />
-                )}
-              </button>
-            ))}
+          <div className="relative w-full min-w-0 group py-1">
+            <div
+              ref={thumbScrollRef}
+              className="flex items-center gap-2 overflow-x-auto py-1 px-1 scroll-smooth no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none]"
+            >
+              {safeImages.map((img: string, i: number) => (
+                <button
+                  key={`${img}-${i}`}
+                  type="button"
+                  onClick={() => setIndex(i)}
+                  className={cn(
+                    "relative flex h-[62px] w-[62px] sm:h-[68px] sm:w-[68px] shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-[#FAFAFA] p-1 transition-all cursor-pointer",
+                    index === i
+                      ? "border-[#E31E24] shadow-xs ring-2 ring-[#E31E24]/30 scale-102 bg-white opacity-100"
+                      : "border-[#E5E7EB] opacity-70 hover:opacity-100 hover:border-slate-300"
+                  )}
+                >
+                  {img.startsWith("data:") ? (
+                    <img src={img} alt={`${title} thumbnail ${i + 1}`} className="h-full w-full object-contain p-0.5" />
+                  ) : (
+                    <Image
+                      src={img}
+                      alt={`${title} thumbnail ${i + 1}`}
+                      fill
+                      sizes="72px"
+                      className="object-contain p-0.5"
+                      unoptimized={img?.startsWith("http://") || img?.startsWith("https://")}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Left & Right Chevron controls when multiple images exist */}
+            {safeImages.length > 5 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Scroll thumbnails left"
+                  onClick={() => {
+                    if (thumbScrollRef.current) {
+                      thumbScrollRef.current.scrollBy({ left: -180, behavior: "smooth" });
+                    }
+                  }}
+                  className="absolute left-1 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-7 w-7 items-center justify-center rounded-full bg-white/95 border border-[#E5E7EB] text-[#1A1A1A] shadow-md hover:bg-white hover:scale-105 transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Scroll thumbnails right"
+                  onClick={() => {
+                    if (thumbScrollRef.current) {
+                      thumbScrollRef.current.scrollBy({ left: 180, behavior: "smooth" });
+                    }
+                  }}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 z-10 hidden sm:flex h-7 w-7 items-center justify-center rounded-full bg-white/95 border border-[#E5E7EB] text-[#1A1A1A] shadow-md hover:bg-white hover:scale-105 transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

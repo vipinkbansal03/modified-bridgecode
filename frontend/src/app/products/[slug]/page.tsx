@@ -263,12 +263,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </div>
 
           {/* Top Fold: Gallery Left, Header & Description Right */}
-          <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr] items-start">
-            <div className="lg:sticky lg:top-[140px] lg:self-start">
+          <div className="grid grid-cols-1 gap-8 border-b border-line pb-8 sm:grid-cols-[1.1fr_1fr] items-start min-w-0">
+            <div className="min-w-0 max-w-full lg:sticky lg:top-[140px] lg:self-start">
               <ProductGallery images={product.images} title={product.title} />
             </div>
 
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <h1 className="text-[28px] font-normal leading-tight tracking-tight text-[#111827] sm:text-[32px] sm:leading-tight">
                   {product.title}
@@ -428,7 +428,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   </div>
                   <div>
                     <span className="font-bold text-[#111827] block text-[13px]">{t("ui.pdp.shippingTitle")}</span>
-                    <span className="text-[12px] text-[#6B7280]">{t("ui.pdp.shippingSubtitle")}</span>
+                    <span className="text-[12px] text-[#6B6B6B]">{t("ui.pdp.shippingSubtitle")}</span>
                   </div>
                 </div>
               </div>

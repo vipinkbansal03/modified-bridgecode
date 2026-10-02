@@ -23,6 +23,13 @@ export interface MediaItem {
   purpose?: string | null;
 }
 
+export interface MediaFolderItem {
+  id: string;
+  name: string;
+  icon?: string;
+  count: number;
+}
+
 export interface MediaListResponse {
   items: MediaItem[];
   pagination: {
@@ -40,6 +47,10 @@ export const mediaService = {
     search?: string;
     type?: "all" | "image" | "document" | "video";
     entityType?: string;
+    entityId?: string;
+    purpose?: string;
+    folder?: string;
+    uncategorized?: string;
   } = {}): Promise<MediaListResponse> {
     const res = await adminApi.get("/media", { params });
     return {
@@ -51,6 +62,15 @@ export const mediaService = {
         totalPages: 1,
       },
     };
+  },
+
+  async getFolders(params?: {
+    entityType?: string;
+    entityId?: string;
+    purpose?: string;
+  }): Promise<MediaFolderItem[]> {
+    const res = await adminApi.get("/media/folders", { params });
+    return res.data?.data || [];
   },
 
   async upload(

@@ -11479,6 +11479,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={pdfMediaSelectorOpen}
         title="Media Library"
         initialType="document"
+        initialEntityType="PRODUCT"
+        initialEntityId={productId !== "new" ? productId : undefined}
+        initialFolderName={form.values.title || undefined}
+        initialPurpose="catalogs"
         onClose={() => setPdfMediaSelectorOpen(false)}
         onSelect={handleAttachCatalogueFromMedia}
       />
@@ -11487,6 +11491,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={imageMediaSelectorOpen}
         title="Media Library"
         initialType="image"
+        initialEntityType="PRODUCT"
+        initialEntityId={productId !== "new" ? productId : undefined}
+        initialFolderName={form.values.title || undefined}
+        initialPurpose="gallery"
         multiple={true}
         onClose={() => setImageMediaSelectorOpen(false)}
         onSelect={handleAttachProductImageFromMedia}
@@ -11497,6 +11505,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={infoImageSelectorOpen}
         title="Media Library"
         initialType="image"
+        initialEntityType="PRODUCT"
+        initialEntityId={productId !== "new" ? productId : undefined}
+        initialFolderName={form.values.title || undefined}
+        initialPurpose="basic-info"
         onClose={() => setInfoImageSelectorOpen(false)}
         onSelect={(media) => {
           form.setFieldValue("informationImage", media.url);
@@ -11509,12 +11521,27 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={specDiagramSelectorOpen}
         title="Media Library"
         initialType="image"
+        initialEntityType="PRODUCT"
+        initialEntityId={productId !== "new" ? productId : undefined}
+        initialFolderName={form.values.title || undefined}
+        initialPurpose="specifications"
+        multiple={true}
         onClose={() => setSpecDiagramSelectorOpen(false)}
         onSelect={(media) => {
           const existing = form.values.specImages || [];
-          form.setFieldValue("specImages", [...existing, { url: media.url, title: media.originalName }]);
+          form.setFieldValue("specImages", [...existing, { url: media.url, title: media.title || media.originalName || "" }]);
           setSpecDiagramSelectorOpen(false);
           showToast("Specification diagram added.");
+        }}
+        onSelectMultiple={(mediaList) => {
+          const existing = form.values.specImages || [];
+          const newItems = mediaList.map((media) => ({
+            url: media.url,
+            title: media.title || media.originalName || "",
+          }));
+          form.setFieldValue("specImages", [...existing, ...newItems]);
+          setSpecDiagramSelectorOpen(false);
+          showToast(`Added ${newItems.length} specification diagram${newItems.length === 1 ? "" : "s"}.`);
         }}
       />
 
@@ -11522,6 +11549,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={packageMediaSelectorOpen}
         title="Media Library"
         initialType="image"
+        initialEntityType="PRODUCT"
+        initialEntityId={productId !== "new" ? productId : undefined}
+        initialFolderName={form.values.title || undefined}
+        initialPurpose="gallery"
         onClose={() => setPackageMediaSelectorOpen(false)}
         onSelect={(media) => {
           setPackageImage(media.url);
@@ -11534,6 +11565,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         open={directionMediaSelectorOpen}
         title="Select Demonstration Image"
         initialType="image"
+        initialEntityType="PRODUCT"
+        initialEntityId={productId !== "new" ? productId : undefined}
+        initialFolderName={form.values.title || undefined}
+        initialPurpose="clinical-guidelines"
         onClose={() => setDirectionMediaSelectorOpen(false)}
         onSelect={(media) => {
           setDirectionImageState(media.url);

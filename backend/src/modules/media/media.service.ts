@@ -149,12 +149,50 @@ export async function getMediaFolders(query: { entityType?: string; entityId?: s
     }
     return results;
   }
-  
-  // 3. Purpose Level - User requested to remove purpose subfolders
+
+  // 3. Purpose Level (e.g. Products -> [Product Name] -> Gallery / Specifications / Catalogs / Basic Info)
   if (query.entityType && query.entityId) {
-    return [];
+    const purposeCounts = await prisma.media.groupBy({
+      by: ['purpose'],
+      where: { entityType: query.entityType, entityId: query.entityId },
+      _count: { id: true }
+    });
+
+    if (query.entityType === "PRODUCT") {
+      const standardPurposes = [
+        { id: "gallery", name: "Gallery Images", icon: "image" },
+        { id: "specifications", name: "Specifications & Diagrams", icon: "file-text" },
+        { id: "catalogs", name: "Product Brochure / Catalogs", icon: "file" },
+        { id: "basic-info", name: "Basic Info Image", icon: "info" },
+        { id: "clinical-guidelines", name: "Clinical Guidelines", icon: "book-open" },
+      ];
+
+      const customPurposes = purposeCounts
+        .filter(p => p.purpose && !standardPurposes.some(sp => sp.id.toLowerCase() === p.purpose?.toLowerCase()))
+        .map(p => ({
+          id: p.purpose as string,
+          name: p.purpose as string,
+          icon: "folder",
+          count: p._count.id
+        }));
+
+      return [
+        ...standardPurposes.map(sp => ({
+          ...sp,
+          count: purposeCounts.find(p => p.purpose?.toLowerCase() === sp.id.toLowerCase())?._count.id || 0
+        })),
+        ...customPurposes
+      ];
+    } else {
+      return purposeCounts.map(p => ({
+        id: p.purpose || "general",
+        name: p.purpose ? p.purpose.charAt(0).toUpperCase() + p.purpose.slice(1) : "General",
+        icon: "folder",
+        count: p._count.id
+      }));
+    }
   }
-  
+
   return [];
 }
 
