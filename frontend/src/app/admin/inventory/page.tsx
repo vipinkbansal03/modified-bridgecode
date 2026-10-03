@@ -1282,19 +1282,21 @@ export default function InventoryPage() {
             showToast("Warehouse unassigned.", "success");
             setUnassignTarget(null);
             refetch();
+            dashboard.refetch();
           } catch (err: any) {
-            showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
+            showToast(getAdminErrorMessage(err, "Error unassigning warehouse."), "error");
           }
         }}
         onPermanentDelete={async () => {
           if (!unassignTarget) return;
           try {
-            await adminApi.delete(`/inventory/${unassignTarget.id}`);
+            await adminApi.delete(`/inventory/${unassignTarget.id}?force=true`);
             showToast("Warehouse unassigned.", "success");
             setUnassignTarget(null);
             refetch();
+            dashboard.refetch();
           } catch (err: any) {
-            showToast(err?.response?.data?.error || "Error unassigning warehouse.", "error");
+            showToast(getAdminErrorMessage(err, "Error unassigning warehouse."), "error");
           }
         }}
       />
@@ -1308,12 +1310,22 @@ export default function InventoryPage() {
         onSoftDelete={async () => {
           setBulkSaving(true);
           try {
-            await Promise.all(selectedIds.map((id) => adminApi.delete(`/inventory/${id}`)));
+            const res = await adminApi.post<{ success: boolean; data: { deletedCount: number; skippedCount: number; skippedDetails: string[] } }>("/inventory/bulk-delete", {
+              ids: selectedIds,
+              forceHardDelete: false,
+            });
+            const { deletedCount, skippedCount } = res.data?.data || { deletedCount: 0, skippedCount: 0 };
+            const totalTargeted = selectedIds.length;
             setSelectedIds([]);
             setBulkAction("");
             setShowBulkDeleteModal(false);
-            showToast(`Successfully deleted ${selectedIds.length} warehouse assignment(s).`, "success");
+            if (skippedCount > 0) {
+              showToast(`Deleted ${deletedCount} of ${totalTargeted} item(s). ${skippedCount} item(s) skipped due to active order reservations.`, "warning");
+            } else {
+              showToast(`Successfully deleted ${deletedCount} warehouse assignment(s).`, "success");
+            }
             refetch();
+            dashboard.refetch();
           } catch (error) {
             showToast(getAdminErrorMessage(error, "Failed to delete warehouse assignments."), "error");
           } finally {
@@ -1323,12 +1335,17 @@ export default function InventoryPage() {
         onPermanentDelete={async () => {
           setBulkSaving(true);
           try {
-            await Promise.all(selectedIds.map((id) => adminApi.delete(`/inventory/${id}`)));
+            const res = await adminApi.post<{ success: boolean; data: { deletedCount: number; skippedCount: number; skippedDetails: string[] } }>("/inventory/bulk-delete", {
+              ids: selectedIds,
+              forceHardDelete: true,
+            });
+            const { deletedCount } = res.data?.data || { deletedCount: 0 };
             setSelectedIds([]);
             setBulkAction("");
             setShowBulkDeleteModal(false);
-            showToast(`Successfully deleted ${selectedIds.length} warehouse assignment(s).`, "success");
+            showToast(`Successfully deleted ${deletedCount} warehouse assignment(s).`, "success");
             refetch();
+            dashboard.refetch();
           } catch (error) {
             showToast(getAdminErrorMessage(error, "Failed to delete warehouse assignments."), "error");
           } finally {

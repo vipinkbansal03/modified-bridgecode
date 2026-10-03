@@ -728,9 +728,10 @@ function getRowField(row: Record<string, any>, ...possibleKeys: string[]): strin
 }
 
 function normalizeRole(roleStr: string): AttributeRole {
+  if (!roleStr) return "DROPDOWN";
   const upper = roleStr.toUpperCase().trim().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_");
-  if (upper.includes("X_GRID") || upper === "XGRID" || upper.includes("X_AXIS") || upper === "COLUMN") return "X_GRID";
-  if (upper.includes("Y_GRID") || upper === "YGRID" || upper.includes("Y_AXIS") || upper === "ROW") return "Y_GRID";
+  if (upper === "X" || upper === "X_AXIS" || upper.includes("X_GRID") || upper === "XGRID" || upper === "COLUMN") return "X_GRID";
+  if (upper === "Y" || upper === "Y_AXIS" || upper.includes("Y_GRID") || upper === "YGRID" || upper === "ROW") return "Y_GRID";
   return "DROPDOWN";
 }
 
@@ -738,6 +739,31 @@ function normalizeStatus(stStr: string): AttributeStatus {
   const upper = stStr.toUpperCase().trim();
   if (upper === "INACTIVE" || upper === "DISABLED" || upper === "FALSE" || upper === "0") return "INACTIVE";
   return "ACTIVE";
+}
+
+export function parseAttributeValuesString(valuesStr?: string | null): string[] {
+  if (!valuesStr) return [];
+  const str = String(valuesStr).trim();
+  if (!str) return [];
+
+  // Priority 1: Pipe delimiter '|'
+  if (str.includes("|")) {
+    return str.split("|").map((s) => s.trim()).filter(Boolean);
+  }
+
+  // Priority 2: Newlines
+  if (str.includes("\n")) {
+    return str.split("\n").map((s) => s.trim()).filter(Boolean);
+  }
+
+  // Priority 3: Semicolons
+  if (str.includes(";")) {
+    return str.split(";").map((s) => s.trim()).filter(Boolean);
+  }
+
+  // If no pipe/newline/semicolon is used, treat entire string as one single value
+  // This preserves values with internal commas like "Hooks on 3,4 & 5"
+  return [str];
 }
 
 export async function exportAttributesSpreadsheet() {
@@ -760,7 +786,7 @@ export async function exportAttributesSpreadsheet() {
         }
         return v.value;
       })
-      .join(", ");
+      .join(" | ");
 
     return {
       attributeName: attr.name,
@@ -787,15 +813,15 @@ export function generateSampleAttributesTemplate() {
       displayType: "X_GRID",
       status: "ACTIVE",
       sortOrder: 1,
-      values: ".018, .022 (+15)",
+      values: ".018 | .022 (+15)",
     },
     {
-      attributeName: "Hook",
-      slug: "hook",
+      attributeName: "Hook Configuration",
+      slug: "hook-configuration",
       displayType: "Y_GRID",
       status: "ACTIVE",
       sortOrder: 2,
-      values: "None, Hook 3, Hook 4 (+8), Hook 5 (+12)",
+      values: "Hooks on 3 | Hooks on 3 with Offset | Hooks on 3,4 & 5 | Hooks on 3,4 & 5 with Offset (+12) | No Hooks",
     },
     {
       attributeName: "Prescription",
@@ -803,7 +829,7 @@ export function generateSampleAttributesTemplate() {
       displayType: "DROPDOWN",
       status: "ACTIVE",
       sortOrder: 3,
-      values: "MBT, Roth, Alexander (+12), Standard Edgewise",
+      values: "MBT | Roth | Alexander (+12) | Standard Edgewise",
     },
     {
       attributeName: "Wire Size",
@@ -811,7 +837,7 @@ export function generateSampleAttributesTemplate() {
       displayType: "X_GRID",
       status: "ACTIVE",
       sortOrder: 4,
-      values: ".014, .016, .018, .018 x .025, .019 x .025 (+20)",
+      values: ".014 | .016 | .018 | .018 x .025 | .019 x .025 (+20)",
     },
     {
       attributeName: "Arch",
@@ -819,7 +845,7 @@ export function generateSampleAttributesTemplate() {
       displayType: "Y_GRID",
       status: "ACTIVE",
       sortOrder: 5,
-      values: "Upper, Lower",
+      values: "Upper | Lower",
     },
     {
       attributeName: "Material",
@@ -827,7 +853,7 @@ export function generateSampleAttributesTemplate() {
       displayType: "DROPDOWN",
       status: "ACTIVE",
       sortOrder: 6,
-      values: "Stainless Steel, Titanium (+25), Ceramic (+40)",
+      values: "Stainless Steel | Titanium (+25) | Ceramic (+40)",
     },
     {
       attributeName: "Size",
@@ -835,7 +861,7 @@ export function generateSampleAttributesTemplate() {
       displayType: "DROPDOWN",
       status: "ACTIVE",
       sortOrder: 7,
-      values: ".012, .014 (+6), .016 (+12)",
+      values: ".012 | .014 (+6) | .016 (+12)",
     },
     {
       attributeName: "Pack Size",
@@ -843,7 +869,7 @@ export function generateSampleAttributesTemplate() {
       displayType: "DROPDOWN",
       status: "ACTIVE",
       sortOrder: 8,
-      values: "Single, 5 Pack (+35), 10 Pack (+60)",
+      values: "Individual Brackets - Pk of 10 pcs | Kit of 20 Brackets (+35) | Full Case (+60)",
     },
   ];
 
@@ -858,80 +884,84 @@ export async function previewAttributeImport(filePath: string) {
   const rawRows = readSpreadsheetRows(filePath);
   const issues: Array<{ row: number; field: string; message: string }> = [];
   const duplicateWarnings: string[] = [];
-  const previewRows: Record<string, unknown>[] = [];
 
-  const seenAttrNames = new Set<string>();
+  type AggregatedAttrPreview = {
+    rowNumber: number;
+    attrName: string;
+    slug?: string;
+    role: AttributeRole;
+    status: AttributeStatus;
+    sortOrder: number;
+    values: string[];
+  };
+
+  const aggregatedMap = new Map<string, AggregatedAttrPreview>();
 
   rawRows.forEach((row, index) => {
     const rowNumber = index + 2;
     const attrName = getRowField(row, "attributeName", "name", "attribute", "attribute_name", "title");
     const roleStr = getRowField(row, "displayType", "role", "display_type", "type", "gridAxis");
     const valuesStr = getRowField(row, "values", "value", "options", "attributeValues", "allowedValues");
+    const slugStr = getRowField(row, "slug", "attributeSlug");
+    const statusStr = getRowField(row, "status", "attributeStatus");
+    const rawSortOrder = Number(getRowField(row, "sortOrder", "attributeSortOrder", "order", "sort"));
+    const sortOrder = Number.isFinite(rawSortOrder) ? rawSortOrder : index + 1;
 
     if (!attrName) {
       issues.push({ row: rowNumber, field: "attributeName", message: "Attribute name is required." });
+      return;
+    }
+
+    const key = (slugStr || attrName).toLowerCase();
+    const roleVal = normalizeRole(roleStr);
+    const statusVal = normalizeStatus(statusStr);
+    const rowValues = parseAttributeValuesString(valuesStr);
+
+    if (!aggregatedMap.has(key)) {
+      aggregatedMap.set(key, {
+        rowNumber,
+        attrName,
+        slug: slugStr,
+        role: roleVal,
+        status: statusVal,
+        sortOrder,
+        values: [...rowValues],
+      });
     } else {
-      const lower = attrName.toLowerCase();
-      if (seenAttrNames.has(lower)) {
-        duplicateWarnings.push(`Duplicate attribute '${attrName}' found on row ${rowNumber}.`);
-      } else {
-        seenAttrNames.add(lower);
+      const existing = aggregatedMap.get(key)!;
+      if (existing.role === "DROPDOWN" && roleVal !== "DROPDOWN") {
+        existing.role = roleVal;
+      }
+      for (const val of rowValues) {
+        if (!existing.values.some((v) => v.toLowerCase() === val.toLowerCase())) {
+          existing.values.push(val);
+        }
       }
     }
+  });
 
-    if (roleStr) {
-      const upper = roleStr.toUpperCase().trim().replace(/[^A-Z0-9]/g, "_").replace(/_+/g, "_");
-      const isValidRole =
-        upper.includes("X_GRID") ||
-        upper === "XGRID" ||
-        upper.includes("X_AXIS") ||
-        upper === "COLUMN" ||
-        upper.includes("Y_GRID") ||
-        upper === "YGRID" ||
-        upper.includes("Y_AXIS") ||
-        upper === "ROW" ||
-        upper.includes("DROPDOWN") ||
-        upper.includes("DROP_DOWN") ||
-        upper === "SELECT";
-      if (!isValidRole) {
-        issues.push({
-          row: rowNumber,
-          field: "displayType",
-          message: `Invalid display type '${roleStr}'. Must be DROPDOWN, X_GRID, or Y_GRID.`,
-        });
-      }
-    }
-
-    const valList = valuesStr ? valuesStr.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
-    const valueCount = valList.length;
-    const rawSortOrder = Number(getRowField(row, "sortOrder", "attributeSortOrder", "order", "sort"));
-    const sortOrder = Number.isFinite(rawSortOrder) ? rawSortOrder : 0;
-
-    const rowIssues = issues
-      .filter((i) => i.row === rowNumber)
-      .map((i) => (i.field ? `[${i.field}] ${i.message}` : i.message));
-
-    const roleVal = roleStr ? normalizeRole(roleStr) : "DROPDOWN";
-    previewRows.push({
-      row: rowNumber,
-      rowNumber,
-      attributeName: attrName,
-      name: attrName,
-      slug: getRowField(row, "slug", "attributeSlug"),
-      displayType: roleVal,
-      role: roleVal,
-      status: normalizeStatus(getRowField(row, "status", "attributeStatus")),
-      sortOrder,
-      values: valuesStr,
-      valueCount,
-      isValid: rowIssues.length === 0,
-      errors: rowIssues,
-    });
+  const previewRows = Array.from(aggregatedMap.values()).map((agg) => {
+    const valuesString = agg.values.join(" | ");
+    return {
+      row: agg.rowNumber,
+      rowNumber: agg.rowNumber,
+      attributeName: agg.attrName,
+      name: agg.attrName,
+      slug: agg.slug,
+      displayType: agg.role,
+      role: agg.role,
+      status: agg.status,
+      sortOrder: agg.sortOrder,
+      values: valuesString,
+      valueCount: agg.values.length,
+      isValid: true,
+      errors: [] as string[],
+    };
   });
 
   return {
-    totalRows: rawRows.length,
-    validRows: Math.max(0, rawRows.length - issues.length),
+    totalRows: previewRows.length,
+    validRows: previewRows.length,
     invalidRows: issues.length,
     issues,
     duplicateWarnings,
@@ -956,30 +986,74 @@ export async function importAttributesSpreadsheet(filePathOrRows: string | any[]
     }
   }
 
+  type AggregatedImportAttr = {
+    attrName: string;
+    slugProvided?: string;
+    role: AttributeRole;
+    status: AttributeStatus;
+    sortOrder: number;
+    values: string[];
+  };
+
+  const aggregatedMap = new Map<string, AggregatedImportAttr>();
+
+  for (const [index, row] of rawRows.entries()) {
+    const attrName = getRowField(row, "attributeName", "name", "attribute", "attribute_name", "title");
+    if (!attrName) continue;
+
+    const slugProvided = getRowField(row, "slug", "attributeSlug");
+    const roleStr = getRowField(row, "displayType", "role", "display_type", "type", "gridAxis");
+    const attrStatusStr = getRowField(row, "status", "attributeStatus", "state");
+    const attrSortStr = getRowField(row, "sortOrder", "attributeSortOrder", "order", "sort");
+    const valuesStr = getRowField(row, "values", "value", "options", "attributeValues", "allowedValues");
+
+    const role = normalizeRole(roleStr || "DROPDOWN");
+    const status = normalizeStatus(attrStatusStr || "ACTIVE");
+    const sortOrder = attrSortStr ? parseInt(attrSortStr, 10) || 0 : index + 1;
+    const rowValues = parseAttributeValuesString(valuesStr);
+
+    const key = (slugProvided || attrName).toLowerCase();
+
+    if (!aggregatedMap.has(key)) {
+      aggregatedMap.set(key, {
+        attrName,
+        slugProvided,
+        role,
+        status,
+        sortOrder,
+        values: [...rowValues],
+      });
+    } else {
+      const existing = aggregatedMap.get(key)!;
+      if (existing.role === "DROPDOWN" && role !== "DROPDOWN") {
+        existing.role = role;
+      }
+      for (const val of rowValues) {
+        if (!existing.values.some((v) => v.toLowerCase() === val.toLowerCase())) {
+          existing.values.push(val);
+        }
+      }
+    }
+  }
+
   const summary = {
     createdAttributes: 0,
     updatedAttributes: 0,
     createdValues: 0,
     updatedValues: 0,
-    totalProcessed: rawRows.length,
+    totalProcessed: aggregatedMap.size,
   };
 
   await prisma.$transaction(async (tx) => {
-    for (const [index, row] of rawRows.entries()) {
-      const attrName = getRowField(row, "attributeName", "name", "attribute", "attribute_name", "title");
-      if (!attrName) continue;
-
-      const slugProvided = getRowField(row, "slug", "attributeSlug");
-      const roleStr = getRowField(row, "displayType", "role", "display_type", "type", "gridAxis");
-      const attrStatusStr = getRowField(row, "status", "attributeStatus", "state");
-      const attrSortStr = getRowField(row, "sortOrder", "attributeSortOrder", "order", "sort");
-      const valuesStr = getRowField(row, "values", "value", "options", "attributeValues", "allowedValues");
-
-      const role = normalizeRole(roleStr || "DROPDOWN");
-      const status = normalizeStatus(attrStatusStr || "ACTIVE");
-      const sortOrder = attrSortStr ? parseInt(attrSortStr, 10) || 0 : index + 1;
-      const attrSlug = slugProvided ? slugify(slugProvided) : slugify(attrName);
-      const finalAttrSlug = attrSlug || `attr-${index + 1}`;
+    let index = 0;
+    for (const item of aggregatedMap.values()) {
+      index++;
+      const attrName = item.attrName;
+      const role = item.role;
+      const status = item.status;
+      const sortOrder = item.sortOrder;
+      const attrSlug = item.slugProvided ? slugify(item.slugProvided) : slugify(attrName);
+      const finalAttrSlug = attrSlug || `attr-${index}`;
 
       let attribute = await tx.attribute.findFirst({
         where: {
@@ -1020,70 +1094,61 @@ export async function importAttributesSpreadsheet(filePathOrRows: string | any[]
       }
 
       // If values are provided, parse and upsert them
-      if (valuesStr) {
-        const rawValueItems = valuesStr.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      for (const [vIdx, rawItem] of item.values.entries()) {
+        let valName = rawItem;
+        let priceAdj = 0;
 
-        for (const [vIdx, rawItem] of rawValueItems.entries()) {
-          let valName = rawItem;
-          let priceAdj = 0;
+        // Check if format is "Name (+12)" or "Name (12)"
+        const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
+        if (priceMatch) {
+          valName = priceMatch[1].trim();
+          priceAdj = parseFloat(priceMatch[2]) || 0;
+        }
 
-          // Check if format is "Name (+12)" or "Name (12)"
-          const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
-          if (priceMatch) {
-            valName = priceMatch[1].trim();
-            priceAdj = parseFloat(priceMatch[2]) || 0;
-          }
+        if (!valName) continue;
 
-          if (!valName) continue;
+        const rawValSlug = slugify(valName);
+        const valSlug = rawValSlug || `val-${vIdx + 1}`;
+        const existingVal = await tx.attributeValue.findFirst({
+          where: {
+            attributeId: attribute.id,
+            value: { equals: valName, mode: "insensitive" },
+          },
+        });
 
-          const rawValSlug = slugify(valName);
-          const valSlug = rawValSlug || `val-${vIdx + 1}`;
-          const existingVal = await tx.attributeValue.findFirst({
-            where: {
-              attributeId: attribute.id,
-              OR: [
-                { value: { equals: valName, mode: "insensitive" } },
-                { slug: valSlug },
-              ],
+        const valSortOrder = vIdx + 1;
+
+        if (existingVal) {
+          await tx.attributeValue.update({
+            where: { id: existingVal.id },
+            data: {
+              value: valName,
+              status: "ACTIVE",
+              sortOrder: valSortOrder,
+              priceAdjustment: new Prisma.Decimal(priceAdj),
             },
           });
-
-          const valSortOrder = vIdx + 1;
-
-          if (existingVal) {
-            await tx.attributeValue.update({
-              where: { id: existingVal.id },
-              data: {
-                value: valName,
-                status: "ACTIVE",
-                sortOrder: valSortOrder,
-                priceAdjustment: new Prisma.Decimal(priceAdj),
-              },
-            });
-            summary.updatedValues++;
-          } else {
-            let uniqueValSlug = valSlug;
-            let valCounter = 1;
-            while (
-              await tx.attributeValue.findFirst({
-                where: { attributeId: attribute.id, slug: uniqueValSlug },
-              })
-            ) {
-              uniqueValSlug = `${valSlug}-${valCounter++}`;
-            }
-
-            await tx.attributeValue.create({
-              data: {
-                attributeId: attribute.id,
-                value: valName,
-                slug: uniqueValSlug,
-                status: "ACTIVE",
-                sortOrder: valSortOrder,
-                priceAdjustment: new Prisma.Decimal(priceAdj),
-              },
-            });
-            summary.createdValues++;
+          summary.updatedValues++;
+        } else {
+          let uniqueValSlug = valSlug;
+          let counter = 1;
+          while (
+            await tx.attributeValue.findFirst({ where: { attributeId: attribute.id, slug: uniqueValSlug } })
+          ) {
+            uniqueValSlug = `${valSlug}-${counter++}`;
           }
+
+          await tx.attributeValue.create({
+            data: {
+              attributeId: attribute.id,
+              value: valName,
+              slug: uniqueValSlug,
+              status: "ACTIVE",
+              sortOrder: valSortOrder,
+              priceAdjustment: new Prisma.Decimal(priceAdj),
+            },
+          });
+          summary.createdValues++;
         }
       }
     }

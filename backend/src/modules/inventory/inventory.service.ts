@@ -984,19 +984,203 @@ export function generateSampleInventoryTemplate() {
 
 
 
-export async function deleteInventory(id: string) {
-  const existing = await prisma.inventory.findUnique({ where: { id } });
+export async function deleteInventory(id: string, forceHardDelete: boolean = false) {
+  const existing = await prisma.inventory.findUnique({
+    where: { id },
+    include: {
+      product: { select: { id: true, title: true } },
+      variant: { select: { id: true, sku: true, title: true } },
+      warehouse: { select: { id: true, name: true } },
+    },
+  });
   if (!existing) throw new AppError("Inventory record not found.", 404);
 
-  if (existing.reservedStock > 0) {
-    throw new AppError(
-      `Cannot delete inventory record: ${existing.reservedStock} item(s) are currently reserved for active orders.`,
-      400,
-    );
+  // Check for real active orders referencing this variant/product
+  if (!forceHardDelete) {
+    const activeOrderWhere: any = {
+      order: {
+        status: { in: ["PENDING", "CONFIRMED", "PROCESSING"] },
+        deletedAt: null,
+      },
+    };
+
+    if (existing.variantId) {
+      activeOrderWhere.variantId = existing.variantId;
+    } else {
+      activeOrderWhere.productId = existing.productId;
+    }
+
+    if (existing.warehouseId) {
+      activeOrderWhere.warehouseId = existing.warehouseId;
+    }
+
+    const activeOrderItems = await prisma.orderItem.findMany({
+      where: activeOrderWhere,
+      select: {
+        orderId: true,
+        quantity: true,
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            customer: { select: { firstName: true, lastName: true, email: true } },
+          },
+        },
+      },
+      take: 10,
+    });
+
+    if (activeOrderItems.length > 0) {
+      const totalReservedInOrders = activeOrderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+      const orderDetails = activeOrderItems
+        .map((item) => {
+          const custName = item.order?.customer
+            ? `${item.order.customer.firstName} ${item.order.customer.lastName}`.trim() || item.order.customer.email
+            : "Guest";
+          return `• Order #${item.order?.orderNumber || item.orderId} (Status: ${item.order?.status}, Customer: ${custName}, Qty: ${item.quantity})`;
+        })
+        .join("\n");
+
+      const itemLabel = existing.variant?.title || existing.variant?.sku || existing.product?.title || "Product";
+      const whLabel = existing.warehouse?.name || "Default Warehouse";
+
+      throw new AppError(
+        `Cannot delete inventory record for "${itemLabel}" in warehouse "${whLabel}". ${totalReservedInOrders || existing.reservedStock} unit(s) are actively referenced in orders:\n${orderDetails}\n\nPlease fulfill or cancel these orders before deleting this inventory record.`,
+        400,
+      );
+    }
   }
 
+  // If no active orders exist or forceHardDelete is true, safely delete adjustments and inventory
   await prisma.$transaction(async (tx) => {
     await tx.inventoryAdjustment.deleteMany({ where: { inventoryId: id } });
     await tx.inventory.delete({ where: { id } });
   });
+}
+
+export async function bulkDeleteInventory(params: {
+  ids?: string[];
+  all?: boolean;
+  forceHardDelete?: boolean;
+}) {
+  let targetIds: string[] = [];
+
+  if (params.all) {
+    const allRecords = await prisma.inventory.findMany({
+      select: { id: true },
+    });
+    targetIds = allRecords.map((r) => r.id);
+  } else if (Array.isArray(params.ids) && params.ids.length > 0) {
+    targetIds = params.ids;
+  }
+
+  if (!targetIds.length) {
+    return { deletedCount: 0, skippedCount: 0, skippedDetails: [] };
+  }
+
+  let deletedCount = 0;
+  let skippedCount = 0;
+  const skippedDetails: string[] = [];
+
+  // Batch process in chunks of 500 to maintain optimal memory and database performance
+  const CHUNK_SIZE = 500;
+  for (let i = 0; i < targetIds.length; i += CHUNK_SIZE) {
+    const chunkIds = targetIds.slice(i, i + CHUNK_SIZE);
+
+    const records = await prisma.inventory.findMany({
+      where: { id: { in: chunkIds } },
+      select: {
+        id: true,
+        productId: true,
+        variantId: true,
+        warehouseId: true,
+        reservedStock: true,
+        product: { select: { title: true } },
+        variant: { select: { sku: true, title: true } },
+        warehouse: { select: { name: true } },
+      },
+    });
+
+    if (!records.length) continue;
+
+    const variantIds = records.map((r) => r.variantId).filter(Boolean) as string[];
+    const productIds = records.map((r) => r.productId).filter(Boolean) as string[];
+
+    let blockedInventoryIds = new Set<string>();
+
+    if (!params.forceHardDelete && (variantIds.length > 0 || productIds.length > 0)) {
+      const activeItems = await prisma.orderItem.findMany({
+        where: {
+          OR: [
+            variantIds.length > 0 ? { variantId: { in: variantIds } } : undefined,
+            productIds.length > 0 ? { productId: { in: productIds } } : undefined,
+          ].filter(Boolean) as any,
+          order: {
+            status: { in: ["PENDING", "CONFIRMED", "PROCESSING"] },
+            deletedAt: null,
+          },
+        },
+        select: {
+          variantId: true,
+          productId: true,
+          warehouseId: true,
+          quantity: true,
+          orderId: true,
+          order: {
+            select: {
+              orderNumber: true,
+              status: true,
+              customer: { select: { firstName: true, lastName: true, email: true } },
+            },
+          },
+        },
+      });
+
+      if (activeItems.length > 0) {
+        for (const item of activeItems) {
+          const matchingRecord = records.find((r) =>
+            (r.variantId && r.variantId === item.variantId) ||
+            (!r.variantId && r.productId === item.productId)
+          );
+          if (matchingRecord) {
+            blockedInventoryIds.add(matchingRecord.id);
+            if (skippedDetails.length < 15) {
+              const custName = item.order?.customer
+                ? `${item.order.customer.firstName} ${item.order.customer.lastName}`.trim() || item.order.customer.email
+                : "Customer";
+              const itemLabel = matchingRecord.variant?.title || matchingRecord.variant?.sku || matchingRecord.product?.title || "Item";
+              skippedDetails.push(
+                `${itemLabel}: Reserved in Order #${item.order?.orderNumber || item.orderId} (${item.order?.status}) by ${custName}`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    const eligibleIds = records
+      .map((r) => r.id)
+      .filter((id) => !blockedInventoryIds.has(id));
+
+    skippedCount += blockedInventoryIds.size;
+
+    if (eligibleIds.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        await tx.inventoryAdjustment.deleteMany({
+          where: { inventoryId: { in: eligibleIds } },
+        });
+        const res = await tx.inventory.deleteMany({
+          where: { id: { in: eligibleIds } },
+        });
+        deletedCount += res.count;
+      });
+    }
+  }
+
+  return {
+    deletedCount,
+    skippedCount,
+    skippedDetails,
+  };
 }

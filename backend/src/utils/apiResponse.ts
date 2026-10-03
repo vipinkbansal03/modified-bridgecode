@@ -73,6 +73,7 @@ export function getPagination(query: { page?: string; limit?: string; ignoreMaxL
 
 export function slugify(text: string): string {
   return text
+    .replace(/\*/g, " star ")
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, "")

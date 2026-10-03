@@ -13,6 +13,7 @@ router.get("/sample-template", requirePermission("inventory.view", "inventory.ma
 router.post("/import/preview", requirePermission("inventory.manage"), upload.single("file"), C.previewImport);
 router.post("/import", requirePermission("inventory.manage"), upload.single("file"), C.importSpreadsheet);
 router.post("/bulk", requirePermission("inventory.manage"), C.bulkUpdate);
+router.post("/bulk-delete", requirePermission("inventory.manage"), C.bulkDelete);
 router.post("/upsert", requirePermission("inventory.manage"), C.upsert);
 router.put("/product/:productId", requirePermission("inventory.manage"), C.upsertProduct);
 router.get("/:variantId/adjustments", requirePermission("inventory.view", "inventory.manage"), C.listVariantAdjustments);

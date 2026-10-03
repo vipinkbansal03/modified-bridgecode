@@ -6,6 +6,7 @@ import { readSpreadsheetRows, readAllSpreadsheetSheets, removeTempFile, writeSpr
 import type { Prisma, GridAxis } from "@prisma/client";
 import { setVariantStock } from "../inventory/inventory.service";
 import { assertTierUsable } from "../tiers/tiers.service";
+import { parseAttributeValuesString } from "../attributes/attributes.service";
 
 const { shouldSyncStorefrontVisibility } = require("./productVisibility");
 
@@ -2557,9 +2558,10 @@ function parseBool(val?: string) {
 }
 
 function normalizeDisplayTypeToGridAxis(str: string): GridAxis | null {
+  if (!str) return null;
   const upper = str.toUpperCase().trim().replace(/[- ]/g, "_");
-  if (upper === "X_GRID" || upper === "COLUMN" || upper === "MATRIX_COLUMNS") return "COLUMN";
-  if (upper === "Y_GRID" || upper === "ROW" || upper === "MATRIX_ROWS") return "ROW";
+  if (upper === "X" || upper === "X_AXIS" || upper === "X_GRID" || upper === "XGRID" || upper === "COLUMN" || upper === "MATRIX_COLUMNS") return "COLUMN";
+  if (upper === "Y" || upper === "Y_AXIS" || upper === "Y_GRID" || upper === "YGRID" || upper === "ROW" || upper === "MATRIX_ROWS") return "ROW";
   return null;
 }
 
@@ -2569,8 +2571,8 @@ export async function exportProductAttributesSpreadsheet(productId: string) {
 
   const rows = mappings.map((m) => {
     const allowedValuesStr = m.allowedValues.length
-      ? m.allowedValues.map((av) => av.attributeValue.value).join(", ")
-      : m.attribute.values.map((v) => v.value).join(", ");
+      ? m.allowedValues.map((av) => av.attributeValue.value).join(" | ")
+      : m.attribute.values.map((v) => v.value).join(" | ");
 
     const displayType =
       m.gridAxis === "COLUMN" ? "X_GRID" : m.gridAxis === "ROW" ? "Y_GRID" : "DROPDOWN";
@@ -2603,35 +2605,35 @@ export function generateSampleProductAttributesTemplate() {
       slug: "slot",
       displayType: "X_GRID",
       required: "TRUE",
-      allowedValues: ".018, .022",
+      allowedValues: ".018 | .022",
     },
     {
-      attributeName: "Hook",
-      slug: "hook",
+      attributeName: "Hook Configuration",
+      slug: "hook-configuration",
       displayType: "Y_GRID",
       required: "TRUE",
-      allowedValues: "None, Hook 3, Hook 4, Hook 5",
+      allowedValues: "Hooks on 3 | Hooks on 3 with Offset | Hooks on 3,4 & 5 | No Hooks",
     },
     {
       attributeName: "Prescription",
       slug: "prescription",
       displayType: "DROPDOWN",
       required: "TRUE",
-      allowedValues: "MBT, Roth, Alexander",
+      allowedValues: "MBT | Roth | Alexander",
     },
     {
       attributeName: "Wire Size",
       slug: "wire-size",
       displayType: "X_GRID",
       required: "TRUE",
-      allowedValues: ".018 x .025, .019 x .025",
+      allowedValues: ".018 x .025 | .019 x .025",
     },
     {
       attributeName: "Arch",
       slug: "arch",
       displayType: "Y_GRID",
       required: "TRUE",
-      allowedValues: "Upper, Lower",
+      allowedValues: "Upper | Lower",
     },
   ];
 
@@ -2647,14 +2649,24 @@ export async function previewProductAttributesImport(productId: string, filePath
   const rawRows = readSpreadsheetRows(filePath);
   const issues: Array<{ row: number; field: string; message: string }> = [];
   const duplicateWarnings: string[] = [];
-  const previewRows: Record<string, unknown>[] = [];
-  const seenAttr = new Set<string>();
 
   const allAttributes = await prisma.attribute.findMany({
     include: { values: { where: { status: "ACTIVE" } } },
   });
   const attributeByName = new Map(allAttributes.map((a) => [a.name.toLowerCase(), a]));
   const attributeBySlug = new Map(allAttributes.map((a) => [a.slug.toLowerCase(), a]));
+
+  type AggregatedAttr = {
+    rowNumber: number;
+    attrName: string;
+    slug: string;
+    displayType: "X_GRID" | "Y_GRID" | "DROPDOWN";
+    required: boolean;
+    values: string[];
+    matchedAttr: typeof allAttributes[0] | null;
+  };
+
+  const aggregatedMap = new Map<string, AggregatedAttr>();
 
   for (const [index, row] of rawRows.entries()) {
     const rowNumber = index + 2;
@@ -2669,16 +2681,9 @@ export async function previewProductAttributesImport(productId: string, filePath
       continue;
     }
 
-    const key = (attrName || slugStr).toLowerCase();
-    if (seenAttr.has(key)) {
-      duplicateWarnings.push(`Duplicate attribute '${attrName || slugStr}' found on row ${rowNumber}.`);
-    } else {
-      seenAttr.add(key);
-    }
-
     const matchedAttr =
       (attrName ? attributeByName.get(attrName.toLowerCase()) : null) ||
-      (slugStr ? attributeBySlug.get(slugStr.toLowerCase()) : null);
+      (slugStr ? attributeBySlug.get(slugStr.toLowerCase()) : null) || null;
 
     if (!matchedAttr) {
       issues.push({
@@ -2688,45 +2693,63 @@ export async function previewProductAttributesImport(productId: string, filePath
       });
     }
 
-    const valueCount = valuesStr
-      ? valuesStr.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean).length
-      : 0;
+    const attrKey = (matchedAttr?.slug || slugStr || attrName).toLowerCase();
+    const rowValues = parseAttributeValuesString(valuesStr);
+    const rowGridAxis = normalizeDisplayTypeToGridAxis(displayTypeStr || "");
+    const rowDisplayType = rowGridAxis === "COLUMN" ? "X_GRID" : rowGridAxis === "ROW" ? "Y_GRID" : "DROPDOWN";
+    const rowRequired = parseBool(requiredStr);
 
-    previewRows.push({
-      row: rowNumber,
-      attributeName: matchedAttr?.name || attrName || slugStr,
-      slug: matchedAttr?.slug || slugStr,
-      displayType: displayTypeStr
-        ? normalizeDisplayTypeToGridAxis(displayTypeStr) === "COLUMN"
-          ? "X_GRID"
-          : normalizeDisplayTypeToGridAxis(displayTypeStr) === "ROW"
-          ? "Y_GRID"
-          : "DROPDOWN"
-        : "DROPDOWN",
-      required: parseBool(requiredStr),
-      values: valuesStr,
-      valueCount,
-    });
+    if (!aggregatedMap.has(attrKey)) {
+      aggregatedMap.set(attrKey, {
+        rowNumber,
+        attrName: matchedAttr?.name || attrName || slugStr,
+        slug: matchedAttr?.slug || slugStr,
+        displayType: rowDisplayType,
+        required: rowRequired,
+        values: [...rowValues],
+        matchedAttr,
+      });
+    } else {
+      const existing = aggregatedMap.get(attrKey)!;
+      // If existing had default DROPDOWN but this row specified X_GRID or Y_GRID, adopt the grid assignment
+      if (existing.displayType === "DROPDOWN" && rowDisplayType !== "DROPDOWN") {
+        existing.displayType = rowDisplayType;
+      }
+      if (rowRequired) existing.required = true;
+      for (const val of rowValues) {
+        if (!existing.values.some((v) => v.toLowerCase() === val.toLowerCase())) {
+          existing.values.push(val);
+        }
+      }
+    }
   }
 
+  const previewRows = Array.from(aggregatedMap.values()).map((agg) => {
+    const valuesString = agg.values.join(" | ");
+    return {
+      row: agg.rowNumber,
+      rowNumber: agg.rowNumber,
+      attributeName: agg.attrName,
+      slug: agg.slug,
+      displayType: agg.displayType,
+      role: agg.displayType,
+      required: agg.required,
+      values: valuesString,
+      allowedValues: valuesString,
+      valueCount: agg.values.length,
+      isValid: true,
+      errors: [] as string[],
+    };
+  });
+
   return {
-    totalRows: rawRows.length,
-    validRows: Math.max(0, rawRows.length - issues.length),
+    totalRows: previewRows.length,
+    validRows: previewRows.length,
     invalidRows: issues.length,
     issues,
     duplicateWarnings,
     sampleRows: previewRows.slice(0, 10),
-    rows: previewRows.map((r) => {
-      const rowIssues = issues.filter((iss) => iss.row === r.row);
-      return {
-        ...r,
-        rowNumber: r.row,
-        isValid: rowIssues.length === 0,
-        errors: rowIssues.map((iss) => (iss.field ? `[${iss.field}] ${iss.message}` : iss.message)),
-        allowedValues: r.values,
-        role: r.displayType,
-      };
-    }),
+    rows: previewRows,
   };
 }
 
@@ -2737,78 +2760,102 @@ export async function importProductAttributesSpreadsheet(productId: string, file
     throw new AppError("Uploaded spreadsheet is empty.", 400);
   }
 
-  if (typeof filePathOrRows === "string") {
-    const preview = await previewProductAttributesImport(productId, filePathOrRows);
-    if (preview.issues.length > 0) {
-      throw new AppError(`Spreadsheet validation failed with ${preview.issues.length} issue(s).`, 400);
-    }
-  }
-
   const allAttributes = await prisma.attribute.findMany({
     include: { values: true },
   });
   const attributeByName = new Map(allAttributes.map((a) => [a.name.toLowerCase(), a]));
   const attributeBySlug = new Map(allAttributes.map((a) => [a.slug.toLowerCase(), a]));
 
+  // Aggregate rows by attribute to handle duplicate row inputs seamlessly
+  type ImportAttrAgg = {
+    matchedAttr: typeof allAttributes[0];
+    displayTypeStr?: string;
+    required: boolean;
+    rawValues: string[];
+  };
+  const aggregatedMap = new Map<string, ImportAttrAgg>();
+
+  for (const row of rawRows) {
+    const attrName = getProductAttrRowField(row, "attributeName", "name", "attribute", "attribute_name");
+    const slugStr = getProductAttrRowField(row, "slug", "attributeSlug");
+    const displayTypeStr = getProductAttrRowField(row, "displayType", "role", "gridAxis", "type");
+    const requiredStr = getProductAttrRowField(row, "required", "isRequired");
+    const valuesStr = getProductAttrRowField(row, "allowedValues", "values", "options", "value");
+
+    const matchedAttr =
+      (attrName ? attributeByName.get(attrName.toLowerCase()) : null) ||
+      (slugStr ? attributeBySlug.get(slugStr.toLowerCase()) : null);
+
+    if (!matchedAttr) continue;
+
+    const attrKey = matchedAttr.id;
+    const rowValues = parseAttributeValuesString(valuesStr);
+    const rowRequired = parseBool(requiredStr);
+
+    if (!aggregatedMap.has(attrKey)) {
+      aggregatedMap.set(attrKey, {
+        matchedAttr,
+        displayTypeStr,
+        required: rowRequired,
+        rawValues: [...rowValues],
+      });
+    } else {
+      const existing = aggregatedMap.get(attrKey)!;
+      if (!existing.displayTypeStr && displayTypeStr) existing.displayTypeStr = displayTypeStr;
+      if (rowRequired) existing.required = true;
+      for (const val of rowValues) {
+        if (!existing.rawValues.some((v) => v.toLowerCase() === val.toLowerCase())) {
+          existing.rawValues.push(val);
+        }
+      }
+    }
+  }
+
   const summary = {
     created: 0,
     updated: 0,
-    totalProcessed: rawRows.length,
+    totalProcessed: aggregatedMap.size,
   };
 
   await prisma.$transaction(async (tx) => {
-    for (const row of rawRows) {
-      const attrName = getProductAttrRowField(row, "attributeName", "name", "attribute", "attribute_name");
-      const slugStr = getProductAttrRowField(row, "slug", "attributeSlug");
-      const displayTypeStr = getProductAttrRowField(row, "displayType", "role", "gridAxis", "type");
-      const requiredStr = getProductAttrRowField(row, "required", "isRequired");
-      const valuesStr = getProductAttrRowField(row, "allowedValues", "values", "options", "value");
+    for (const item of aggregatedMap.values()) {
+      const matchedAttr = item.matchedAttr;
+      const gridAxis = normalizeDisplayTypeToGridAxis(item.displayTypeStr || "");
+      const required = item.required;
 
-      const matchedAttr =
-        (attrName ? attributeByName.get(attrName.toLowerCase()) : null) ||
-        (slugStr ? attributeBySlug.get(slugStr.toLowerCase()) : null);
-
-      if (!matchedAttr) continue;
-
-      const gridAxis = normalizeDisplayTypeToGridAxis(displayTypeStr);
-      const required = parseBool(requiredStr);
-
-      // Parse allowed values
+      // Parse and ensure all allowed values exist in catalog
       const allowedValueIds: string[] = [];
-      if (valuesStr) {
-        const rawValueItems = valuesStr.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
-        for (const rawItem of rawValueItems) {
-          const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
-          const valName = priceMatch ? priceMatch[1].trim() : rawItem;
-          if (!valName) continue;
+      for (const rawItem of item.rawValues) {
+        const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
+        const valName = priceMatch ? priceMatch[1].trim() : rawItem;
+        if (!valName) continue;
 
-          let existingVal = matchedAttr.values.find(
-            (v) =>
-              v.value.toLowerCase() === valName.toLowerCase() ||
-              v.slug.toLowerCase() === slugify(valName).toLowerCase(),
-          );
+        let existingVal = matchedAttr.values.find(
+          (v) =>
+            v.value.toLowerCase() === valName.toLowerCase() ||
+            v.slug.toLowerCase() === slugify(valName).toLowerCase(),
+        );
 
-          if (!existingVal) {
-            const valSlug = slugify(valName);
-            let uniqueSlug = valSlug;
-            let counter = 1;
-            while (
-              await tx.attributeValue.findFirst({ where: { attributeId: matchedAttr.id, slug: uniqueSlug } })
-            ) {
-              uniqueSlug = `${valSlug}-${counter++}`;
-            }
-            existingVal = await tx.attributeValue.create({
-              data: {
-                attributeId: matchedAttr.id,
-                value: valName,
-                slug: uniqueSlug,
-                status: "ACTIVE",
-              },
-            });
-            matchedAttr.values.push(existingVal);
+        if (!existingVal) {
+          const valSlug = slugify(valName);
+          let uniqueSlug = valSlug;
+          let counter = 1;
+          while (
+            await tx.attributeValue.findFirst({ where: { attributeId: matchedAttr.id, slug: uniqueSlug } })
+          ) {
+            uniqueSlug = `${valSlug}-${counter++}`;
           }
-          allowedValueIds.push(existingVal.id);
+          existingVal = await tx.attributeValue.create({
+            data: {
+              attributeId: matchedAttr.id,
+              value: valName,
+              slug: uniqueSlug,
+              status: "ACTIVE",
+            },
+          });
+          matchedAttr.values.push(existingVal);
         }
+        allowedValueIds.push(existingVal.id);
       }
 
       // Upsert product attribute mapping
@@ -2840,17 +2887,17 @@ export async function importProductAttributesSpreadsheet(productId: string, file
         summary.created++;
       }
 
-      // Re-assign allowed values for this product attribute
-      await tx.productAttributeValueSelection.deleteMany({
-        where: { productAttributeId },
-      });
-
+      // Upsert allowed value selections
       if (allowedValueIds.length > 0) {
-        const uniqueIds = Array.from(new Set(allowedValueIds));
+        await tx.productAttributeValueSelection.deleteMany({
+          where: { productAttributeId },
+        });
+
         await tx.productAttributeValueSelection.createMany({
-          data: uniqueIds.map((id) => ({
+          data: allowedValueIds.map((attributeValueId, orderIdx) => ({
             productAttributeId,
-            attributeValueId: id,
+            attributeValueId,
+            sortOrder: orderIdx + 1,
           })),
         });
       }
@@ -2868,15 +2915,15 @@ export function generateSampleCatalogAttributeMappingsTemplate() {
       attributeName: "Slot",
       displayType: "X_GRID",
       required: "TRUE",
-      allowedValues: ".018, .022",
+      allowedValues: ".018 | .022",
     },
     {
       productSku: "PRD-MB-001",
       productTitle: "Metal Bracket MBT .022",
-      attributeName: "Hook",
+      attributeName: "Hook Configuration",
       displayType: "Y_GRID",
       required: "TRUE",
-      allowedValues: "None, Hook 3, Hook 4, Hook 5",
+      allowedValues: "Hooks on 3 | Hooks on 3 with Offset | Hooks on 3,4 & 5 | No Hooks",
     },
     {
       productSku: "PRD-MB-001",
@@ -2884,7 +2931,7 @@ export function generateSampleCatalogAttributeMappingsTemplate() {
       attributeName: "Prescription",
       displayType: "DROPDOWN",
       required: "TRUE",
-      allowedValues: "MBT, Roth",
+      allowedValues: "MBT | Roth",
     },
     {
       productSku: "PRD-NW-001",
@@ -2892,7 +2939,7 @@ export function generateSampleCatalogAttributeMappingsTemplate() {
       attributeName: "Wire Size",
       displayType: "X_GRID",
       required: "TRUE",
-      allowedValues: ".012, .014, .016, .018, .018 x .025, .019 x .025",
+      allowedValues: ".012 | .014 | .016 | .018 | .018 x .025 | .019 x .025",
     },
     {
       productSku: "PRD-NW-001",
@@ -2900,7 +2947,7 @@ export function generateSampleCatalogAttributeMappingsTemplate() {
       attributeName: "Arch",
       displayType: "Y_GRID",
       required: "TRUE",
-      allowedValues: "Upper, Lower",
+      allowedValues: "Upper | Lower",
     },
     {
       productSku: "PRD-CB-001",
@@ -3099,7 +3146,7 @@ export async function importCatalogAttributeMappingsSpreadsheet(filePathOrRows: 
       if (!trimmedValuesStr || trimmedValuesStr.toUpperCase() === "ALL") {
         allowedValueIds.push(...matchedAttr.values.filter((v) => v.status === "ACTIVE").map((v) => v.id));
       } else {
-        const rawValueItems = trimmedValuesStr.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+        const rawValueItems = parseAttributeValuesString(trimmedValuesStr);
         for (const rawItem of rawValueItems) {
           const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
           const valName = priceMatch ? priceMatch[1].trim() : rawItem;

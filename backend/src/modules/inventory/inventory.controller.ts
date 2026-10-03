@@ -14,8 +14,17 @@ export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
 export const dashboard = asyncHandler(async (_req: AuthRequest, res: Response) => ApiResponse.success(res, "Inventory dashboard fetched.", await S.getInventoryDashboard()));
 export const update = asyncHandler(async (req: AuthRequest, res: Response) => ApiResponse.success(res, "Updated.", await S.updateInventory(String(req.params.id), req.body)));
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
-  await S.deleteInventory(String(req.params.id));
+  const force = req.query.force === "true" || req.body?.force === true;
+  await S.deleteInventory(String(req.params.id), force);
   return ApiResponse.success(res, "Inventory removed.");
+});
+export const bulkDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await S.bulkDeleteInventory({
+    ids: req.body?.ids,
+    all: req.body?.all === true,
+    forceHardDelete: req.body?.forceHardDelete === true || req.body?.force === true,
+  });
+  return ApiResponse.success(res, "Bulk deletion completed.", result);
 });
 export const upsert = asyncHandler(async (req: AuthRequest, res: Response) =>
   ApiResponse.success(res, "Inventory saved.", await S.upsertVariantInventory(req.body)),
