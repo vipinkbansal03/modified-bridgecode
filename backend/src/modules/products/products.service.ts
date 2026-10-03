@@ -2893,11 +2893,11 @@ export async function importProductAttributesSpreadsheet(productId: string, file
           where: { productAttributeId },
         });
 
+        const uniqueAllowedValueIds = Array.from(new Set(allowedValueIds));
         await tx.productAttributeValueSelection.createMany({
-          data: allowedValueIds.map((attributeValueId, orderIdx) => ({
+          data: uniqueAllowedValueIds.map((attributeValueId) => ({
             productAttributeId,
             attributeValueId,
-            sortOrder: orderIdx + 1,
           })),
         });
       }
