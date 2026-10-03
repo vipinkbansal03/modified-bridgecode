@@ -4,6 +4,7 @@ import { AuthRequest } from "../../middleware/auth.middleware";
 import { prisma } from "../../config/database";
 import * as ProductService from "./products.service";
 import * as PricingService from "../pricing/pricing.service";
+import { logActivity } from "../logs/logs.service";
 import { removeTempFile } from "../../utils/spreadsheet";
 
 export const list = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -33,8 +34,12 @@ export const getOne = asyncHandler(async (req: AuthRequest, res: Response) => {
 export const create = asyncHandler(async (req: AuthRequest, res: Response) => {
   const product = await ProductService.createProduct(req.body);
 
-  await prisma.activityLog.create({
-    data: { userId: req.user!.id, action: "PRODUCT_CREATED", entityType: "Product", entityId: product.id },
+  await logActivity({
+    req,
+    action: "PRODUCT_CREATED",
+    entityType: "Product",
+    entityId: product.id,
+    metadata: { title: product.title, sku: product.sku },
   });
 
   return ApiResponse.created(res, "Product created.", product);
@@ -43,8 +48,12 @@ export const create = asyncHandler(async (req: AuthRequest, res: Response) => {
 export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
   const product = await ProductService.updateProduct(req.params.id as string, req.body);
 
-  await prisma.activityLog.create({
-    data: { userId: req.user!.id, action: "PRODUCT_UPDATED", entityType: "Product", entityId: product.id },
+  await logActivity({
+    req,
+    action: "PRODUCT_UPDATED",
+    entityType: "Product",
+    entityId: product.id,
+    metadata: { title: product.title, sku: product.sku },
   });
 
   return ApiResponse.success(res, "Product updated.", product);
@@ -52,13 +61,23 @@ export const update = asyncHandler(async (req: AuthRequest, res: Response) => {
 
 export const remove = asyncHandler(async (req: AuthRequest, res: Response) => {
   await ProductService.deleteProduct(req.params.id as string);
+  await logActivity({
+    req,
+    action: "PRODUCT_DELETED",
+    entityType: "Product",
+    entityId: String(req.params.id),
+  });
   return ApiResponse.success(res, "Product deleted.");
 });
 
 export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
   const product = await ProductService.restoreProduct(req.params.id as string);
-  await prisma.activityLog.create({
-    data: { userId: req.user!.id, action: "PRODUCT_RESTORED", entityType: "Product", entityId: product.id },
+  await logActivity({
+    req,
+    action: "PRODUCT_RESTORED",
+    entityType: "Product",
+    entityId: product.id,
+    metadata: { title: product.title },
   });
   return ApiResponse.success(res, "Product restored.", product);
 });

@@ -692,7 +692,7 @@ function ProductThumbnail({ url, title }: { url?: string | null; title: string }
   }
 
   return (
-    <AdminLayout title="Products" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Products" }]}>
+    <AdminLayout title="Products" breadcrumb={[{ label: "Products" }]}>
       <div className="space-y-5">
         {/* 1. TOP KPI SUMMARY GRID */}
         <AdminStatsGrid

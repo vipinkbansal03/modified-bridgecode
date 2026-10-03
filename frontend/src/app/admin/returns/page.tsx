@@ -50,7 +50,7 @@ export default function AdminReturnsPage() {
 
   const returns = data?.data || [];
   const total = data?.pagination?.total || 0;
-  const totalPages = data?.pagination?.totalPages || 1;
+  const totalPages = data?.pagination?.totalPages || 0;
 
   const columns: Column<ReturnRow>[] = [
     {
@@ -212,21 +212,19 @@ export default function AdminReturnsPage() {
         </div>
 
         {/* Datatable */}
-        <div className="rounded-xl border border-[#E6E6E6] bg-white overflow-hidden">
-          <DataTable<ReturnRow>
-            title="Return Requests"
-            columns={columns}
-            data={returns}
-            rowKey="id"
-            isLoading={isLoading}
-            emptyMessage="No return requests found."
-            totalItems={total}
-            currentPage={page}
-            pageSize={limit}
-            totalPages={totalPages}
-            onPageChange={setPage}
-          />
-        </div>
+        <DataTable<ReturnRow>
+          title="Return Requests"
+          columns={columns}
+          data={returns}
+          rowKey="id"
+          isLoading={isLoading}
+          emptyMessage="No return requests found."
+          totalItems={total}
+          currentPage={page}
+          pageSize={limit}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
 
         <Modal
           open={actionModal.open}

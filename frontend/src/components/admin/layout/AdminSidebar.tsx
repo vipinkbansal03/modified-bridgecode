@@ -82,7 +82,7 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
-  const { user, hasPermission, logout } = useAdminAuth();
+  const { user, hasPermission } = useAdminAuth();
   const bestActiveHref = useMemo(() => getBestActiveHref(pathname), [pathname]);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
     return getInitialExpandedMenus(pathname);
@@ -349,16 +349,11 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-semibold text-white">{user?.name || "Admin"}</div>
               <div className="truncate text-[11px] text-white/50">{user?.email || "admin@modortho.com"}</div>
-              <div className="truncate text-[11px] text-white/50 mt-0.5">{user?.role || "Staff Member"}</div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                <span className="truncate text-[10.5px] font-medium text-white/60">{user?.role || "Staff Member"}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center justify-between mt-3 text-[11.5px] text-white/40">
-            <Link href="/admin/settings" onClick={handleLinkClick} className="hover:text-white transition-colors">
-              View profile
-            </Link>
-            <button onClick={logout} className="hover:text-white transition-colors">
-              Sign out
-            </button>
           </div>
         </div>
       </aside>

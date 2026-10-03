@@ -55,8 +55,8 @@ type OrderListResponse = {
 
 function formatMoney(value: number | string, currency?: OrderRow["currency"]) {
   const amount = Number(value ?? 0);
-  const prefix = currency?.symbol || currency?.code || "$";
-  return `${prefix}${amount.toFixed(2)}`;
+  const prefix = currency?.symbol || "₹";
+  return `${prefix}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(value?: string) {
@@ -65,10 +65,15 @@ function formatDate(value?: string) {
 }
 
 function formatPaymentMethod(value?: string | null) {
-  if (!value) return "-";
-  if (value === "PAY_ON_DELIVERY") return "Pay on Delivery (COD)";
-  if (value === "RAZORPAY") return "Razorpay";
-  return value;
+  if (!value) return "Offline / Manual";
+  const normalized = value.toUpperCase();
+  if (normalized === "PAY_ON_DELIVERY" || normalized === "COD") return "Pay on Delivery (COD)";
+  if (normalized === "RAZORPAY") return "Razorpay";
+  if (normalized === "CASHFREE") return "Cashfree";
+  if (normalized === "STRIPE") return "Stripe";
+  if (normalized === "MANUAL_INVOICE" || normalized === "OFFLINE_PAYMENT") return "Invoice / Manual";
+  if (normalized === "BANK_TRANSFER") return "Bank Transfer";
+  return value.replace(/_/g, " ");
 }
 
 export default function OrdersPage() {
@@ -284,12 +289,15 @@ export default function OrdersPage() {
       {
         key: "shippingProvider",
         label: "Shipping",
-        render: (row) => row.shippingProvider || row.shippingZone?.provider?.displayName || "-",
+        render: (row) =>
+          row.shippingProvider ||
+          row.shippingZone?.provider?.displayName ||
+          (row.status === "RETURNED" || row.status === "DELIVERED" || row.status === "SHIPPED" ? "Standard Delivery" : "Standard Shipping"),
       },
       {
         key: "actions",
         label: "Actions",
-        width: "160px",
+        width: "120px",
         align: "right",
         render: (row) => (
           <AdminRowActions
@@ -305,26 +313,6 @@ export default function OrdersPage() {
                     title: "Edit order",
                   }
                 : undefined
-            }
-            extra={
-              <>
-                {!row.deletedAt && (
-                  <AdminActionButton
-                    action={{
-                      href: `/admin/orders/${row.id}?mode=edit`,
-                      title: "Manage shipping",
-                      icon: <Truck size={13} />,
-                    }}
-                    defaultIcon={<Truck size={13} />}
-                    defaultTitle="Shipping"
-                  />
-                )}
-                {row.deletedAt && (
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 whitespace-nowrap">
-                    Soft-deleted
-                  </span>
-                )}
-              </>
             }
             delete={
               canDelete && !row.deletedAt
@@ -350,13 +338,16 @@ export default function OrdersPage() {
     return null;
   }
 
+  const primaryCurrency = orders[0]?.currency || { symbol: "₹", code: "INR" };
+  const totalOrdersCount = analytics.data?.totals?.totalOrders ?? pagination.total ?? 0;
+
   return (
     <AdminLayout title="Orders" breadcrumb={[{ label: "Orders" }]}>
       <div className="space-y-5">
         <AdminStatsGrid
           stats={[
-            { title: "Total Orders", value: pagination.total ?? 0, icon: <ShoppingCart size={18} /> },
-            { title: "Revenue", value: formatMoney(totalRevenue), icon: <Wallet size={18} />, color: "bg-green-600" },
+            { title: "Total Orders", value: totalOrdersCount, icon: <ShoppingCart size={18} /> },
+            { title: "Revenue", value: formatMoney(totalRevenue, primaryCurrency), icon: <Wallet size={18} />, color: "bg-green-600" },
             { title: "Top Country", value: topCountry?.country ?? "-", subtitle: topCountry ? `${topCountry.orders} orders` : "No order analytics yet", icon: <Filter size={18} />, color: "bg-[#0F6CBD]" },
             { title: "Shipping Ready", value: orders.filter((order) => order.status === "SHIPPED" || order.status === "DELIVERED").length, subtitle: "Visible in current page", icon: <Truck size={18} />, color: "bg-[#7A4F01]" }
           ]}
@@ -603,9 +594,11 @@ export default function OrdersPage() {
               />
             )}
           />
-          <div className="flex items-center justify-end mt-4">
-            <Pagination page={pagination.page} totalPages={pagination.totalPages || 1} onPageChange={setPage} />
-          </div>
+          {pagination.total > 0 && (
+            <div className="flex items-center justify-end mt-4">
+              <Pagination page={pagination.page} totalPages={pagination.totalPages || 0} total={pagination.total} onPageChange={setPage} />
+            </div>
+          )}
         </div>
       </div>
 

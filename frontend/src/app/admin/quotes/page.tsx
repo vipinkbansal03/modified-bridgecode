@@ -339,7 +339,7 @@ export default function QuotesPage() {
   }
 
   return (
-    <AdminLayout title="Quote Requests" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Quotes" }]}>
+    <AdminLayout title="Quote Requests" breadcrumb={[{ label: "Quotes" }]}>
       <div className="space-y-5">
         {/* KPI STATS GRID MATCHING TAX / ORDERS */}
         <AdminStatsGrid
@@ -469,7 +469,7 @@ export default function QuotesPage() {
           totalItems={pagination.total ?? 0}
           currentPage={page}
           pageSize={limit}
-          totalPages={pagination.totalPages || 1}
+          totalPages={pagination.totalPages || 0}
           onPageChange={setPage}
           onPageSizeChange={(newLimit) => {
             setLimit(newLimit);
@@ -493,14 +493,17 @@ export default function QuotesPage() {
         />
 
         {/* BOTTOM PAGINATION MATCHING TAX / ORDERS */}
-        <div className="flex items-center justify-end mt-4">
-          <Pagination
-            page={pagination.page}
-            totalPages={pagination.totalPages || 1}
-            onPageChange={setPage}
-            alwaysShow={true}
-          />
-        </div>
+        {pagination.total > 0 && (
+          <div className="flex items-center justify-end mt-4">
+            <Pagination
+              page={pagination.page}
+              totalPages={pagination.totalPages || 0}
+              total={pagination.total}
+              onPageChange={setPage}
+              alwaysShow={true}
+            />
+          </div>
+        )}
       </div>
 
       {/* SINGLE QUOTE DELETE / ARCHIVE MODAL */}

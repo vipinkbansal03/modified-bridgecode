@@ -11,20 +11,63 @@ import {
 } from "recharts";
 
 interface OrderRow { id: string; orderNumber: string; customerName: string; total: string; status: string; createdAt: string }
-interface InventoryRow { id: string; variant?: { product?: { title: string } }; stock: number; status: string; lowStockThreshold: number }
+interface InventoryRow {
+  id: string;
+  product?: { id: string; title: string; sku?: string };
+  variant?: { id: string; title?: string; sku?: string; product?: { id: string; title: string; sku?: string } };
+  stock: number;
+  status: string;
+  lowStockThreshold: number;
+}
+
+const formatCurrencyAxis = (v: number) => {
+  if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `$${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k`;
+  return `$${v}`;
+};
+
+const sanitizeCustomerName = (name?: string | null) => {
+  if (!name) return "—";
+  const cleaned = name.replace(/^[\s\-_.,]+|[\s\-_.,]+$/g, "").trim();
+  return cleaned || "—";
+};
 
 const orderColumns: Column<OrderRow>[] = [
   { key: "orderNumber", label: "Order #", width: "140px" },
-  { key: "customerName", label: "Customer" },
+  {
+    key: "customerName",
+    label: "Customer",
+    render: (r) => <span className="font-medium text-[#1A1A1A]">{sanitizeCustomerName(r.customerName)}</span>,
+  },
   { key: "total", label: "Total", render: (r) => `${r.total}` },
   { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
   { key: "createdAt", label: "Date", render: (r) => new Date(r.createdAt).toLocaleDateString() },
 ];
 
 const invColumns: Column<InventoryRow>[] = [
-  { key: "product", label: "Product", render: (r) => r.variant?.product?.title || "—" },
-  { key: "stock", label: "Stock" },
-  { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
+  {
+    key: "product",
+    label: "Product / Variant",
+    render: (r) => {
+      const prodTitle = r.product?.title || r.variant?.product?.title || "—";
+      const variantTitle = r.variant?.title;
+      const sku = r.variant?.sku || r.product?.sku;
+      return (
+        <div className="min-w-0 py-0.5">
+          <div className="font-medium text-[#1A1A1A] truncate max-w-[200px]" title={prodTitle}>
+            {prodTitle}
+          </div>
+          {(variantTitle || sku) && (
+            <div className="text-[11px] text-[#777] truncate max-w-[200px]" title={`${variantTitle || ""} ${sku || ""}`}>
+              {variantTitle ? variantTitle : ""}{variantTitle && sku ? " • " : ""}{sku || ""}
+            </div>
+          )}
+        </div>
+      );
+    },
+  },
+  { key: "stock", label: "Stock", width: "70px", render: (r) => <span className="font-semibold text-[#1A1A1A]">{r.stock}</span> },
+  { key: "status", label: "Status", width: "110px", render: (r) => <StatusBadge status={r.status} /> },
 ];
 
 const PIE_COLORS = ["#E31E24", "#111111", "#6B6B6B", "#B5151B", "#9A9A9A", "#D4D4D4", "#F2F2F2", "#444444"];
@@ -62,15 +105,15 @@ export default function DashboardPage() {
               <p className="py-12 text-center text-[13px] text-[#9A9A9A]">No paid orders yet.</p>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={analytics.revenueByMonth} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" />
+                <BarChart data={analytics.revenueByMonth} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" vertical={false} />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9A9A9A" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "#9A9A9A" }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                  <YAxis tick={{ fontSize: 11, fill: "#9A9A9A" }} tickFormatter={formatCurrencyAxis} allowDecimals={false} />
                   <Tooltip
                     formatter={(v: unknown) => [`$${Number(v).toLocaleString()}`, "Revenue"]}
                     contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #E6E6E6" }}
                   />
-                  <Bar dataKey="revenue" fill="#E31E24" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="revenue" fill="#E31E24" radius={[4, 4, 0, 0]} maxBarSize={44} />
                 </BarChart>
               </ResponsiveContainer>
             )}

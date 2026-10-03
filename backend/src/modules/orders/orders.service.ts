@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import type { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
+import { sanitizeCustomerName, isValidCustomerName, cleanSingleName } from "../../utils/nameValidation";
 import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { reserveOrderInventory, commitOrderReservation, releaseOrderReservation } from "../inventory/inventoryReservation.service";
@@ -15,7 +16,7 @@ export async function getAnalytics() {
   twelveMonthsAgo.setDate(1);
   twelveMonthsAgo.setHours(0, 0, 0, 0);
 
-  const [revenueRaw, ordersByCountry, orderTotals] = await Promise.all([
+  const [revenueRaw, ordersByCountry, revenueAggregate, totalOrdersCount] = await Promise.all([
     prisma.$queryRaw<{ month: string; revenue: number; count: number }[]>`
       SELECT
         TO_CHAR(DATE_TRUNC('month', "createdAt"), 'Mon YY') AS month,
@@ -24,6 +25,8 @@ export async function getAnalytics() {
       FROM orders
       WHERE "createdAt" >= ${twelveMonthsAgo}
         AND "paymentStatus" = 'PAID'
+        AND "status" NOT IN ('CANCELLED', 'RETURNED')
+        AND "deletedAt" IS NULL
       GROUP BY DATE_TRUNC('month', "createdAt")
       ORDER BY DATE_TRUNC('month', "createdAt") ASC
     `,
@@ -31,11 +34,22 @@ export async function getAnalytics() {
       SELECT c.name AS country, COUNT(o.id) AS count
       FROM orders o
       JOIN countries c ON o."countryId" = c.id
+      WHERE o."deletedAt" IS NULL
       GROUP BY c.name
       ORDER BY count DESC
       LIMIT 8
     `,
-    prisma.order.aggregate({ _sum: { total: true }, _count: true }),
+    prisma.order.aggregate({
+      where: {
+        deletedAt: null,
+        paymentStatus: "PAID",
+        status: { notIn: ["CANCELLED", "RETURNED"] },
+      },
+      _sum: { total: true },
+    }),
+    prisma.order.count({
+      where: { deletedAt: null },
+    }),
   ]);
 
   return {
@@ -49,8 +63,8 @@ export async function getAnalytics() {
       orders: Number(r.count),
     })),
     totals: {
-      allTimeRevenue: Number(orderTotals._sum.total ?? 0),
-      totalOrders: orderTotals._count,
+      allTimeRevenue: Number(revenueAggregate._sum?.total ?? 0),
+      totalOrders: totalOrdersCount,
     },
   };
 }
@@ -239,7 +253,7 @@ export async function getOrder(id: string) {
   return o;
 }
 
-function generateOrderNumber() {
+export function generateOrderNumber() {
   const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
   return `ORD-${Date.now()}-${suffix}`;
 }
@@ -255,6 +269,7 @@ export async function createAdminOrder(input: {
   shippingZoneId?: string | null;
   shippingCharge?: number | string | null;
   discount?: number | string | null;
+  paymentMethod?: string | null;
   notes?: string | null;
   isTest?: boolean;
   items: {
@@ -348,9 +363,12 @@ export async function createAdminOrder(input: {
   if (!Number.isFinite(discount) || discount < 0) throw new AppError("Discount must be a non-negative number.", 400);
   const total = Math.max(0, subtotal + shippingCharge - discount);
 
-  const customerName = customer ? `${customer.firstName} ${customer.lastName}`.trim() : input.customerName?.trim();
+  const customerName = customer
+    ? sanitizeCustomerName(customer.firstName, customer.lastName) || customer.email
+    : cleanSingleName(input.customerName);
   const customerEmail = customer?.email ?? input.customerEmail?.trim();
   if (!customerName || !customerEmail) throw new AppError("Customer name and email are required.", 400);
+  if (!isValidCustomerName(customerName) && !customer) throw new AppError("Please provide a valid customer name (at least 2 letters, no trailing symbols).", 400);
 
   const orderNumber = generateOrderNumber();
   const globalAutoSetting = await getSettingValue("tax.auto_generate_invoice_global").catch(() => "");
@@ -376,6 +394,7 @@ export async function createAdminOrder(input: {
         total,
         status: input.isTest ? "PENDING" : "CONFIRMED",
         paymentStatus: "PENDING",
+        paymentMethod: input.paymentMethod || "MANUAL_INVOICE",
         isTest: Boolean(input.isTest),
         isInvoiceGenerated: isAutoInvoice,
         invoiceType: isAutoInvoice ? "AUTO" : "NONE",
@@ -421,7 +440,18 @@ export async function createAdminOrder(input: {
 export const updateStatus = async (id: string, status: string) => {
   const existing = await prisma.order.findUnique({ where: { id }, include: { items: true, country: true, currency: true } });
   if (!existing) throw new AppError("Order not found.", 404);
-  
+
+  // Prevent online prepaid orders (Razorpay, etc.) from being marked as SHIPPED or DELIVERED while payment is still pending
+  if (
+    (status === "SHIPPED" || status === "DELIVERED") &&
+    existing.paymentMethod &&
+    existing.paymentMethod !== "PAY_ON_DELIVERY" &&
+    existing.paymentMethod !== "COD" &&
+    existing.paymentStatus !== "PAID"
+  ) {
+    throw new AppError("Online prepaid orders cannot be marked as SHIPPED until payment status is PAID.", 400);
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const res = await tx.order.update({ where: { id }, data: { status: status as never } });
     

@@ -281,7 +281,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               };
             });
           } catch (invErr) {
-            console.warn("Failed to refresh cart inventory status", invErr);
+            // Graceful fallback if backend is momentarily offline
           }
         }
 
@@ -305,7 +305,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               };
             });
           } catch (pmErr) {
-            console.warn("Failed to refresh cart payment methods resolution", pmErr);
+            // Graceful fallback if backend is momentarily offline
           }
         }
 

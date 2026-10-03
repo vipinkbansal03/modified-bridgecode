@@ -124,6 +124,7 @@ const basicSchema = Yup.object({
   specImages: Yup.array().optional(),
   warranty: Yup.array().optional(),
   primaryFeatures: Yup.array().optional(),
+  descriptionCards: Yup.array().optional(),
 });
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -162,6 +163,7 @@ type ProductEditorFormValues = {
   warranty: string[];
   primaryFeatures: Array<{ title: string; description: string; image?: string }>;
   additionalInfo: Array<{ label: string; value: string }>;
+  descriptionCards: Array<{ title: string; description: string; image?: string }>;
 };
 
 const DEFAULT_ADDITIONAL_INFO = [
@@ -747,6 +749,13 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
   const [directionImageState, setDirectionImageState] = useState("");
   const [directionMediaSelectorOpen, setDirectionMediaSelectorOpen] = useState(false);
 
+  const [descriptionCardModalOpen, setDescriptionCardModalOpen] = useState(false);
+  const [editingDescriptionCardIndex, setEditingDescriptionCardIndex] = useState<number | null>(null);
+  const [descriptionCardTitleState, setDescriptionCardTitleState] = useState("");
+  const [descriptionCardDescriptionState, setDescriptionCardDescriptionState] = useState("");
+  const [descriptionCardImageState, setDescriptionCardImageState] = useState("");
+  const [descriptionCardMediaSelectorOpen, setDescriptionCardMediaSelectorOpen] = useState(false);
+
   const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
   const [editingWarrantyIndex, setEditingWarrantyIndex] = useState<number | null>(null);
   const [warrantyTextState, setWarrantyTextState] = useState("");
@@ -954,6 +963,45 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     const list = [...(form.values.primaryFeatures || [])];
     list.splice(index, 1);
     form.setFieldValue("primaryFeatures", list);
+  };
+
+  // Description Cards Modal Handlers
+  const openDescriptionCardModal = (index?: number) => {
+    const list = form.values.descriptionCards || [];
+    if (index !== undefined && list[index]) {
+      setEditingDescriptionCardIndex(index);
+      setDescriptionCardTitleState(list[index].title || "");
+      setDescriptionCardDescriptionState(list[index].description || "");
+      setDescriptionCardImageState(list[index].image || "");
+    } else {
+      setEditingDescriptionCardIndex(null);
+      setDescriptionCardTitleState("");
+      setDescriptionCardDescriptionState("");
+      setDescriptionCardImageState("");
+    }
+    setDescriptionCardModalOpen(true);
+  };
+
+  const handleSaveDescriptionCardModal = () => {
+    const list = [...(form.values.descriptionCards || [])];
+    const newItem = {
+      title: descriptionCardTitleState.trim(),
+      description: descriptionCardDescriptionState.trim(),
+      image: descriptionCardImageState.trim() || undefined,
+    };
+    if (editingDescriptionCardIndex !== null) {
+      list[editingDescriptionCardIndex] = newItem;
+    } else {
+      list.push(newItem);
+    }
+    form.setFieldValue("descriptionCards", list);
+    setDescriptionCardModalOpen(false);
+  };
+
+  const handleDeleteDescriptionCardItem = (index: number) => {
+    const list = [...(form.values.descriptionCards || [])];
+    list.splice(index, 1);
+    form.setFieldValue("descriptionCards", list);
   };
 
   // Warranty Modal Handlers
@@ -2902,6 +2950,14 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         Array.isArray(product?.additionalInfo) && product.additionalInfo.length > 0
           ? product.additionalInfo
           : DEFAULT_ADDITIONAL_INFO,
+      descriptionCards:
+        product?.technicalSpecs && typeof product.technicalSpecs === "object" && Array.isArray((product.technicalSpecs as any).descriptionCards)
+          ? (product.technicalSpecs as any).descriptionCards.map((c: any) => ({
+              title: String(c?.title ?? ""),
+              description: String(c?.description ?? ""),
+              image: c?.image ? String(c.image) : "",
+            }))
+          : [],
     },
     validationSchema: basicSchema,
     onSubmit: async (values, { resetForm }) => {
@@ -2921,8 +2977,18 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               .filter((img) => Boolean(img.url))
           : [];
 
+        const cleanDescriptionCards = Array.isArray(values.descriptionCards)
+          ? values.descriptionCards
+              .map((c) => ({
+                title: String(c?.title ?? "").trim(),
+                description: String(c?.description ?? "").trim(),
+                image: c?.image ? String(c.image).trim() : undefined,
+              }))
+              .filter((c) => hasContent(c.title) || hasContent(c.description) || Boolean(c.image))
+          : [];
+
         // Build a sanitized payload to avoid sending unexpected types or empty array items to the API
-        const { specImages: _discardSpecImages, ...otherValues } = values;
+        const { specImages: _discardSpecImages, descriptionCards: _discardDescriptionCards, ...otherValues } = values;
         const payload = {
           ...otherValues,
           highlights: Array.isArray(values.highlights)
@@ -2937,6 +3003,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           technicalSpecs: {
             specs: cleanSpecs,
             images: cleanSpecImages,
+            descriptionCards: cleanDescriptionCards,
           },
           warranty: Array.isArray(values.warranty)
             ? values.warranty
@@ -3155,6 +3222,50 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             type="button"
             title="Delete guideline"
             onClick={(e) => { e.stopPropagation(); handleDeleteDirectionItem(row.index); }}
+            className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  const descriptionCardCols: Column<{ title: string; description: string; image?: string; index: number }>[] = [
+    {
+      key: "image",
+      label: "Image",
+      render: (row) => row.image ? (
+        <div className="h-11 w-11 overflow-hidden rounded-md border border-[#E5E7EB] bg-white p-0.5 shadow-2xs">
+          <img src={row.image} alt={row.title || "Description image"} className="h-full w-full object-contain" />
+        </div>
+      ) : (
+        <span className="text-gray-300 text-[12px] italic">—</span>
+      ),
+    },
+    { key: "title", label: "Title / Heading", render: (row) => <span className="font-semibold text-[#1A1A1A]">{row.title || "—"}</span> },
+    {
+      key: "description",
+      label: "Description / Details",
+      render: (row) => <span className="line-clamp-2 text-[#4B5563] text-[13px]">{stripHtml(row.description) || "—"}</span>,
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="Edit description row"
+            onClick={(e) => { e.stopPropagation(); openDescriptionCardModal(row.index); }}
+            className="rounded border border-[#E6E6E6] px-2 py-1 text-[12px] hover:bg-[#F5F5F5]"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            type="button"
+            title="Delete description row"
+            onClick={(e) => { e.stopPropagation(); handleDeleteDescriptionCardItem(row.index); }}
             className="rounded border border-[#F2C9C9] px-2 py-1 text-[12px] text-red-600 hover:bg-red-50"
           >
             <Trash2 size={12} />
@@ -5725,6 +5836,19 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               placeholder="Enter detailed clinical product description..."
               onChange={(value) => form.setFieldValue("description", value)}
               className="min-h-[220px]"
+            />
+
+            <AdminSectionTable
+              title="Description Cards & Visual Details (Images & Descriptions)"
+              description='Add structured visual cards (e.g. key benefits, feature spotlights, close-up images with notes) to display alongside the clinical description on the product page.'
+              addButtonLabel="Add Description Row"
+              onAdd={() => openDescriptionCardModal()}
+              columns={descriptionCardCols}
+              data={(form.values.descriptionCards || []).map((item: any, index: number) => ({ ...item, index }))}
+              rowKey="index"
+              onRowClick={(row) => openDescriptionCardModal(row.index)}
+              rowTooltip="Click row or edit icon to edit description row"
+              emptyMessage="No description rows added yet."
             />
           </div>
         )}
@@ -11430,6 +11554,68 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         </div>
       </Modal>
 
+      {/* Description Card Modal */}
+      <Modal
+        open={descriptionCardModalOpen}
+        onClose={() => setDescriptionCardModalOpen(false)}
+        title={editingDescriptionCardIndex !== null ? "Edit Description Row" : "Add Description Row"}
+        size="lg"
+        onSave={handleSaveDescriptionCardModal}
+        saveText={editingDescriptionCardIndex !== null ? "Save Description Row" : "Add Description Row"}
+      >
+        <div className="space-y-4 p-6">
+          <div>
+            <label className="block text-[13px] font-semibold text-[#1A1A1A] mb-1.5">
+              Demonstration Image / Close-up Photo (Optional)
+            </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDescriptionCardMediaSelectorOpen(true)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-[#FAFAFA] px-3.5 py-2 text-[13px] font-semibold text-[#1A1A1A] hover:bg-white hover:border-[#E31E24] transition-colors shadow-2xs"
+              >
+                <ImageIcon size={14} className="text-[#E31E24]" />
+                <span>{descriptionCardImageState ? "Change Image" : "Browse Media Library"}</span>
+              </button>
+              {descriptionCardImageState && (
+                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white p-1 shadow-2xs">
+                  <img
+                    src={descriptionCardImageState}
+                    alt="Description card preview"
+                    className="h-full w-full object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDescriptionCardImageState("")}
+                    className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold shadow-xs hover:bg-red-700 cursor-pointer"
+                    title="Remove image"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="mt-1 text-[11.5px] text-[#6B6B6B]">
+              Upload a feature close-up image, diagram, or demonstration graphic for this description row.
+            </p>
+          </div>
+
+          <AdminInput
+            label="Title / Heading"
+            value={descriptionCardTitleState}
+            onChange={(e) => setDescriptionCardTitleState(e.target.value)}
+            placeholder="e.g. Totally Invisible Zero Glare Surface / Smooth Tie Wings"
+          />
+          <AdminRichTextEditor
+            label="Description / Details"
+            value={descriptionCardDescriptionState}
+            placeholder="Enter detailed description..."
+            onChange={(val) => setDescriptionCardDescriptionState(val)}
+            className="min-h-[160px]"
+          />
+        </div>
+      </Modal>
+
       {/* 4. Warranty Modal */}
       <Modal
         open={warrantyModalOpen}
@@ -11574,6 +11760,22 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
           setDirectionImageState(media.url);
           setDirectionMediaSelectorOpen(false);
           showToast("Guideline image selected.");
+        }}
+      />
+
+      <MediaSelectorModal
+        open={descriptionCardMediaSelectorOpen}
+        title="Select Description Card Image"
+        initialType="image"
+        initialEntityType="PRODUCT"
+        initialEntityId={productId !== "new" ? productId : undefined}
+        initialFolderName={form.values.title || undefined}
+        initialPurpose="specifications"
+        onClose={() => setDescriptionCardMediaSelectorOpen(false)}
+        onSelect={(media) => {
+          setDescriptionCardImageState(media.url);
+          setDescriptionCardMediaSelectorOpen(false);
+          showToast("Description image selected.");
         }}
       />
 

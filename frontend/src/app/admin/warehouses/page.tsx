@@ -438,7 +438,7 @@ export default function WarehousesPage() {
   );
 
   return (
-    <AdminLayout title="Warehouses" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Commerce" }, { label: "Warehouses" }]}>
+    <AdminLayout title="Warehouses" breadcrumb={[{ label: "Commerce" }, { label: "Warehouses" }]}>
       <div className="space-y-5">
         {/* 1. TOP KPI STATS GRID */}
         <AdminStatsGrid

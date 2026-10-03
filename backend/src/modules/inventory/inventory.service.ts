@@ -269,14 +269,22 @@ export function getInventoryStatus(stock: number, lowStockThreshold: number): In
 }
 
 export async function getInventoryDashboard() {
-  const [summary, lowStockCount, outOfStockCount, recentItems, recentAdjustments] = await Promise.all([
+  const [summary, lowStockDistinct, outOfStockDistinct, recentItems, recentAdjustments] = await Promise.all([
     prisma.inventory.aggregate({
       where: { product: { deletedAt: null } },
       _count: { id: true },
       _sum: { stock: true, reservedStock: true },
     }),
-    prisma.inventory.count({ where: { status: "LOW_STOCK", product: { deletedAt: null } } }),
-    prisma.inventory.count({ where: { status: "OUT_OF_STOCK", product: { deletedAt: null } } }),
+    prisma.inventory.findMany({
+      where: { status: "LOW_STOCK", product: { deletedAt: null } },
+      distinct: ["variantId"],
+      select: { id: true },
+    }),
+    prisma.inventory.findMany({
+      where: { status: "OUT_OF_STOCK", product: { deletedAt: null } },
+      distinct: ["variantId"],
+      select: { id: true },
+    }),
     prisma.inventory.findMany({
       where: { product: { deletedAt: null } },
       take: 6,
@@ -296,8 +304,8 @@ export async function getInventoryDashboard() {
       trackedItems: summary._count.id ?? 0,
       totalStock: summary._sum.stock ?? 0,
       reservedStock: summary._sum.reservedStock ?? 0,
-      lowStockCount,
-      outOfStockCount,
+      lowStockCount: lowStockDistinct.length,
+      outOfStockCount: outOfStockDistinct.length,
     },
     recentItems,
     recentAdjustments,

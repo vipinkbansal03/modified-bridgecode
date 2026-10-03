@@ -3336,8 +3336,12 @@ export const useAdminSettings = (group?: string) =>
 
 export const useAdminLogs = (params?: {
   page?: number;
+  limit?: number;
   entityType?: string;
   action?: string;
+  search?: string;
+  category?: string;
+  mainOnly?: boolean | string;
 }) =>
   useQuery({
     queryKey: ["admin-logs", params],

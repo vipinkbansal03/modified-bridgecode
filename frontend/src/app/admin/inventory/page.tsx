@@ -784,7 +784,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <AdminLayout title="Inventory" breadcrumb={[{ label: "Admin", href: "/admin" }, { label: "Inventory" }]}>
+    <AdminLayout title="Inventory" breadcrumb={[{ label: "Inventory" }]}>
       <div className="space-y-5">
         {/* 1. TOP KPI STATS GRID */}
         <AdminStatsGrid

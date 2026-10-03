@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { AppError } from "../../utils/apiResponse";
+import { sanitizeCustomerName } from "../../utils/nameValidation";
 import { decrementVariantStock } from "../inventory/inventory.service";
 import { reserveOrderInventory, releaseOrderReservation } from "../inventory/inventoryReservation.service";
 import { assertSellableInCountry } from "../countries/countryAvailability.service";
@@ -494,7 +495,7 @@ export async function createCustomerOrder(
     const order = await tx.order.create({
       data: {
         orderNumber,
-        customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+        customerName: sanitizeCustomerName(customer.firstName, customer.lastName) || customer.email,
         customerEmail: customer.email,
         customerId: customer.id,
         customerPhone: customer.phone ?? input.shippingAddress.phone,

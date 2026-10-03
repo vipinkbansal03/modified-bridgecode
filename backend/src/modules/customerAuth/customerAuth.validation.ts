@@ -2,12 +2,21 @@ import { z } from "zod";
 
 const PHONE_REGEX = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{2,4}[-\s\.]?[0-9]{3,6}$/;
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const NAME_REGEX = /^[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+(?:[\s.'-][a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+)*$/;
+
+const nameSchema = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(2, `${label} must be at least 2 characters`)
+    .max(50, `${label} is too long`)
+    .regex(NAME_REGEX, `Please enter a valid ${label.toLowerCase()}`);
 
 export const customerRegisterSchema = z.object({
   email: z.string().email("Invalid email address").transform((value) => value.toLowerCase().trim()),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  firstName: z.string().trim().min(1, "First name is required"),
-  lastName: z.string().trim().min(1, "Last name is required"),
+  firstName: nameSchema("First name"),
+  lastName: nameSchema("Last name"),
   phone: z
     .string()
     .trim()
@@ -60,8 +69,8 @@ export const resetPasswordSchema = z.object({
 });
 
 export const updateCustomerProfileSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required").optional(),
-  lastName: z.string().trim().min(1, "Last name is required").optional(),
+  firstName: nameSchema("First name").optional(),
+  lastName: nameSchema("Last name").optional(),
   phone: z.string().trim().min(1, "Mobile number is required").optional(),
   companyName: z.string().trim().optional(),
   website: z.string().trim().optional(),

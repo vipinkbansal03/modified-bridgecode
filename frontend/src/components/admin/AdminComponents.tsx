@@ -205,11 +205,12 @@ export function DataTable<T>({
 
                 {/* Showing Count - Natural width */}
                 {totalItems !== undefined &&
+                  totalItems > 0 &&
                   currentPage !== undefined &&
                   pageSize !== undefined && (
                     <span className="text-[12.5px] text-[#6B6B6B] whitespace-nowrap">
                       Showing{" "}
-                      {totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1}–
+                      {(currentPage - 1) * pageSize + 1}–
                       {Math.min(currentPage * pageSize, totalItems)} of{" "}
                       {totalItems}
                     </span>
@@ -226,10 +227,12 @@ export function DataTable<T>({
                 )}
 
                 {/* Pagination Controls */}
-                {((pageSize !== undefined && onPageSizeChange) ||
-                  (currentPage !== undefined &&
-                    totalPages !== undefined &&
-                    onPageChange)) && (
+                {totalItems !== undefined &&
+                  totalItems > 0 &&
+                  ((pageSize !== undefined && onPageSizeChange) ||
+                    (currentPage !== undefined &&
+                      totalPages !== undefined &&
+                      onPageChange)) && (
                   <div
                     className={cn(
                       "flex items-center gap-3 shrink-0",
@@ -974,6 +977,7 @@ export function AdminSectionTable<T>({
 export interface PaginationProps {
   page: number;
   totalPages: number;
+  total?: number;
   onPageChange: (page: number) => void;
   alwaysShow?: boolean;
   className?: string;
@@ -982,11 +986,12 @@ export interface PaginationProps {
 export function Pagination({
   page,
   totalPages,
+  total,
   onPageChange,
   alwaysShow = false,
   className,
 }: PaginationProps) {
-  if (totalPages <= 1 && !alwaysShow) return null;
+  if (totalPages <= 0 || total === 0 || (totalPages <= 1 && !alwaysShow)) return null;
   const safeTotalPages = Math.max(1, totalPages || 1);
   return (
     <div className={cn("flex items-center justify-end gap-2", className)}>

@@ -98,6 +98,8 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
                 sizes="(max-width: 768px) 90vw, 600px"
                 className="object-contain transition-all duration-300"
                 priority
+                loading="eager"
+                fetchPriority="high"
                 unoptimized={safeImages[index]?.startsWith("http://") || safeImages[index]?.startsWith("https://")}
               />
             )}

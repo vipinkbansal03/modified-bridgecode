@@ -13,6 +13,11 @@ interface AdminHeaderProps {
 export function AdminHeader({ title, breadcrumb, onMenuOpen }: AdminHeaderProps) {
   const { user, logout } = useAdminAuth();
 
+  // Deduplicate leading "Admin" if already in breadcrumb
+  const cleanedBreadcrumb = breadcrumb
+    ? breadcrumb.filter((crumb, idx) => !(idx === 0 && crumb.label.trim().toLowerCase() === "admin"))
+    : [];
+
   return (
     <header className="flex h-14 items-center justify-between border-b border-[#E6E6E6] bg-white px-5 relative z-40">
       <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 pr-3">
@@ -21,21 +26,19 @@ export function AdminHeader({ title, breadcrumb, onMenuOpen }: AdminHeaderProps)
         </button>
         <div className="min-w-0 flex-1">
           <h1 className="text-[14px] sm:text-[15px] font-semibold text-[#1A1A1A] truncate">{title}</h1>
-          {breadcrumb && breadcrumb.length > 0 && (
-            <div className="flex items-center gap-1 text-[11.5px] text-[#9A9A9A] truncate">
-              <span className="flex-shrink-0">Admin</span>
-              {breadcrumb.map((crumb, i) => (
-                <span key={i} className="flex items-center gap-1 flex-shrink-0">
-                  <ChevronRight size={10} className="flex-shrink-0" />
-                  {crumb.href ? (
-                    <a href={crumb.href} className="hover:text-[#1A1A1A] truncate">{crumb.label}</a>
-                  ) : (
-                    <span className="text-[#1A1A1A] truncate">{crumb.label}</span>
-                  )}
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-1 text-[11.5px] text-[#9A9A9A] truncate">
+            <a href="/admin" className="hover:text-[#1A1A1A] flex-shrink-0">Admin</a>
+            {cleanedBreadcrumb.map((crumb, i) => (
+              <span key={i} className="flex items-center gap-1 flex-shrink-0">
+                <ChevronRight size={10} className="flex-shrink-0" />
+                {crumb.href ? (
+                  <a href={crumb.href} className="hover:text-[#1A1A1A] truncate">{crumb.label}</a>
+                ) : (
+                  <span className="text-[#1A1A1A] truncate">{crumb.label}</span>
+                )}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 

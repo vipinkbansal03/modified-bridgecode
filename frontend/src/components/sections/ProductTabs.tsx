@@ -107,6 +107,23 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
     [apiProduct?.primaryFeatures, product.primaryFeatures]
   );
 
+  const validDescriptionCards = useMemo(() => {
+    let rawSpecs = apiProduct?.technicalSpecs ?? product.technicalSpecs;
+    if (typeof rawSpecs === "string") {
+      try {
+        rawSpecs = JSON.parse(rawSpecs);
+      } catch {
+        // ignore
+      }
+    }
+    const rawList = (rawSpecs && typeof rawSpecs === "object" && Array.isArray((rawSpecs as any).descriptionCards))
+      ? (rawSpecs as any).descriptionCards
+      : [];
+    return (rawList as Array<{ title?: string; description?: string; image?: string }>).filter(
+      (item) => isNonEmptyText(item.title) || isNonEmptyText(item.description) || Boolean(item.image)
+    );
+  }, [apiProduct?.technicalSpecs, product.technicalSpecs]);
+
   const displayedPackages = useMemo(() => {
     return apiProduct?.packages || [];
   }, [apiProduct?.packages]);
@@ -308,7 +325,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
         {activeTab === "description" && (
           <div className="space-y-4">
             <h3 className="text-[16px] font-bold text-[#111827]">{t("ui.pdp.descriptionHeading")}</h3>
-            {validPrimaryFeatures.length > 0 ? (
+            {validDescriptionCards.length > 0 ? (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 {/* Left Column: Clinical Description Text */}
                 <div className="lg:col-span-6 space-y-3">
@@ -320,9 +337,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                   />
                 </div>
 
-                {/* Right Column: Product Data Visual Instruction Cards */}
+                {/* Right Column: Product Description Structured Visual Cards */}
                 <div className="lg:col-span-6 space-y-3">
-                  {validPrimaryFeatures.map((item: { title?: string; description?: string; image?: string }, idx: number) => (
+                  {validDescriptionCards.map((item: { title?: string; description?: string; image?: string }, idx: number) => (
                     <div
                       key={idx}
                       className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3 shadow-2xs hover:border-[#E31E24]/30 hover:shadow-xs transition-all"
@@ -331,7 +348,7 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                         <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0 overflow-hidden rounded-lg border border-[#E5E7EB] bg-white p-1 flex items-center justify-center shadow-2xs">
                           <img
                             src={item.image}
-                            alt={item.title || `Product Data ${idx + 1}`}
+                            alt={item.title || `Description visual ${idx + 1}`}
                             className="h-full w-full object-contain"
                           />
                         </div>

@@ -46,8 +46,9 @@ export function AdminBulkActionsBar({
       
       <select
         value={actionType}
+        disabled={selectedCount === 0 || applyLoading}
         onChange={(e) => onActionTypeChange(e.target.value)}
-        className="h-8 rounded-md border border-[#D1D5DB] bg-white px-3 text-[12.5px] text-[#1F2937] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24] transition-all shadow-xs cursor-pointer"
+        className="h-8 rounded-md border border-[#D1D5DB] bg-white px-3 text-[12.5px] text-[#1F2937] outline-none focus:border-[#E31E24] focus:ring-1 focus:ring-[#E31E24] transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-[#F9FAFB]"
       >
         <option value="">Choose Bulk Action</option>
         {actions.map((act) => (

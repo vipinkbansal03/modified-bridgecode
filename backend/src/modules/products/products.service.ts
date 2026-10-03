@@ -1167,6 +1167,7 @@ export async function createProduct(data: ProductInput) {
 
   const { activeCountryIds, ...createData } = data;
   if ("specImages" in createData) delete (createData as any).specImages;
+  if ("descriptionCards" in createData) delete (createData as any).descriptionCards;
 
   const createdProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.create({
@@ -1234,6 +1235,7 @@ export async function updateProduct(id: string, data: Partial<ProductInput>) {
   if (data.description !== undefined) updateData.description = data.description || null;
   if (data.brand !== undefined) updateData.brand = data.brand?.trim() || existing.brand;
   if ("specImages" in updateData) delete updateData.specImages;
+  if ("descriptionCards" in updateData) delete updateData.descriptionCards;
 
   const updatedProduct = await prisma.$transaction(async (tx) => {
     const product = await tx.product.update({ where: { id }, data: updateData as Prisma.ProductUpdateInput });

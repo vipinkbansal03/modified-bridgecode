@@ -1,11 +1,13 @@
 import { prisma } from "../../config/database";
 import { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
+import { sanitizeCustomerName, cleanSingleName, isValidCustomerName } from "../../utils/nameValidation";
 import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
 import { resolvePrice } from "../pricing/priceResolver.service";
 import { sendQuoteConvertedEmail, sendQuoteSentEmail } from "../../utils/email";
 import { reserveOrderInventory } from "../inventory/inventoryReservation.service";
 import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
+import { generateOrderNumber } from "../orders/orders.service";
 
 export async function listQuotes(query: { page?: string; limit?: string; status?: string; search?: string; sortBy?: string; sortDir?: string; deleted?: string }) {
   const { page, limit, skip } = getPagination(query);
@@ -188,9 +190,12 @@ export async function createAdminQuote(input: {
   if (!Number.isFinite(shippingCharge) || shippingCharge < 0) throw new AppError("Shipping charge must be a non-negative number.", 400);
   if (!Number.isFinite(discount) || discount < 0) throw new AppError("Discount must be a non-negative number.", 400);
 
-  const customerName = customer ? `${customer.firstName} ${customer.lastName}`.trim() : input.customerName?.trim();
+  const customerName = customer
+    ? sanitizeCustomerName(customer.firstName, customer.lastName) || customer.email
+    : cleanSingleName(input.customerName);
   const customerEmail = customer?.email ?? input.customerEmail?.trim();
   if (!customerName || !customerEmail) throw new AppError("Customer name and email are required.", 400);
+  if (!isValidCustomerName(customerName) && !customer) throw new AppError("Please provide a valid customer name (at least 2 letters, no trailing symbols).", 400);
 
   const quote = await prisma.quote.create({
     data: {
@@ -371,7 +376,7 @@ export async function convertToOrder(quoteId: string) {
     })
   );
 
-  const orderNumber = `ORD-${Date.now()}`;
+  const orderNumber = generateOrderNumber();
 
   let customerId = quote.customerId;
   if (!customerId && quote.customerEmail) {

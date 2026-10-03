@@ -1,4 +1,5 @@
 import axios from "axios";
+import { apiClient } from "@/lib/apiClient";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL
   ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api(?:\/admin|\/customer)?$/, "")
@@ -393,24 +394,31 @@ export async function fetchPublicPaymentMethods(
   countryCode?: string,
   cartItems?: { productId: string; variantId: string }[]
 ) {
-  const url = API_ORIGIN ? `${API_ORIGIN}/api/public/payment-methods/resolve` : "/api/public/payment-methods/resolve";
-  const res = await axios.post(url, {
-    countryCode: countryCode || "IN",
-    cartItems: cartItems || [],
-  });
-  const data = res.data.data;
-  if (Array.isArray(data)) {
+  try {
+    const res = await apiClient.post("/public/payment-methods/resolve", {
+      countryCode: countryCode || "IN",
+      cartItems: cartItems || [],
+    });
+    const data = res.data.data;
+    if (Array.isArray(data)) {
+      return {
+        methods: data as AvailablePaymentMethod[],
+        hasConflict: false,
+        conflictingVariantIds: [] as string[],
+      };
+    }
     return {
-      methods: data as AvailablePaymentMethod[],
+      methods: (data?.methods ?? []) as AvailablePaymentMethod[],
+      hasConflict: Boolean(data?.hasConflict),
+      conflictingVariantIds: (data?.conflictingVariantIds ?? []) as string[],
+    };
+  } catch {
+    return {
+      methods: [] as AvailablePaymentMethod[],
       hasConflict: false,
       conflictingVariantIds: [] as string[],
     };
   }
-  return {
-    methods: (data?.methods ?? []) as AvailablePaymentMethod[],
-    hasConflict: Boolean(data?.hasConflict),
-    conflictingVariantIds: (data?.conflictingVariantIds ?? []) as string[],
-  };
 }
 
 export async function initiateCustomerPayment(orderId: string, paymentMethodCode: string) {
