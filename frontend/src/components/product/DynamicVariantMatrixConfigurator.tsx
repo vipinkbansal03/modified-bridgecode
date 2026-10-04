@@ -82,6 +82,7 @@ function formatMoney(symbol: string, amount: number) {
 
 function buildSelectionKey(selectionByAttributeId: Record<string, string>) {
   return Object.entries(selectionByAttributeId)
+    .filter(([_, valueId]) => Boolean(valueId))
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([attributeId, valueId]) => `${attributeId}:${valueId}`)
     .join("|");
@@ -91,10 +92,12 @@ function buildVariantLookupKey(
   selectionByAttributeId: Record<string, string>,
   packageId?: string | null,
 ) {
-  return buildSelectionKey({
-    ...selectionByAttributeId,
-    __package: packageId ?? "",
-  });
+  const payload: Record<string, string> = {};
+  for (const [k, v] of Object.entries(selectionByAttributeId)) {
+    if (v) payload[k] = v;
+  }
+  if (packageId) payload.__package = packageId;
+  return buildSelectionKey(payload);
 }
 
 function buildAxisCombinations(
@@ -323,51 +326,6 @@ export function DynamicVariantMatrixConfigurator({
     [apiProduct.attributes],
   );
 
-  const hasConfiguredGridAxis = useMemo(
-    () => attributes.some((a) => a.gridAxis === "COLUMN" || a.gridAxis === "ROW"),
-    [attributes],
-  );
-
-  const xAxisAttributes = useMemo(
-    () =>
-      attributes.filter((attribute) =>
-        attribute.gridAxis === "COLUMN" ||
-        (!hasConfiguredGridAxis && attribute.gridAxis === undefined && getAttributeDisplayType(attribute) === "X_GRID"),
-      ),
-    [attributes, hasConfiguredGridAxis],
-  );
-  const yAxisAttributes = useMemo(
-    () =>
-      attributes.filter((attribute) =>
-        attribute.gridAxis === "ROW" ||
-        (!hasConfiguredGridAxis && attribute.gridAxis === undefined && getAttributeDisplayType(attribute) === "Y_GRID"),
-      ),
-    [attributes, hasConfiguredGridAxis],
-  );
-  const rowAxisAttributes = yAxisAttributes;
-  const matrixEnabled = Boolean(
-    xAxisAttributes.length && yAxisAttributes.length,
-  );
-  const dropdownAttributes = useMemo(
-    () =>
-      matrixEnabled
-        ? attributes.filter(
-            (attribute) =>
-              !xAxisAttributes.some((axis) => axis.id === attribute.id) &&
-              !yAxisAttributes.some((axis) => axis.id === attribute.id),
-          )
-        : attributes,
-    [matrixEnabled, attributes, xAxisAttributes, yAxisAttributes],
-  );
-  const rowCombinations = useMemo(
-    () => buildAxisCombinations(rowAxisAttributes),
-    [rowAxisAttributes],
-  );
-  const columnCombinations = useMemo(
-    () => buildAxisCombinations(xAxisAttributes),
-    [xAxisAttributes],
-  );
-
   const normalizedVariants = useMemo<NormalizedVariant[]>(
     () =>
       apiProduct.variants.map((variant) => ({
@@ -377,11 +335,6 @@ export function DynamicVariantMatrixConfigurator({
     [apiProduct.variants, attributes],
   );
 
-  const [dropdownSelections, setDropdownSelections] = useState<
-    Record<string, string>
-  >(() =>
-    buildInitialDropdownSelections(dropdownAttributes, normalizedVariants),
-  );
   const packageOptions = useMemo(
     () =>
       Array.from(
@@ -396,10 +349,71 @@ export function DynamicVariantMatrixConfigurator({
       ),
     [normalizedVariants],
   );
-  const filterControlCount = dropdownAttributes.length;
+
   const [selectedPackageId, setSelectedPackageId] = useState(
     () => packageOptions[0]?.id ?? "",
   );
+
+  const baseVariants = useMemo(() => {
+    return normalizedVariants.filter(
+      (variant) =>
+        packageOptions.length <= 1 ||
+        (variant.package?.id ?? "") === selectedPackageId,
+    );
+  }, [normalizedVariants, packageOptions.length, selectedPackageId]);
+
+  const hasConfiguredGridAxis = useMemo(
+    () => attributes.some((a) => a.gridAxis === "COLUMN" || a.gridAxis === "ROW"),
+    [attributes],
+  );
+
+  const gridRowAttributeIds = useMemo(
+    () =>
+      new Set(
+        attributes
+          .filter(
+            (attribute) =>
+              attribute.gridAxis === "ROW" ||
+              (!hasConfiguredGridAxis &&
+                attribute.gridAxis === undefined &&
+                getAttributeDisplayType(attribute) === "Y_GRID"),
+          )
+          .map((a) => a.id),
+      ),
+    [attributes, hasConfiguredGridAxis],
+  );
+
+  const gridColAttributeIds = useMemo(
+    () =>
+      new Set(
+        attributes
+          .filter(
+            (attribute) =>
+              attribute.gridAxis === "COLUMN" ||
+              (!hasConfiguredGridAxis &&
+                attribute.gridAxis === undefined &&
+                getAttributeDisplayType(attribute) === "X_GRID"),
+          )
+          .map((a) => a.id),
+      ),
+    [attributes, hasConfiguredGridAxis],
+  );
+
+  const candidateDropdownAttributes = useMemo(
+    () =>
+      attributes.filter(
+        (a) =>
+          !gridRowAttributeIds.has(a.id) && !gridColAttributeIds.has(a.id),
+      ),
+    [attributes, gridRowAttributeIds, gridColAttributeIds],
+  );
+
+  const [dropdownSelections, setDropdownSelections] = useState<
+    Record<string, string>
+  >(() =>
+    buildInitialDropdownSelections(candidateDropdownAttributes, normalizedVariants),
+  );
+
   const [quantityMap, setQuantityMap] = useState<Record<string, number>>({});
   const [dropdownQuantity, setDropdownQuantity] = useState<number>(1);
   const [previewPriceMap, setPreviewPriceMap] = useState<
@@ -438,6 +452,47 @@ export function DynamicVariantMatrixConfigurator({
     return map;
   }, [normalizedVariants]);
 
+  const activeDropdownInfo = useMemo(() => {
+    const activeList: Array<{
+      attribute: ProductOptionAttribute;
+      availableValues: ApiAttributeValue[];
+    }> = [];
+
+    let currentVariants = baseVariants;
+
+    for (const attr of candidateDropdownAttributes) {
+      const availableValueIds = new Set(
+        currentVariants
+          .map((v) => v.selectionByAttributeId[attr.id])
+          .filter((val): val is string => Boolean(val)),
+      );
+
+      if (availableValueIds.size > 0) {
+        const availableValues = attr.values.filter((v) =>
+          availableValueIds.has(v.id),
+        );
+        activeList.push({ attribute: attr, availableValues });
+
+        const selectedValId = dropdownSelections[attr.id];
+        if (selectedValId && availableValueIds.has(selectedValId)) {
+          currentVariants = currentVariants.filter(
+            (v) => v.selectionByAttributeId[attr.id] === selectedValId,
+          );
+        }
+      }
+    }
+
+    return {
+      activeDropdownAttributes: activeList.map((item) => item.attribute),
+      availableValuesByAttributeId: new Map(
+        activeList.map((item) => [item.attribute.id, item.availableValues]),
+      ),
+    };
+  }, [baseVariants, candidateDropdownAttributes, dropdownSelections]);
+
+  const dropdownAttributes = activeDropdownInfo.activeDropdownAttributes;
+  const filterControlCount = dropdownAttributes.length;
+
   const allDropdownsSelected = useMemo(() => {
     return (
       dropdownAttributes.length === 0 ||
@@ -446,32 +501,122 @@ export function DynamicVariantMatrixConfigurator({
   }, [dropdownAttributes, dropdownSelections]);
 
   const filteredVariants = useMemo(() => {
-    return normalizedVariants.filter(
-      (variant) =>
-        (packageOptions.length <= 1 ||
-          (variant.package?.id ?? "") === selectedPackageId) &&
-        dropdownAttributes.every((attribute) => {
-          const selectedValueId = dropdownSelections[attribute.id];
-          return (
-            !selectedValueId ||
-            variant.selectionByAttributeId[attribute.id] === selectedValueId
-          );
-        }),
+    return baseVariants.filter((variant) =>
+      dropdownAttributes.every((attribute) => {
+        const selectedValueId = dropdownSelections[attribute.id];
+        return (
+          !selectedValueId ||
+          variant.selectionByAttributeId[attribute.id] === selectedValueId
+        );
+      }),
     );
-  }, [normalizedVariants, packageOptions.length, selectedPackageId, dropdownAttributes, dropdownSelections]);
+  }, [baseVariants, dropdownAttributes, dropdownSelections]);
+
+  const activeRowAttributes = useMemo(() => {
+    return attributes
+      .filter(
+        (a) =>
+          gridRowAttributeIds.has(a.id) &&
+          filteredVariants.some((v) => Boolean(v.selectionByAttributeId[a.id])),
+      )
+      .map((a) => {
+        const presentValueIds = new Set(
+          filteredVariants
+            .map((v) => v.selectionByAttributeId[a.id])
+            .filter((val): val is string => Boolean(val)),
+        );
+        return {
+          ...a,
+          values: a.values.filter((v) => presentValueIds.has(v.id)),
+        };
+      });
+  }, [attributes, gridRowAttributeIds, filteredVariants]);
+
+  const activeColumnAttributes = useMemo(() => {
+    return attributes
+      .filter(
+        (a) =>
+          gridColAttributeIds.has(a.id) &&
+          filteredVariants.some((v) => Boolean(v.selectionByAttributeId[a.id])),
+      )
+      .map((a) => {
+        const presentValueIds = new Set(
+          filteredVariants
+            .map((v) => v.selectionByAttributeId[a.id])
+            .filter((val): val is string => Boolean(val)),
+        );
+        return {
+          ...a,
+          values: a.values.filter((v) => presentValueIds.has(v.id)),
+        };
+      });
+  }, [attributes, gridColAttributeIds, filteredVariants]);
+
+  const rowAxisAttributes = activeRowAttributes;
+  const xAxisAttributes = activeColumnAttributes;
+  const yAxisAttributes = activeRowAttributes;
+
+  const matrixEnabled = Boolean(
+    activeRowAttributes.length && activeColumnAttributes.length,
+  );
+
+  const rowCombinations = useMemo(
+    () => (matrixEnabled ? buildAxisCombinations(activeRowAttributes) : []),
+    [matrixEnabled, activeRowAttributes],
+  );
+
+  const columnCombinations = useMemo(
+    () => (matrixEnabled ? buildAxisCombinations(activeColumnAttributes) : []),
+    [matrixEnabled, activeColumnAttributes],
+  );
+
+  const activeRowCombinations = useMemo(() => {
+    if (!allDropdownsSelected || !matrixEnabled) return [];
+    return rowCombinations.filter((rc) => {
+      return columnCombinations.some((cc) => {
+        const key = buildVariantLookupKey(
+          {
+            ...dropdownSelections,
+            ...rc.selection,
+            ...cc.selection,
+          },
+          selectedPackageId,
+        );
+        return variantLookup.has(key) && variantLookup.get(key) !== null;
+      });
+    });
+  }, [allDropdownsSelected, matrixEnabled, rowCombinations, columnCombinations, dropdownSelections, selectedPackageId, variantLookup]);
+
+  const activeColumnCombinations = useMemo(() => {
+    if (!allDropdownsSelected || !matrixEnabled) return [];
+    return columnCombinations.filter((cc) => {
+      return activeRowCombinations.some((rc) => {
+        const key = buildVariantLookupKey(
+          {
+            ...dropdownSelections,
+            ...rc.selection,
+            ...cc.selection,
+          },
+          selectedPackageId,
+        );
+        return variantLookup.has(key) && variantLookup.get(key) !== null;
+      });
+    });
+  }, [allDropdownsSelected, matrixEnabled, columnCombinations, activeRowCombinations, dropdownSelections, selectedPackageId, variantLookup]);
 
   const singleResolvedVariant = useMemo<NormalizedVariant | null>(() => {
     if (!allDropdownsSelected) return null;
+    if (matrixEnabled && activeRowCombinations.length > 0 && activeColumnCombinations.length > 0) return null;
     if (filteredVariants.length === 1) return filteredVariants[0];
 
     // Check if there is a variant that specifically does not require X/Y grid attributes
     const exactDropdownMatch = filteredVariants.find((v) => {
-      const hasX = xAxisAttributes.some((x) => Boolean(v.selectionByAttributeId[x.id]));
-      const hasY = yAxisAttributes.some((y) => Boolean(v.selectionByAttributeId[y.id]));
+      const hasX = activeColumnAttributes.some((x) => Boolean(v.selectionByAttributeId[x.id]));
+      const hasY = activeRowAttributes.some((y) => Boolean(v.selectionByAttributeId[y.id]));
       return !hasX && !hasY;
     });
     return exactDropdownMatch ?? null;
-  }, [allDropdownsSelected, filteredVariants, xAxisAttributes, yAxisAttributes]);
+  }, [allDropdownsSelected, matrixEnabled, activeRowCombinations.length, activeColumnCombinations.length, filteredVariants, activeColumnAttributes, activeRowAttributes]);
 
   const singleResolvedPrice = singleResolvedVariant
     ? variantPriceMap[singleResolvedVariant.id] ?? null
@@ -490,40 +635,6 @@ export function DynamicVariantMatrixConfigurator({
   const isSingleOutOfStock = singleResolvedVariant
     ? singleResolvedAvailableStock <= 0
     : false;
-
-  const activeRowCombinations = useMemo(() => {
-    if (!allDropdownsSelected && dropdownAttributes.length > 0) return [];
-    return rowCombinations.filter((rc) => {
-      return columnCombinations.some((cc) => {
-        const key = buildVariantLookupKey(
-          {
-            ...dropdownSelections,
-            ...rc.selection,
-            ...cc.selection,
-          },
-          selectedPackageId,
-        );
-        return variantLookup.has(key) && variantLookup.get(key) !== null;
-      });
-    });
-  }, [allDropdownsSelected, dropdownAttributes.length, rowCombinations, columnCombinations, dropdownSelections, selectedPackageId, variantLookup]);
-
-  const activeColumnCombinations = useMemo(() => {
-    if (!allDropdownsSelected && dropdownAttributes.length > 0) return [];
-    return columnCombinations.filter((cc) => {
-      return activeRowCombinations.some((rc) => {
-        const key = buildVariantLookupKey(
-          {
-            ...dropdownSelections,
-            ...rc.selection,
-            ...cc.selection,
-          },
-          selectedPackageId,
-        );
-        return variantLookup.has(key) && variantLookup.get(key) !== null;
-      });
-    });
-  }, [allDropdownsSelected, dropdownAttributes.length, columnCombinations, activeRowCombinations, dropdownSelections, selectedPackageId, variantLookup]);
 
   const selectedEntries = useMemo(
     () =>
@@ -634,32 +745,12 @@ export function DynamicVariantMatrixConfigurator({
 
   function getAvailableValuesForDropdownAttribute(
     attribute: ProductOptionAttribute,
-    attrIndex: number,
+    _attrIndex?: number,
   ) {
-    const precedingSelections = dropdownAttributes
-      .slice(0, attrIndex)
-      .map((a) => ({ id: a.id, valueId: dropdownSelections[a.id] }))
-      .filter((item) => Boolean(item.valueId));
-
-    const matchingVariants = normalizedVariants.filter((variant) =>
-      precedingSelections.every(
-        (item) => variant.selectionByAttributeId[item.id] === item.valueId,
-      ),
+    return (
+      activeDropdownInfo.availableValuesByAttributeId.get(attribute.id) ??
+      attribute.values
     );
-
-    const sourceVariants = matchingVariants.length > 0 ? matchingVariants : normalizedVariants;
-
-    const availableValueIdSet = new Set(
-      sourceVariants
-        .map((v) => v.selectionByAttributeId[attribute.id])
-        .filter((val): val is string => Boolean(val)),
-    );
-
-    if (availableValueIdSet.size === 0) {
-      return attribute.values;
-    }
-
-    return attribute.values.filter((v) => availableValueIdSet.has(v.id));
   }
 
   const handleDropdownChange = (attributeId: string, valueId: string) => {
@@ -668,43 +759,48 @@ export function DynamicVariantMatrixConfigurator({
 
     for (let i = 0; i < attrIndex; i++) {
       const id = dropdownAttributes[i].id;
-      nextSelections[id] = dropdownSelections[id] ?? "";
+      if (dropdownSelections[id]) {
+        nextSelections[id] = dropdownSelections[id];
+      }
     }
 
-    nextSelections[attributeId] = valueId;
+    if (valueId) {
+      nextSelections[attributeId] = valueId;
+    }
 
-    if (!valueId) {
-      for (let i = attrIndex + 1; i < dropdownAttributes.length; i++) {
-        nextSelections[dropdownAttributes[i].id] = "";
+    let currentVariants = baseVariants;
+    for (const [k, v] of Object.entries(nextSelections)) {
+      if (v) {
+        currentVariants = currentVariants.filter(
+          (variant) => variant.selectionByAttributeId[k] === v,
+        );
       }
-    } else {
-      for (let i = attrIndex + 1; i < dropdownAttributes.length; i++) {
-        const downstreamAttr = dropdownAttributes[i];
-        const validDownstreamVariants = normalizedVariants.filter((v) =>
-          Object.entries(nextSelections).every(
-            ([k, vId]) => !vId || v.selectionByAttributeId[k] === vId,
-          ),
-        );
+    }
 
-        const availableDownstreamValueIds = new Set(
-          validDownstreamVariants
-            .map((v) => v.selectionByAttributeId[downstreamAttr.id])
-            .filter((val): val is string => Boolean(val)),
-        );
+    for (let i = attrIndex + 1; i < dropdownAttributes.length; i++) {
+      const downstreamAttr = dropdownAttributes[i];
+      const availableDownstreamValueIds = new Set(
+        currentVariants
+          .map((v) => v.selectionByAttributeId[downstreamAttr.id])
+          .filter((val): val is string => Boolean(val)),
+      );
 
-        const currentDownstreamValId = dropdownSelections[downstreamAttr.id];
-        if (currentDownstreamValId && availableDownstreamValueIds.has(currentDownstreamValId)) {
-          nextSelections[downstreamAttr.id] = currentDownstreamValId;
-        } else {
-          nextSelections[downstreamAttr.id] = "";
-        }
+      const currentDownstreamValId = dropdownSelections[downstreamAttr.id];
+      if (
+        currentDownstreamValId &&
+        availableDownstreamValueIds.has(currentDownstreamValId)
+      ) {
+        nextSelections[downstreamAttr.id] = currentDownstreamValId;
+        currentVariants = currentVariants.filter(
+          (v) => v.selectionByAttributeId[downstreamAttr.id] === currentDownstreamValId,
+        );
+      } else {
+        nextSelections[downstreamAttr.id] = "";
       }
     }
 
     setDropdownSelections(nextSelections);
-    if (matrixEnabled) {
-      setQuantityMap({});
-    }
+    setQuantityMap({});
     setFeedback(null);
   };
 
@@ -978,7 +1074,12 @@ export function DynamicVariantMatrixConfigurator({
                       type="button"
                       role="tab"
                       aria-selected={selectedPackageId === pkg.id}
-                      onClick={() => setSelectedPackageId(pkg.id)}
+                      onClick={() => {
+                        setSelectedPackageId(pkg.id);
+                        setDropdownSelections({});
+                        setQuantityMap({});
+                        setFeedback(null);
+                      }}
                       className={`rounded-lg px-5 py-2.5 text-[14px] font-bold transition cursor-pointer ${selectedPackageId === pkg.id ? "bg-brand text-white shadow-xs" : "border border-[#E31E24] bg-white text-[#111827] hover:bg-red-50"}`}
                     >
                       {pkg.title}
