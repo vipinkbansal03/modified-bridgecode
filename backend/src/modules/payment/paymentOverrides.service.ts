@@ -152,15 +152,40 @@ export async function resolveCartPaymentMethods(
   countryCode: string,
   cartItems: CartItemInput[]
 ) {
-  const code = (countryCode || "IN").trim().toUpperCase();
+  const rawCountry = (countryCode || "IN").trim();
 
   const country = await prisma.country.findFirst({
-    where: { code, status: "ACTIVE" },
+    where: {
+      status: "ACTIVE",
+      OR: [
+        { code: { equals: rawCountry, mode: "insensitive" } },
+        { name: { equals: rawCountry, mode: "insensitive" } },
+        { id: rawCountry },
+      ],
+    },
   });
 
   if (!country) {
+    // Fallback to globally enabled active payment methods
+    const methods = await prisma.paymentMethod.findMany({
+      where: { isEnabled: true },
+      orderBy: { sortOrder: "asc" },
+    });
     return {
-      methods: [],
+      methods: methods.map((m) => ({
+        id: m.id,
+        code: m.code,
+        name: m.name,
+        description: m.description,
+        iconUrl: m.iconUrl,
+        type: m.type,
+        clientScriptUrl: m.clientScriptUrl,
+        sortOrder: m.sortOrder,
+        isDefault: m.code === "COD",
+        minOrderAmount: null,
+        maxOrderAmount: null,
+        publicKey: null,
+      })),
       hasConflict: false,
       conflictingVariantIds: [],
     };
@@ -214,20 +239,58 @@ export async function resolveCartPaymentMethods(
   }
 
   // Fetch Overrides for products and variants in cart
-  const productIds = Array.from(
+  const rawProductKeys = Array.from(
     new Set(cartItems.map((item) => item?.productId).filter((id): id is string => typeof id === "string" && id !== ""))
   );
   const variantIds = Array.from(
     new Set(cartItems.map((item) => item?.variantId).filter((id): id is string => typeof id === "string" && id !== ""))
   );
 
+  const [dbProducts, dbVariants] = await Promise.all([
+    rawProductKeys.length > 0
+      ? prisma.product.findMany({
+          where: {
+            OR: [
+              { id: { in: rawProductKeys } },
+              { slug: { in: rawProductKeys } },
+            ],
+          },
+          select: { id: true, slug: true },
+        })
+      : [],
+    variantIds.length > 0
+      ? prisma.productVariant.findMany({
+          where: { id: { in: variantIds } },
+          select: { id: true, productId: true },
+        })
+      : [],
+  ]);
+
+  const productKeyToIdMap = new Map<string, string>();
+  dbProducts.forEach((p) => {
+    productKeyToIdMap.set(p.id, p.id);
+    productKeyToIdMap.set(p.slug, p.id);
+  });
+  const variantToProductMap = new Map(dbVariants.map((v) => [v.id, v.productId]));
+
+  const resolvedProductIds = Array.from(
+    new Set([
+      ...Array.from(productKeyToIdMap.values()),
+      ...Array.from(variantToProductMap.values()),
+    ])
+  );
+
   const [productOverrides, variantOverrides] = await Promise.all([
-    prisma.productPaymentMethod.findMany({
-      where: { productId: { in: productIds } },
-    }),
-    prisma.variantPaymentMethod.findMany({
-      where: { variantId: { in: variantIds } },
-    }),
+    resolvedProductIds.length > 0
+      ? prisma.productPaymentMethod.findMany({
+          where: { productId: { in: resolvedProductIds } },
+        })
+      : [],
+    variantIds.length > 0
+      ? prisma.variantPaymentMethod.findMany({
+          where: { variantId: { in: variantIds } },
+        })
+      : [],
   ]);
 
   // Compute allowed payment methods per item
@@ -253,9 +316,14 @@ export async function resolveCartPaymentMethods(
       }
 
       // 2. Check Product Override
-      if (item.productId) {
+      const effectiveProductId =
+        productKeyToIdMap.get(item.productId) ||
+        variantToProductMap.get(item.variantId) ||
+        item.productId;
+
+      if (effectiveProductId) {
         const pOverride = productOverrides.find(
-          (po) => po.productId === item.productId && po.paymentMethodId === method.id
+          (po) => po.productId === effectiveProductId && po.paymentMethodId === method.id
         );
         if (pOverride) {
           if (pOverride.state === "ALLOW") {
@@ -276,9 +344,10 @@ export async function resolveCartPaymentMethods(
 
   const itemAllowedMap = new Map<string, Set<string>>();
   cartItems.forEach((item) => {
-    if (item && item.variantId) {
-      if (!itemAllowedMap.has(item.variantId)) {
-        itemAllowedMap.set(item.variantId, getItemAllowedMethodIds(item));
+    const itemKey = item?.variantId || item?.productId;
+    if (itemKey) {
+      if (!itemAllowedMap.has(itemKey)) {
+        itemAllowedMap.set(itemKey, getItemAllowedMethodIds(item));
       }
     }
   });

@@ -5,10 +5,17 @@ import { resolveCartPaymentMethods } from "./paymentOverrides.service";
 import { expireOrderAndReleaseStock } from "./paymentReconciliation.service";
 
 export async function getAvailablePaymentMethodsForCountry(countryCode?: string) {
-  const code = (countryCode || "IN").trim().toUpperCase();
+  const rawCountry = (countryCode || "IN").trim();
 
   const country = await prisma.country.findFirst({
-    where: { code, status: "ACTIVE" },
+    where: {
+      status: "ACTIVE",
+      OR: [
+        { code: { equals: rawCountry, mode: "insensitive" } },
+        { name: { equals: rawCountry, mode: "insensitive" } },
+        { id: rawCountry },
+      ],
+    },
   });
 
   if (!country) {

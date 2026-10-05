@@ -231,6 +231,7 @@ export default function CheckoutPage() {
   const [availablePaymentMethods, setAvailablePaymentMethods] = useState<
     AvailablePaymentMethod[]
   >([]);
+  const [hasPaymentConflict, setHasPaymentConflict] = useState(false);
   const [selectedPaymentCode, setSelectedPaymentCode] = useState<string>("COD");
   const [estimate, setEstimate] = useState<CustomerOrderEstimate | null>(null);
   const [shippingEstimate, setShippingEstimate] =
@@ -412,6 +413,7 @@ export default function CheckoutPage() {
         if (!active) return;
         const methods = res.methods || [];
         setAvailablePaymentMethods(methods);
+        setHasPaymentConflict(Boolean(res.hasConflict));
         const defaultMethod = methods.find((m) => m.isDefault) || methods[0];
         if (defaultMethod) {
           setSelectedPaymentCode(defaultMethod.code);
@@ -420,7 +422,10 @@ export default function CheckoutPage() {
         }
       })
       .catch(() => {
-        if (active) setAvailablePaymentMethods([]);
+        if (active) {
+          setAvailablePaymentMethods([]);
+          setHasPaymentConflict(false);
+        }
       });
     return () => {
       active = false;
@@ -2027,9 +2032,13 @@ export default function CheckoutPage() {
                         </label>
                       );
                     })
-                  ) : (
+                  ) : hasPaymentConflict ? (
                     <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-[12px] text-red-800 leading-relaxed font-semibold">
                       ⚠️ Incompatible payment requirements in cart. Some items cannot be paid with the same method. Please check out items separately.
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-[12px] text-amber-900 leading-relaxed font-medium">
+                      No payment methods currently available for the selected country or delivery address.
                     </div>
                   )}
                 </div>
