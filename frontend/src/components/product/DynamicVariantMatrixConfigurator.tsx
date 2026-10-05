@@ -739,18 +739,6 @@ export function DynamicVariantMatrixConfigurator({
       return { totalUnits, subtotal, currencySymbol };
     }
 
-    if (singleResolvedVariant && dropdownQuantity > 0) {
-      const currencySymbol =
-        singleResolvedPrice?.currencySymbol ??
-        variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ??
-        (selectedCurrency === "USD" ? "$" : "₹");
-      return {
-        totalUnits: dropdownQuantity,
-        subtotal: singleResolvedUnitPrice * dropdownQuantity,
-        currencySymbol,
-      };
-    }
-
     const currencySymbol =
       variantPriceMap[normalizedVariants[0]?.id ?? ""]?.currencySymbol ??
       (selectedCurrency === "USD"
@@ -765,10 +753,6 @@ export function DynamicVariantMatrixConfigurator({
     normalizedVariants,
     selectedCurrency,
     selectedEntries,
-    singleResolvedPrice,
-    singleResolvedUnitPrice,
-    singleResolvedVariant,
-    dropdownQuantity,
     variantPriceMap,
   ]);
 
@@ -874,21 +858,6 @@ export function DynamicVariantMatrixConfigurator({
       selectedWarehouse?.isLocal,
     );
 
-    if (!items.length && singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock) {
-      items = buildCartItems(
-        apiProduct,
-        normalizedVariants,
-        { [singleResolvedVariant.id]: dropdownQuantity },
-        variantPriceMap,
-        warehouses || [],
-        previewPriceMap,
-        selectedWarehouse?.id,
-        selectedWarehouse?.name,
-        selectedWarehouse?.estimatedDeliveryDays,
-        selectedWarehouse?.isLocal,
-      );
-    }
-
     if (!items.length) {
       setFeedback({
         kind: "error",
@@ -922,21 +891,6 @@ export function DynamicVariantMatrixConfigurator({
       selectedWarehouse?.isLocal,
     );
 
-    if (!items.length && singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock) {
-      items = buildCartItems(
-        apiProduct,
-        normalizedVariants,
-        { [singleResolvedVariant.id]: dropdownQuantity },
-        variantPriceMap,
-        warehouses || [],
-        previewPriceMap,
-        selectedWarehouse?.id,
-        selectedWarehouse?.name,
-        selectedWarehouse?.estimatedDeliveryDays,
-        selectedWarehouse?.isLocal,
-      );
-    }
-
     if (items.length) {
       addCartItems(items.map((item) => item.cart));
       showToast({
@@ -963,21 +917,6 @@ export function DynamicVariantMatrixConfigurator({
       selectedWarehouse?.estimatedDeliveryDays,
       selectedWarehouse?.isLocal,
     );
-
-    if (!items.length && singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock) {
-      items = buildCartItems(
-        apiProduct,
-        normalizedVariants,
-        { [singleResolvedVariant.id]: dropdownQuantity },
-        variantPriceMap,
-        warehouses || [],
-        previewPriceMap,
-        selectedWarehouse?.id,
-        selectedWarehouse?.name,
-        selectedWarehouse?.estimatedDeliveryDays,
-        selectedWarehouse?.isLocal,
-      );
-    }
 
     if (!items.length) {
       setFeedback({
@@ -1470,9 +1409,7 @@ export function DynamicVariantMatrixConfigurator({
           </div>
 
           {(() => {
-            const hasOrderableItems =
-              selectedEntries.length > 0 ||
-              Boolean(singleResolvedVariant && dropdownQuantity > 0 && !isSingleOutOfStock);
+            const hasOrderableItems = selectedEntries.length > 0;
 
             return (
               <div className="grid gap-6 md:grid-cols-2 items-start">
@@ -1488,9 +1425,7 @@ export function DynamicVariantMatrixConfigurator({
                       <p className="text-[14.5px] font-bold text-[#111827]">
                         {selectedEntries.length
                           ? `${selectedEntries.length} line${selectedEntries.length === 1 ? "" : "s"} ready`
-                          : singleResolvedVariant && dropdownQuantity > 0
-                            ? "1 configured variant ready"
-                            : t("ui.products.nothingSelectedYet")}
+                          : t("ui.products.nothingSelectedYet")}
                       </p>
                     </div>
                   </div>
@@ -1547,35 +1482,6 @@ export function DynamicVariantMatrixConfigurator({
                         </div>
                       ))}
                     </div>
-                  ) : singleResolvedVariant && dropdownQuantity > 0 ? (
-                    <div className="rounded-xl border border-[#E31E24] bg-white p-4 shadow-2xs">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[14px] font-bold text-[#111827]">
-                            {singleResolvedVariant.title}
-                          </p>
-                          <p className="mt-1 text-[12.5px] font-semibold text-[#111827]">
-                            {dropdownQuantity} x{" "}
-                            <span className="text-[#111827] font-bold">
-                              {formatMoney(
-                                totals.currencySymbol,
-                                singleResolvedUnitPrice,
-                              )}
-                            </span>
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <QuantityInput
-                            size="xs"
-                            value={isSingleOutOfStock ? 0 : dropdownQuantity}
-                            onChange={(next) => setDropdownQuantity(Math.max(1, next))}
-                            min={isSingleOutOfStock ? 0 : 1}
-                            max={singleResolvedAvailableStock > 0 ? singleResolvedAvailableStock : 0}
-                            disabled={isSingleOutOfStock}
-                          />
-                        </div>
-                      </div>
-                    </div>
                   ) : (
                     <div className="rounded-xl border border-dashed border-[#E31E24] bg-white px-4 py-6 text-[13.5px] leading-relaxed text-[#111827]">
                       {t("ui.products.stageVariantsHelper")}
@@ -1591,11 +1497,7 @@ export function DynamicVariantMatrixConfigurator({
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-[#111827]">Variant lines</span>
                       <span className="font-bold text-[#111827]">
-                        {selectedEntries.length > 0
-                          ? selectedEntries.length
-                          : singleResolvedVariant && dropdownQuantity > 0
-                            ? 1
-                            : 0}
+                        {selectedEntries.length}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
