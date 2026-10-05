@@ -70,7 +70,7 @@ export interface ProductListParams {
   search?: string;
   featured?: boolean;
   attributeValues?: string;
-  sort?: "newest" | "name_asc" | "name_desc";
+  sort?: "default" | "sort_order" | "newest" | "name_asc" | "name_desc";
   lang?: string;
   countryCode?: string;
   ids?: string;

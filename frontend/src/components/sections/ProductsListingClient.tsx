@@ -163,7 +163,7 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
   const { data: categories = [] } = useCategories();
 
   const [showFilters, setShowFilters] = useState(true);
-  const [sort, setSort] = useState<"newest" | "name_asc" | "name_desc">("newest");
+  const [sort, setSort] = useState<"sort_order" | "newest" | "name_asc" | "name_desc">("sort_order");
   const [filters, setFilters] = useState<ProductFilterState>(() => ({
     featuredOnly: false,
     categorySlugs: categorySlug ? [categorySlug] : [],
@@ -226,74 +226,45 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
   const pageTitle = t("ui.products.title") || heroBlock?.title || "Orthodontic products manufactured in-house.";
   const pageDescription = t("ui.products.description") || heroBlock?.description || "Browse product families built for orthodontists, dealers, and distribution partners across global markets.";
 
-  // Group products into category sections
+  // Group products into category sections respecting product sort order
   const categorySections = useMemo(() => {
     if (!products.length) return [];
 
-    const sections: Array<{
-      category: {
-        id: string;
-        name: string;
-        slug: string;
-        description?: string | null;
-      };
-      products: typeof products;
-    }> = [];
+    const sectionMap = new Map<
+      string,
+      {
+        category: {
+          id: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+        };
+        products: typeof products;
+      }
+    >();
 
-    // Order by categories list
-    for (const cat of categories) {
-      // If a specific category or categories are filtered, check match
-      if (effectiveCategory && cat.slug !== effectiveCategory) continue;
-      if (filters.categorySlugs.length > 1 && !filters.categorySlugs.includes(cat.slug)) continue;
+    for (const p of products) {
+      const catSlug = p.category?.slug || "general";
+      const catName = p.category?.name || "General Products";
+      const catObj = categories.find((c) => c.slug === catSlug);
 
-      const catProducts = products.filter(
-        (p) => p.category?.slug === cat.slug
-      );
-
-      if (catProducts.length > 0) {
-        sections.push({
+      if (!sectionMap.has(catSlug)) {
+        sectionMap.set(catSlug, {
           category: {
-            id: cat.id,
-            name: cat.name,
-            slug: cat.slug,
-            description: cat.description,
+            id: catObj?.id || catSlug,
+            name: catObj?.name || catName,
+            slug: catSlug,
+            description: catObj?.description || null,
           },
-          products: catProducts,
+          products: [],
         });
       }
+
+      sectionMap.get(catSlug)!.products.push(p);
     }
 
-    // Capture any products belonging to categories not in the main categories query
-    const assignedIds = new Set(
-      sections.flatMap((s) => s.products.map((p) => p.id))
-    );
-    const unassigned = products.filter((p) => !assignedIds.has(p.id));
-
-    if (unassigned.length > 0) {
-      // Group unassigned by their product.category
-      const groups = new Map<string, typeof products>();
-      for (const p of unassigned) {
-        const catName = p.category?.name || "General Products";
-        const list = groups.get(catName) || [];
-        list.push(p);
-        groups.set(catName, list);
-      }
-
-      for (const [catName, catProds] of groups.entries()) {
-        sections.push({
-          category: {
-            id: catProds[0]?.category?.slug || "general",
-            name: catName,
-            slug: catProds[0]?.category?.slug || "general",
-            description: null,
-          },
-          products: catProds,
-        });
-      }
-    }
-
-    return sections;
-  }, [categories, products, effectiveCategory, filters.categorySlugs]);
+    return Array.from(sectionMap.values());
+  }, [categories, products]);
 
   const allProductDirectory = useMemo(() => {
     const result: Array<{
@@ -433,6 +404,7 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
                 aria-label="Sort products"
                 className="appearance-none rounded-md border border-line bg-white py-1.5 pl-3 pr-8 text-[13px] font-medium text-ink outline-none cursor-pointer focus:border-ink"
               >
+                <option value="sort_order">Default (Sort Order)</option>
                 <option value="newest">Newest</option>
                 <option value="name_asc">Name (A-Z)</option>
                 <option value="name_desc">Name (Z-A)</option>

@@ -143,10 +143,12 @@ export async function publicListProducts(
 
   const orderBy =
     query.sort === "name_asc"
-      ? { title: "asc" as const }
+      ? [{ title: "asc" as const }, { createdAt: "desc" as const }]
       : query.sort === "name_desc"
-        ? { title: "desc" as const }
-        : { createdAt: "desc" as const };
+        ? [{ title: "desc" as const }, { createdAt: "desc" as const }]
+        : query.sort === "newest"
+          ? [{ createdAt: "desc" as const }]
+          : [{ sortOrder: "asc" as const }, { createdAt: "desc" as const }];
 
   const [products, total] = await Promise.all([
     prisma.product.findMany({
