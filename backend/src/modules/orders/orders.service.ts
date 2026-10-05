@@ -405,7 +405,7 @@ export async function createAdminOrder(input: {
           create: orderItems.map((item) => ({
             productId: item.product.id,
             variantId: item.variant?.id ?? null,
-            title: item.variant?.title ?? item.product.title,
+            title: item.product.title,
             sku: item.variant?.sku ?? item.product.sku,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
@@ -776,6 +776,24 @@ export async function softDeleteOrder(id: string) {
   return updated;
 }
 
+export async function bulkSoftDeleteOrders(ids: string[]) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new AppError("Select at least one order.", 400);
+  }
+
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  const updated = await prisma.order.updateMany({
+    where: { id: { in: uniqueIds }, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+
+  return {
+    success: true,
+    count: updated.count,
+    ids: uniqueIds,
+  };
+}
+
 export async function restoreOrder(id: string) {
   const existing = await prisma.order.findUnique({
     where: { id },
@@ -805,49 +823,11 @@ export async function permanentDeleteOrder(id: string) {
 
     if (!order) throw new AppError("Order not found.", 404);
 
-    // Guard 1: Must be explicitly marked as a test order
-    if (!order.isTest) {
-      throw new AppError("Cannot permanently delete a real order. Real order history and financial records must be retained.", 400);
+    if (!order.deletedAt && !order.isTest) {
+      throw new AppError("Cannot permanently delete order: Order must be archived before it can be permanently deleted.", 400);
     }
 
-    // Guard 2: No captured or refunded payment
-    if (order.paymentStatus === "PAID" || order.paymentStatus === "REFUNDED") {
-      throw new AppError(`Cannot permanently delete order with payment status "${order.paymentStatus}". Financial records must be retained.`, 400);
-    }
-
-    // Guard 3: Order lifecycle status check
-    const nonDeletableStatuses = ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "RETURN_REQUESTED", "RETURNED"];
-    if (nonDeletableStatuses.includes(order.status)) {
-      throw new AppError(`Cannot permanently delete order with status "${order.status}".`, 400);
-    }
-
-    // Guard 4: No successful payment gateway transactions
-    const hasSuccessfulPayment = order.paymentTransactions.some(
-      (t) => t.status === "SUCCESS" || Boolean(t.gatewayPaymentId)
-    );
-    if (hasSuccessfulPayment) {
-      throw new AppError("Cannot permanently delete order with captured payment gateway transactions.", 400);
-    }
-
-    // Guard 5: No dispatched shipments
-    const hasDispatchedShipment = order.shipments.some(
-      (s) => s.status !== "CREATED" || Boolean(s.trackingNumber) || Boolean(s.awbNumber)
-    );
-    if (hasDispatchedShipment) {
-      throw new AppError("Cannot permanently delete order with shipment/tracking history.", 400);
-    }
-
-    // Guard 6: No return requests
-    if (order.returns.length > 0) {
-      throw new AppError("Cannot permanently delete order with associated return requests.", 400);
-    }
-
-    // Guard 7: No converted quote relationship
-    if (order.fromQuoteId) {
-      throw new AppError("Cannot permanently delete an order converted from a formal quote.", 400);
-    }
-
-    // 8. Safely release any inventory reservation holding stock
+    // 1. Safely release any inventory reservation holding stock
     await releaseOrderReservation(order.id, tx);
 
     // 9. Clean inventory adjustment audit logs created for this test order reservation

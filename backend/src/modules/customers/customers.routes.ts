@@ -16,9 +16,11 @@ router.put("/:id", requirePermission("customers.manage"), C.update);
 router.patch("/:id", requirePermission("customers.manage"), C.update);
 router.put("/:id/tier", requirePermission("customers.manage"), C.updateTier);
 router.put("/:id/role", requirePermission("customers.manage"), C.updateRole);
+router.post("/bulk/permanent", requirePermission("customers.manage", "customers.delete"), C.bulkPermanentDelete);
 router.post("/:id/approve", requirePermission("customers.manage"), C.approve);
 router.post("/:id/reject", requirePermission("customers.manage"), C.reject);
 router.post("/:id/restore", requirePermission("customers.manage"), C.restore);
+router.delete("/:id/permanent", requirePermission("customers.manage", "customers.delete"), C.permanentDelete);
 router.delete("/:id", requirePermission("customers.manage"), C.remove);
 
 export default router;

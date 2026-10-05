@@ -12,7 +12,7 @@ import {
   AdminSelect,
   AdminStatsGrid,
   AdminListToolbar,
-  ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Pagination,
   StatusBadge,
@@ -509,13 +509,16 @@ export default function AdminCustomerRolesPage() {
         </form>
       </Modal>
 
-      <ConfirmModal
-        open={!!deleting}
-        title="Delete customer role?"
-        message={deleting ? `Delete ${deleting.name}? Customers must be reassigned first.` : ""}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteRole.isPending}
+      <AdminDeleteModal
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        itemName={deleting?.name}
+        itemType="Customer Role"
+        warningMessage="Choose the deletion method for this customer role. Customers assigned to this role must be reassigned."
+        softDeleteDescription={`Removes "${deleting?.name}" role from customer assignments.`}
+        onSoftDelete={confirmDelete}
+        isSoftDeleting={deleteRole.isPending}
+        initialDeleteType="soft"
       />
 
       {ToastComponent}

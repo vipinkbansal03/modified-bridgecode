@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import {
-  ConfirmModal,
+  AdminDeleteModal,
   useToast,
   LoadingButton,
   DataTable,
@@ -766,13 +766,16 @@ export default function RolesPage() {
         </div>
       </Modal>
 
-      <ConfirmModal
-        open={!!deletingId}
-        title="Delete Role?"
-        message="Are you sure you want to delete this system role? Make sure no active admins or staff members are assigned to this role before deleting."
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeletingId(null)}
-        isLoading={deletingLoading}
+      <AdminDeleteModal
+        open={Boolean(deletingId)}
+        onClose={() => setDeletingId(null)}
+        itemName={roles.find((r: any) => r.id === deletingId)?.name || "Role"}
+        itemType="Staff Role"
+        warningMessage="Choose the deletion method for this role. Make sure no active staff members are assigned to this role before deleting."
+        softDeleteDescription={`Removes "${roles.find((r: any) => r.id === deletingId)?.name || "role"}" from available system roles.`}
+        onSoftDelete={handleDeleteConfirm}
+        isSoftDeleting={deletingLoading}
+        initialDeleteType="soft"
       />
 
       {ToastComponent}

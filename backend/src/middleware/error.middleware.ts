@@ -8,10 +8,14 @@ export function errorMiddleware(err: Error, req: Request, res: Response, _next: 
   let message = "Internal server error";
   let errors: unknown[] = [];
 
+  let details: Record<string, any> | undefined = undefined;
+
   // Operational/known errors
   if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
+    if (err.errors && Array.isArray(err.errors)) errors = err.errors;
+    if (err.details) details = err.details;
   }
 
   // Request validation errors
@@ -61,6 +65,7 @@ export function errorMiddleware(err: Error, req: Request, res: Response, _next: 
     success: false,
     message,
     errors,
+    ...(details ? { details } : {}),
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 }

@@ -221,6 +221,21 @@ export const softDelete = asyncHandler(async (req: AuthRequest, res: Response) =
   return ApiResponse.success(res, "Order soft-deleted successfully.", result);
 });
 
+export const bulkSoftDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await S.bulkSoftDeleteOrders(ids);
+  await prisma.activityLog.create({
+    data: {
+      userId: req.user?.id,
+      action: "ORDERS_BULK_ARCHIVED",
+      entityType: "Order",
+      ipAddress: req.ip,
+      metadata: { count: result.count, ids: result.ids },
+    },
+  }).catch(() => {});
+  return ApiResponse.success(res, `Successfully archived ${result.count} order(s).`, result);
+});
+
 export const restore = asyncHandler(async (req: AuthRequest, res: Response) => {
   const result = await S.restoreOrder(String(req.params.id));
   await prisma.activityLog.create({

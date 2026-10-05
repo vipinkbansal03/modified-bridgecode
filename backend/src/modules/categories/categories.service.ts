@@ -310,9 +310,56 @@ export async function permanentDeleteCategory(id: string, options?: { force?: bo
   ]);
 
   if (orderItemCount > 0 || quoteItemCount > 0) {
+    const prodIds = category.products.map((p) => p.id);
+    const [orderItems, quoteItems] = await Promise.all([
+      orderItemCount > 0
+        ? prisma.orderItem.findMany({
+            where: {
+              OR: [
+                { productId: { in: prodIds } },
+                ...(allVariantIds.length > 0 ? [{ variantId: { in: allVariantIds } }] : []),
+              ],
+            },
+            take: 10,
+            select: { order: { select: { id: true, orderNumber: true } } },
+          })
+        : [],
+      quoteItemCount > 0
+        ? prisma.quoteItem.findMany({
+            where: {
+              OR: [
+                { productId: { in: prodIds } },
+                ...(allVariantIds.length > 0 ? [{ variantId: { in: allVariantIds } }] : []),
+              ],
+            },
+            take: 10,
+            select: { quote: { select: { id: true, quoteNumber: true } } },
+          })
+        : [],
+    ]);
+
+    const orderMap = new Map<string, { id: string; orderNumber: string }>();
+    for (const oi of orderItems) {
+      if (oi.order && !orderMap.has(oi.order.id)) {
+        orderMap.set(oi.order.id, { id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id });
+      }
+    }
+    const quoteMap = new Map<string, { id: string; quoteNumber: string }>();
+    for (const qi of quoteItems) {
+      if (qi.quote && !quoteMap.has(qi.quote.id)) {
+        quoteMap.set(qi.quote.id, { id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id });
+      }
+    }
+
     throw new AppError(
       `Cannot permanently delete category "${category.name}": contains products referenced by ${orderItemCount} order item(s) and ${quoteItemCount} quote item(s). Archiving is required for legal and tax auditing.`,
       400,
+      undefined,
+      {
+        orders: Array.from(orderMap.values()),
+        quotes: Array.from(quoteMap.values()),
+        products: category.products.map((p) => ({ id: p.id, title: p.title })),
+      }
     );
   }
 
@@ -321,6 +368,10 @@ export async function permanentDeleteCategory(id: string, options?: { force?: bo
     throw new AppError(
       `Cannot permanently delete category "${category.name}": referenced by ${activeProducts.length} active product(s). Please archive or delete the products first.`,
       400,
+      undefined,
+      {
+        products: activeProducts.map((p) => ({ id: p.id, title: p.title })),
+      }
     );
   }
 
@@ -912,7 +963,14 @@ export async function importCategoriesSpreadsheet(filePathOrRows: string | any[]
 
 export async function bulkPermanentDeleteCategories(ids: string[], options?: { force?: boolean }) {
   const deletedIds: string[] = [];
-  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+  const blocked: Array<{
+    id: string;
+    name: string;
+    reason: string;
+    products?: Array<{ id: string; title: string; sku?: string | null }>;
+    orders?: Array<{ id: string; orderNumber: string | null }>;
+    quotes?: Array<{ id: string; quoteNumber: string | null }>;
+  }> = [];
 
   for (const id of ids) {
     try {
@@ -929,12 +987,78 @@ export async function bulkPermanentDeleteCategories(ids: string[], options?: { f
     } catch (error: any) {
       const cat = await prisma.category.findUnique({
         where: { id },
-        select: { name: true },
+        select: {
+          name: true,
+          products: {
+            select: {
+              id: true,
+              title: true,
+              sku: true,
+              variants: { select: { id: true } },
+            },
+          },
+        },
       });
+
+      let orders = error?.details?.orders;
+      let quotes = error?.details?.quotes;
+      let products = error?.details?.products;
+
+      if (!orders && !quotes && !products && cat) {
+        const prodIds = cat.products.map((p) => p.id);
+        const variantIds = cat.products.flatMap((p) => p.variants.map((v) => v.id));
+        const [orderItems, quoteItems] = await Promise.all([
+          prodIds.length > 0
+            ? prisma.orderItem.findMany({
+                where: {
+                  OR: [
+                    { productId: { in: prodIds } },
+                    ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+                  ],
+                },
+                select: { order: { select: { id: true, orderNumber: true } } },
+                take: 10,
+              })
+            : [],
+          prodIds.length > 0
+            ? prisma.quoteItem.findMany({
+                where: {
+                  OR: [
+                    { productId: { in: prodIds } },
+                    ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+                  ],
+                },
+                select: { quote: { select: { id: true, quoteNumber: true } } },
+                take: 10,
+              })
+            : [],
+        ]);
+
+        const orderMap = new Map<string, { id: string; orderNumber: string | null }>();
+        for (const oi of orderItems) {
+          if (oi.order && !orderMap.has(oi.order.id)) {
+            orderMap.set(oi.order.id, { id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id });
+          }
+        }
+        const quoteMap = new Map<string, { id: string; quoteNumber: string | null }>();
+        for (const qi of quoteItems) {
+          if (qi.quote && !quoteMap.has(qi.quote.id)) {
+            quoteMap.set(qi.quote.id, { id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id });
+          }
+        }
+
+        orders = Array.from(orderMap.values());
+        quotes = Array.from(quoteMap.values());
+        products = cat.products.map((p) => ({ id: p.id, title: p.title, sku: p.sku }));
+      }
+
       blocked.push({
         id,
         name: cat?.name || id,
         reason: error?.message || "Failed to permanently delete category.",
+        orders: orders?.length ? orders : undefined,
+        quotes: quotes?.length ? quotes : undefined,
+        products: products?.length ? products : undefined,
       });
     }
   }

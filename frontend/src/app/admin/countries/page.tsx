@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Coins, Filter, Globe, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, ConfirmModal, DataTable, Pagination, StatCard, StatusBadge, Tooltip, useToast, LoadingButton, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminListToolbar, AdminSelect, AdminStatsGrid, AdminDeleteModal, DataTable, Pagination, StatCard, StatusBadge, Tooltip, useToast, LoadingButton, type Column } from "@/components/admin/AdminComponents";
 import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
 import { AdminRowActions } from "@/components/admin/AdminRowActions";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
@@ -804,25 +804,28 @@ export default function CountriesPage() {
         </form>
       </Modal>
 
-      <ConfirmModal
-        open={!!deleting}
-        title="Deactivate country?"
-        message={deleting ? `Deactivate ${deleting.name}? It will remain in the list as inactive and stay available for historical records.` : ""}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={bulkMutation.isPending}
-        danger
+      <AdminDeleteModal
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        itemName={deleting?.name}
+        itemType="Country"
+        warningMessage="Choose the deletion method for this country. Deactivating will preserve historical orders and tax addresses."
+        softDeleteDescription={`Deactivates ${deleting?.name}. It will remain in the database for historical tax and shipping records.`}
+        onSoftDelete={handleDelete}
+        isSoftDeleting={bulkMutation.isPending}
+        initialDeleteType="soft"
       />
 
-      <ConfirmModal
+      <AdminDeleteModal
         open={bulkDeleting}
-        title="Delete Selected Countries?"
-        message={`Are you sure you want to delete ${selectedIds.length} selected countries? Default country will not be deleted.`}
-        confirmText="Delete"
-        onConfirm={confirmBulkDelete}
-        onCancel={() => setBulkDeleting(false)}
-        isLoading={bulkMutation.isPending}
-        danger
+        onClose={() => setBulkDeleting(false)}
+        itemName={`${selectedIds.length} selected countries`}
+        itemType="Countries (Bulk)"
+        warningMessage="Choose the deletion method for these countries (bulk). Default country will not be deleted."
+        softDeleteDescription={`Deactivates the ${selectedIds.length} selected countries while retaining historical data.`}
+        onSoftDelete={confirmBulkDelete}
+        isSoftDeleting={bulkMutation.isPending}
+        initialDeleteType="soft"
       />
 
       {ToastComponent}

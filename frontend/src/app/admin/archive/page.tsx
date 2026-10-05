@@ -73,6 +73,8 @@ import {
   useBulkPermanentDeleteOrders,
   useAdminArchivedCustomers,
   useRestoreCustomer,
+  usePermanentDeleteCustomer,
+  useBulkPermanentDeleteCustomers,
   useAdminArchivedQuotes,
   useRestoreAdminQuote,
   usePermanentDeleteAdminQuote,
@@ -150,6 +152,8 @@ function AdminArchiveContent() {
     hasPermission("orders.delete") || hasPermission("orders.manage");
   const canManageCustomers =
     hasPermission("customers.manage") || hasPermission("customers.update");
+  const canDeleteCustomers =
+    hasPermission("customers.delete") || hasPermission("customers.manage");
   const canManageQuotes =
     hasPermission("quotes.manage") || hasPermission("quotes.update");
   const canDeleteQuotes =
@@ -276,6 +280,7 @@ function AdminArchiveContent() {
   const [deletingAttribute, setDeletingAttribute] = useState<any | null>(null);
   const [deletingVariant, setDeletingVariant] = useState<any | null>(null);
   const [deletingOrder, setDeletingOrder] = useState<any | null>(null);
+  const [deletingCustomer, setDeletingCustomer] = useState<any | null>(null);
   const [deletingQuote, setDeletingQuote] = useState<any | null>(null);
   const [deletingWarehouse, setDeletingWarehouse] = useState<any | null>(null);
   const [deletingReview, setDeletingReview] = useState<any | null>(null);
@@ -385,6 +390,8 @@ function AdminArchiveContent() {
   const permanentDeleteOrderMutation = usePermanentDeleteOrder();
   const bulkPermanentDeleteOrdersMutation = useBulkPermanentDeleteOrders();
   const restoreCustomerMutation = useRestoreCustomer();
+  const permanentDeleteCustomerMutation = usePermanentDeleteCustomer();
+  const bulkPermanentDeleteCustomersMutation = useBulkPermanentDeleteCustomers();
   const restoreQuoteMutation = useRestoreAdminQuote();
   const permanentDeleteQuoteMutation = usePermanentDeleteAdminQuote();
   const bulkPermanentDeleteQuotesMutation = useBulkPermanentDeleteQuotes();
@@ -749,6 +756,8 @@ function AdminArchiveContent() {
         result = await bulkPermanentDeleteCategoriesMutation.mutateAsync(selectedIds);
       } else if (activeTab === "orders") {
         result = await bulkPermanentDeleteOrdersMutation.mutateAsync(selectedIds);
+      } else if (activeTab === "customers") {
+        result = await bulkPermanentDeleteCustomersMutation.mutateAsync(selectedIds);
       } else if (activeTab === "products") {
         result = await bulkPermanentDeleteProductsMutation.mutateAsync(selectedIds);
       } else if (activeTab === "variants") {
@@ -790,16 +799,41 @@ function AdminArchiveContent() {
 
       if (result) {
         const payload = (result as any)?.data ?? result;
-        const deletedIds: string[] = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
-        const blocked: Array<{ id: string; name?: string; reason: string }> = Array.isArray(payload?.blocked) ? payload.blocked : [];
+        let deletedIds: string[] = Array.isArray(payload?.deletedIds) ? payload.deletedIds : [];
+        let blocked: Array<{
+          id: string;
+          name?: string;
+          reason: string;
+          products?: any[];
+          variants?: any[];
+          orders?: any[];
+          quotes?: any[];
+          returns?: any[];
+        }> = Array.isArray(payload?.blocked) ? payload.blocked : [];
+
+        if (Array.isArray(payload?.results) && (!payload?.deletedIds || !payload?.blocked)) {
+          deletedIds = payload.results.filter((r: any) => r.success).map((r: any) => r.id);
+          blocked = payload.results.filter((r: any) => !r.success).map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            reason: r.error || "Protected from permanent deletion.",
+            orders: r.orders,
+            quotes: r.quotes,
+            returns: r.returns,
+            products: r.products,
+          }));
+        }
+
         const deletedCount = typeof payload?.deletedCount === "number" ? payload.deletedCount : deletedIds.length;
         const blockedCount = typeof payload?.blockedCount === "number" ? payload.blockedCount : (blocked.length || Math.max(0, totalSelected - deletedCount));
 
         // If items were deleted, remove them from selectedIds; keep any remaining blocked IDs selected
-        if (blockedCount > 0 && deletedIds.length > 0) {
-          setSelectedIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
-        } else if (deletedCount > 0 && blockedCount === 0) {
+        if (blockedCount === 0 || deletedCount >= totalSelected) {
           setSelectedIds([]);
+        } else if (deletedIds.length > 0) {
+          const deletedSet = new Set(deletedIds);
+          setSelectedIds((prev) => prev.filter((id) => !deletedSet.has(id)));
         }
 
         // Set comprehensive summary data so result modal displays accurately
@@ -1386,7 +1420,7 @@ function AdminArchiveContent() {
       {
         key: "actions",
         label: "Actions",
-        width: "120px",
+        width: "140px",
         render: (cust) => (
           <AdminRowActions
             view={{
@@ -1411,11 +1445,19 @@ function AdminArchiveContent() {
                 />
               ) : undefined
             }
+            delete={
+              canDeleteCustomers
+                ? {
+                    title: "Permanently Delete Customer",
+                    onClick: () => setDeletingCustomer(cust),
+                  }
+                : undefined
+            }
           />
         ),
       },
     ],
-    [canManageCustomers]
+    [canManageCustomers, canDeleteCustomers]
   );
 
   // 5. Quotes Columns
@@ -3348,14 +3390,10 @@ function AdminArchiveContent() {
               onClear={() => setSelectedIds([])}
               actionType={bulkAction}
               onActionTypeChange={setBulkAction}
-              actions={
-                activeTab === "customers"
-                  ? [{ value: "RESTORE", label: "Restore Selected" }]
-                  : [
-                      { value: "RESTORE", label: "Restore Selected" },
-                      { value: "PERMANENT_DELETE", label: "Permanently Delete Selected" },
-                    ]
-              }
+              actions={[
+                { value: "RESTORE", label: "Restore Selected" },
+                { value: "PERMANENT_DELETE", label: "Permanently Delete Selected" },
+              ]}
               onApply={handleBulkActionApply}
               applyDisabled={!bulkAction || selectedIds.length === 0 || bulkProcessing}
             />
@@ -3728,26 +3766,20 @@ function AdminArchiveContent() {
           softDeleteDescription="This order is already soft-deleted and stored in the Archive."
           permanentDeleteDescription={
             deletingOrder
-              ? `Physically removes Order #${deletingOrder.orderNumber} from the database. Allowed only for Draft or Test orders. Blocked by system guards if the order is a real customer order or contains financial transactions.`
+              ? `Physically and permanently removes Order #${deletingOrder.orderNumber} and all its item lines from the database.`
               : undefined
           }
-          permanentDeleteDisabled={!deletingOrder?.isTest}
-          permanentDeleteDisabledReason="Permanent deletion is restricted to Draft and Test orders only. Real customer orders cannot be permanently deleted to retain financial and audit records."
+          permanentDeleteDisabled={false}
+          permanentDeleteDisabledReason={undefined}
           onSoftDelete={() => {
             showToast("Order is already archived.");
             setDeletingOrder(null);
           }}
           onPermanentDelete={async () => {
             if (!deletingOrder) return;
-            if (!deletingOrder.isTest) {
-              throw new Error("Cannot permanently delete a real order. Real order history and financial records must be retained. Only Draft or Test orders can be permanently deleted.");
-            }
-            if (deletingOrder.paymentStatus === "PAID" || deletingOrder.paymentStatus === "REFUNDED") {
-              throw new Error(`Cannot permanently delete order with payment status "${deletingOrder.paymentStatus}". Financial records must be retained.`);
-            }
             try {
               await permanentDeleteOrderMutation.mutateAsync(deletingOrder.id);
-              showToast(`Test order #${deletingOrder.orderNumber} permanently deleted.`, "success");
+              showToast(`Order #${deletingOrder.orderNumber} permanently deleted.`, "success");
               setDeletingOrder(null);
               ordersQuery.refetch();
             } catch (err) {
@@ -3755,6 +3787,62 @@ function AdminArchiveContent() {
             }
           }}
           isPermanentDeleting={permanentDeleteOrderMutation.isPending}
+          initialDeleteType="permanent"
+        />
+
+        {/* ─── Customer Permanent Delete Modal (Product Pattern) ─── */}
+        <AdminDeleteModal
+          open={Boolean(deletingCustomer)}
+          onClose={() => setDeletingCustomer(null)}
+          itemName={
+            deletingCustomer
+              ? `${deletingCustomer.firstName || ""} ${deletingCustomer.lastName || ""}`.trim() || deletingCustomer.email
+              : undefined
+          }
+          itemType="Customer Account"
+          warningMessage="Choose the deletion method for this customer account. Soft Delete is recommended to maintain customer history, communication, and commercial audit records."
+          softDeleteDescription="This customer account is already soft-deleted and stored in the Archive."
+          permanentDeleteDescription={
+            deletingCustomer
+              ? `Physically and permanently removes "${`${deletingCustomer.firstName || ""} ${deletingCustomer.lastName || ""}`.trim() || deletingCustomer.email}" and their associated addresses and preferences from the database. Allowed only if the customer has zero historical orders and quotation requests.`
+              : undefined
+          }
+          permanentDeleteDisabled={Boolean(
+            deletingCustomer &&
+              ((deletingCustomer._count?.orders ?? 0) > 0 ||
+                (deletingCustomer._count?.quotes ?? 0) > 0 ||
+                (deletingCustomer._count?.returns ?? 0) > 0)
+          )}
+          permanentDeleteDisabledReason={
+            deletingCustomer && (deletingCustomer._count?.orders ?? 0) > 0
+              ? `Cannot permanently delete customer because they have ${deletingCustomer._count.orders} historical order(s)${deletingCustomer.orders?.length ? ` (e.g. ${deletingCustomer.orders.map((o: any) => o.orderNumber || o.id).join(", ")})` : ""}. Customer records with orders cannot be permanently deleted to preserve financial audit history.`
+              : deletingCustomer && (deletingCustomer._count?.quotes ?? 0) > 0
+              ? `Cannot permanently delete customer because they have ${deletingCustomer._count.quotes} quotation request(s)${deletingCustomer.quotes?.length ? ` (e.g. ${deletingCustomer.quotes.map((q: any) => q.quoteNumber || q.id).join(", ")})` : ""}. Delete or reassign quotation requests first.`
+              : deletingCustomer && (deletingCustomer._count?.returns ?? 0) > 0
+              ? `Cannot permanently delete customer because they have ${deletingCustomer._count.returns} order return(s).`
+              : undefined
+          }
+          onSoftDelete={() => {
+            showToast("Customer is already archived.");
+            setDeletingCustomer(null);
+          }}
+          onPermanentDelete={async () => {
+            if (!deletingCustomer) return;
+            const orderCount = deletingCustomer._count?.orders ?? 0;
+            if (orderCount > 0) {
+              throw new Error(`Cannot permanently delete customer with ${orderCount} historical order(s).`);
+            }
+            try {
+              await permanentDeleteCustomerMutation.mutateAsync(deletingCustomer.id);
+              const custName = `${deletingCustomer.firstName || ""} ${deletingCustomer.lastName || ""}`.trim() || deletingCustomer.email;
+              showToast(`Customer "${custName}" permanently deleted.`, "success");
+              setDeletingCustomer(null);
+              customersQuery.refetch();
+            } catch (err) {
+              showToast(getAdminErrorMessage(err, "Failed to permanently delete customer."), "error");
+            }
+          }}
+          isPermanentDeleting={permanentDeleteCustomerMutation.isPending}
           initialDeleteType="permanent"
         />
 
@@ -4588,27 +4676,137 @@ function AdminArchiveContent() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[12.5px] font-semibold text-[#1A1A1A]">
-                      Protected Records ({bulkPermanentResult.blocked.length}):
+                      Protected Records ({bulkPermanentResult.blockedCount ?? bulkPermanentResult.blocked.length}):
                     </span>
                     <span className="text-[11px] text-[#888]">
                       Untouched in database
                     </span>
                   </div>
-                  <div className="max-h-60 overflow-y-auto space-y-2 border border-[#E6E6E6] rounded-lg p-2.5 bg-[#FAFAFA]">
-                    {bulkPermanentResult.blocked.map((item: any, index: number) => (
-                      <div key={item.id || index} className="text-[12px] bg-white p-3 rounded-lg border border-[#E6E6E6] shadow-2xs">
+                  <div className="max-h-72 overflow-y-auto space-y-2.5 border border-[#E6E6E6] rounded-lg p-2.5 bg-[#FAFAFA]">
+                    {bulkPermanentResult.blocked.slice(0, 50).map((item: any, index: number) => (
+                      <div key={item.id || index} className="text-[12px] bg-white p-3.5 rounded-lg border border-[#E6E6E6] shadow-2xs space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-[#1A1A1A]">{item.name || item.id}</span>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-[#1A1A1A]">{item.name || item.id}</span>
+                            {item.email && (
+                              <span className="ml-1.5 text-[11px] text-[#777]">({item.email})</span>
+                            )}
+                          </div>
                           <span className="inline-flex shrink-0 items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-800 border border-amber-200">
                             Protected
                           </span>
                         </div>
-                        <div className="text-amber-900 mt-1 flex items-start gap-1">
+
+                        {item.productTitle && item.productId && (
+                          <div className="text-[11.5px] text-[#666] flex items-center gap-1.5">
+                            <span>Product:</span>
+                            <Link
+                              href={`/admin/products/${item.productId}/edit`}
+                              target="_blank"
+                              className="font-medium text-[#E31E24] hover:underline inline-flex items-center gap-0.5"
+                            >
+                              <span>{item.productTitle}</span>
+                              <ExternalLink size={10} className="shrink-0 opacity-70" />
+                            </Link>
+                          </div>
+                        )}
+
+                        <div className="text-amber-900 mt-0.5 flex items-start gap-1">
                           <span className="font-medium shrink-0">Reason:</span>
                           <span>{item.reason}</span>
                         </div>
+
+                        {item.products && item.products.length > 0 && (
+                          <div className="pt-1.5 border-t border-amber-100 flex items-center flex-wrap gap-1.5">
+                            <span className="text-[11px] font-semibold text-[#666]">Linked Products:</span>
+                            {item.products.map((prod: any) => (
+                              <Link
+                                key={prod.id}
+                                href={`/admin/products/${prod.id}/edit`}
+                                target="_blank"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-medium hover:bg-emerald-100 hover:text-emerald-900 transition-colors"
+                              >
+                                <span>{prod.title || prod.name || prod.id}</span>
+                                <ExternalLink size={10} className="shrink-0 opacity-70" />
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.variants && item.variants.length > 0 && (
+                          <div className="pt-1.5 border-t border-amber-100 flex items-center flex-wrap gap-1.5">
+                            <span className="text-[11px] font-semibold text-[#666]">Linked Variants:</span>
+                            {item.variants.map((v: any) => (
+                              <Link
+                                key={v.id}
+                                href={v.productId ? `/admin/products/${v.productId}/edit` : `/admin/products`}
+                                target="_blank"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium hover:bg-amber-100 hover:text-amber-900 transition-colors"
+                              >
+                                <span>{v.title || v.sku || v.id}</span>
+                                <ExternalLink size={10} className="shrink-0 opacity-70" />
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.orders && item.orders.length > 0 && (
+                          <div className="pt-1.5 border-t border-amber-100 flex items-center flex-wrap gap-1.5">
+                            <span className="text-[11px] font-semibold text-[#666]">Linked Orders:</span>
+                            {item.orders.map((ord: any) => (
+                              <Link
+                                key={ord.id}
+                                href={`/admin/orders/${ord.id}`}
+                                target="_blank"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-medium hover:bg-blue-100 hover:text-blue-900 transition-colors"
+                              >
+                                <span>{ord.orderNumber || ord.id}</span>
+                                <ExternalLink size={10} className="shrink-0 opacity-70" />
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.quotes && item.quotes.length > 0 && (
+                          <div className="pt-1.5 border-t border-amber-100 flex items-center flex-wrap gap-1.5">
+                            <span className="text-[11px] font-semibold text-[#666]">Linked Quotes:</span>
+                            {item.quotes.map((q: any) => (
+                              <Link
+                                key={q.id}
+                                href={`/admin/quotes/${q.id}`}
+                                target="_blank"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-medium hover:bg-purple-100 hover:text-purple-900 transition-colors"
+                              >
+                                <span>{q.quoteNumber || q.id}</span>
+                                <ExternalLink size={10} className="shrink-0 opacity-70" />
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.returns && item.returns.length > 0 && (
+                          <div className="pt-1.5 border-t border-amber-100 flex items-center flex-wrap gap-1.5">
+                            <span className="text-[11px] font-semibold text-[#666]">Linked Returns:</span>
+                            {item.returns.map((ret: any) => (
+                              <Link
+                                key={ret.id}
+                                href={`/admin/orders`}
+                                target="_blank"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-medium hover:bg-rose-100 hover:text-rose-900 transition-colors"
+                              >
+                                <span>Return #{ret.returnNumber || ret.id}</span>
+                                <ExternalLink size={10} className="shrink-0 opacity-70" />
+                              </Link>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
+                    {(bulkPermanentResult.blockedCount > 50 || bulkPermanentResult.blocked.length > 50) && (
+                      <div className="text-center py-2 text-[11.5px] text-[#888] italic">
+                        Showing first 50 of {bulkPermanentResult.blockedCount ?? bulkPermanentResult.blocked.length} protected records.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

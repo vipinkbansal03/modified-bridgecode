@@ -10,7 +10,7 @@ import {
   AdminListToolbar,
   AdminSelect,
   AdminStatsGrid,
-  ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Modal,
   Pagination,
@@ -655,13 +655,16 @@ export default function ShippingZonesPage() {
         </form>
       </Modal>
 
-      <ConfirmModal
+      <AdminDeleteModal
         open={Boolean(deleteTarget)}
-        title="Delete shipping zone?"
-        message={`This removes the ${(deleteTarget?.countries ?? []).map((entry) => entry.country.code).join(", ") || "selected countries"} zone for ${deleteTarget?.provider?.displayName ?? "this provider"}.`}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
-        isLoading={deleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        itemName={deleteTarget?.provider?.displayName ? `${deleteTarget.provider.displayName} Zone` : "Shipping Zone"}
+        itemType="Shipping Zone"
+        warningMessage="Choose the deletion method for this shipping zone."
+        softDeleteDescription={`Removes the ${(deleteTarget?.countries ?? []).map((entry) => entry.country.code).join(", ") || "selected countries"} zone from ${deleteTarget?.provider?.displayName ?? "this provider"}.`}
+        onSoftDelete={handleDelete}
+        isSoftDeleting={deleteMutation.isPending}
+        initialDeleteType="soft"
       />
       {ToastComponent}
     </AdminLayout>

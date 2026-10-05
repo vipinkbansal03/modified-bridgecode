@@ -3,7 +3,7 @@ import { prisma } from "../../config/database";
 import { AppError, getPagination, slugify } from "../../utils/apiResponse";
 import { uploadFile, deleteFile } from "../../config/storage";
 import { readSpreadsheetRows, readAllSpreadsheetSheets, removeTempFile, writeSpreadsheetBuffer, writeMultiSheetSpreadsheetBuffer } from "../../utils/spreadsheet";
-import type { Prisma, GridAxis } from "@prisma/client";
+import type { Prisma, GridAxis, Status } from "@prisma/client";
 import { setVariantStock } from "../inventory/inventory.service";
 import { assertTierUsable } from "../tiers/tiers.service";
 import { parseAttributeValuesString } from "../attributes/attributes.service";
@@ -766,11 +766,15 @@ export async function listProducts(query: ProductListQuery) {
     return { data: ids, total: ids.length, page: 1, limit: ids.length };
   }
 
+  // Guard against exceeding database driver prepared statement parameter limit (32,767)
+  // when relational includes are present
+  const safeTake = query.ignoreMaxLimit === "true" ? Math.min(limit, 1000) : limit;
+
   const [data, total] = await Promise.all([
     prisma.product.findMany({
       where,
       skip,
-      take: limit,
+      take: safeTake,
       orderBy,
       select: {
         id: true,
@@ -846,11 +850,15 @@ export async function listVariants(query: VariantListQuery) {
     return { data: ids, total: ids.length, page: 1, limit: ids.length };
   }
 
+  // Guard against exceeding database driver prepared statement parameter limit (32,767)
+  // when relational includes are present
+  const safeTake = query.ignoreMaxLimit === "true" ? Math.min(limit, 1000) : limit;
+
   const [data, total] = await Promise.all([
     prisma.productVariant.findMany({
       where,
       skip,
-      take: limit,
+      take: safeTake,
       orderBy,
       include: {
         product: {
@@ -1025,7 +1033,7 @@ export async function getProduct(id: string) {
       },
       _count: {
         select: {
-          variants: { where: { status: { not: "INACTIVE" }, deletedAt: null } },
+          variants: { where: { deletedAt: null } },
         },
       },
       inventories: {
@@ -1068,7 +1076,7 @@ export async function getProduct(id: string) {
 
 export async function getProductVariants(
   productId: string,
-  query?: { page?: number | string; limit?: number | string; search?: string }
+  query?: { page?: number | string; limit?: number | string; search?: string; status?: string }
 ) {
   const startTime = performance.now();
   await assertProductExists(productId);
@@ -1076,10 +1084,11 @@ export async function getProductVariants(
   const page = query?.page ? Math.max(1, Number(query.page)) : undefined;
   const limit = query?.limit ? Math.max(1, Number(query.limit)) : (query?.page ? 50 : undefined);
   const search = typeof query?.search === "string" ? query.search.trim() : undefined;
+  const statusFilter = query?.status && ["ACTIVE", "INACTIVE"].includes(query.status) ? (query.status as Status) : undefined;
 
   const where: Prisma.ProductVariantWhereInput = {
     productId,
-    status: { not: "INACTIVE" },
+    ...(statusFilter ? { status: statusFilter } : {}),
     deletedAt: null,
     ...(search
       ? {
@@ -1386,9 +1395,30 @@ export async function permanentDeleteProduct(id: string) {
   ]);
 
   if (orderItemCount > 0 || quoteItemCount > 0) {
+    const [orderItems, quoteItems] = await Promise.all([
+      orderItemCount > 0
+        ? prisma.orderItem.findMany({
+            where: { productId: id },
+            take: 10,
+            select: { order: { select: { id: true, orderNumber: true } } },
+          })
+        : [],
+      quoteItemCount > 0
+        ? prisma.quoteItem.findMany({
+            where: { productId: id },
+            take: 10,
+            select: { quote: { select: { id: true, quoteNumber: true } } },
+          })
+        : [],
+    ]);
     throw new AppError(
       `Cannot permanently delete product: referenced by ${orderItemCount} order item(s) and ${quoteItemCount} quote item(s). Use normal delete (Soft Delete) instead to protect order history.`,
       400,
+      undefined,
+      {
+        orders: orderItems.map((oi) => ({ id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id })),
+        quotes: quoteItems.map((qi) => ({ id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id })),
+      }
     );
   }
 
@@ -1452,7 +1482,7 @@ export async function duplicateProduct(id: string) {
       translations: true,
       prices: { where: { deletedAt: null }, include: { country: true, currency: true } },
       variants: {
-        where: { status: { not: "INACTIVE" } },
+        where: { deletedAt: null },
         include: {
           attributeValues: true,
           countries: true,
@@ -4134,23 +4164,41 @@ export async function permanentDeleteVariant(productId: string, variantId: strin
   const reservedStock = Math.max(0, inventorySum._sum.reservedStock || 0);
 
   if (orderItemCount > 0) {
+    const orderItems = await prisma.orderItem.findMany({
+      where: { variantId },
+      take: 10,
+      select: { order: { select: { id: true, orderNumber: true } } },
+    });
     throw new AppError(
       `Cannot permanently delete variant: referenced by ${orderItemCount} historical order item(s) and legal tax invoice(s).`,
       400,
+      undefined,
+      {
+        orders: orderItems.map((oi) => ({ id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id })),
+      }
     );
   }
 
   if (quoteItemCount > 0) {
+    const quoteItems = await prisma.quoteItem.findMany({
+      where: { variantId },
+      take: 10,
+      select: { quote: { select: { id: true, quoteNumber: true } } },
+    });
     throw new AppError(
       `Cannot permanently delete variant: referenced by ${quoteItemCount} quote item(s).`,
       400,
+      undefined,
+      {
+        quotes: quoteItems.map((qi) => ({ id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id })),
+      }
     );
   }
 
   if (reservedStock > 0) {
     throw new AppError(
       `Cannot permanently delete variant: reserved stock (${reservedStock} units) exists for pending orders. Zero or resolve reservations first.`,
-      400,
+      400
     );
   }
 
@@ -6558,7 +6606,13 @@ export async function exportProductVariantsSpreadsheet(productId: string, varian
 
 export async function bulkPermanentDeleteProducts(ids: string[]) {
   const deletedIds: string[] = [];
-  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+  const blocked: Array<{
+    id: string;
+    name: string;
+    reason: string;
+    orders?: Array<{ id: string; orderNumber: string | null }>;
+    quotes?: Array<{ id: string; quoteNumber: string | null }>;
+  }> = [];
 
   for (const id of ids) {
     try {
@@ -6575,12 +6629,49 @@ export async function bulkPermanentDeleteProducts(ids: string[]) {
     } catch (error: any) {
       const prod = await prisma.product.findUnique({
         where: { id },
-        select: { title: true },
+        select: { title: true, sku: true },
       });
+
+      let orders = error?.details?.orders;
+      let quotes = error?.details?.quotes;
+
+      if (!orders && !quotes) {
+        const [orderItems, quoteItems] = await Promise.all([
+          prisma.orderItem.findMany({
+            where: { productId: id },
+            take: 10,
+            select: { order: { select: { id: true, orderNumber: true } } },
+          }),
+          prisma.quoteItem.findMany({
+            where: { productId: id },
+            take: 10,
+            select: { quote: { select: { id: true, quoteNumber: true } } },
+          }),
+        ]);
+
+        const orderMap = new Map<string, { id: string; orderNumber: string | null }>();
+        for (const oi of orderItems) {
+          if (oi.order && !orderMap.has(oi.order.id)) {
+            orderMap.set(oi.order.id, { id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id });
+          }
+        }
+        const quoteMap = new Map<string, { id: string; quoteNumber: string | null }>();
+        for (const qi of quoteItems) {
+          if (qi.quote && !quoteMap.has(qi.quote.id)) {
+            quoteMap.set(qi.quote.id, { id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id });
+          }
+        }
+
+        orders = Array.from(orderMap.values());
+        quotes = Array.from(quoteMap.values());
+      }
+
       blocked.push({
         id,
-        name: prod?.title || id,
+        name: prod?.title ? `${prod.title}${prod.sku ? ` (${prod.sku})` : ""}` : id,
         reason: error?.message || "Failed to permanently delete product.",
+        orders: orders?.length ? orders : undefined,
+        quotes: quotes?.length ? quotes : undefined,
       });
     }
   }
@@ -6606,47 +6697,66 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
     };
   }
 
-  // 1. Fetch all requested variants
-  const variants = await prisma.productVariant.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, productId: true, title: true, sku: true },
-  });
+  // 1. Fetch all requested variants in safe chunks
+  const variants: Array<{ id: string; productId: string; title: string; sku: string | null; product?: { id: string; title: string } }> = [];
+  const FETCH_CHUNK = 5000;
+  for (let i = 0; i < ids.length; i += FETCH_CHUNK) {
+    const chunk = ids.slice(i, i + FETCH_CHUNK);
+    const rows = await prisma.productVariant.findMany({
+      where: { id: { in: chunk } },
+      select: {
+        id: true,
+        productId: true,
+        title: true,
+        sku: true,
+        product: { select: { id: true, title: true } },
+      },
+    });
+    variants.push(...rows);
+  }
   const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-  // 2. Fetch protection checks in batch
-  const [orderItems, quoteItems, reservedInventories] = await Promise.all([
-    prisma.orderItem.groupBy({
-      by: ["variantId"],
-      where: { variantId: { in: ids } },
-      _count: { _all: true },
-    }),
-    prisma.quoteItem.groupBy({
-      by: ["variantId"],
-      where: { variantId: { in: ids } },
-      _count: { _all: true },
-    }),
-    prisma.inventory.groupBy({
-      by: ["variantId"],
-      where: { variantId: { in: ids }, reservedStock: { gt: 0 } },
-      _sum: { reservedStock: true },
-    }),
-  ]);
+  // 2. Fetch protection checks in safe batch chunks
+  const orderBlockedMap = new Map<string, number>();
+  const quoteBlockedMap = new Map<string, number>();
+  const reservedBlockedMap = new Map<string, number>();
 
-  const orderBlockedMap = new Map(
-    orderItems
-      .filter((o) => o.variantId)
-      .map((o) => [o.variantId!, typeof o._count === "object" ? o._count._all : (o._count as number)])
-  );
-  const quoteBlockedMap = new Map(
-    quoteItems
-      .filter((q) => q.variantId)
-      .map((q) => [q.variantId!, typeof q._count === "object" ? q._count._all : (q._count as number)])
-  );
-  const reservedBlockedMap = new Map(
-    reservedInventories
-      .filter((i) => i.variantId && (i._sum.reservedStock || 0) > 0)
-      .map((i) => [i.variantId!, i._sum.reservedStock || 0])
-  );
+  for (let i = 0; i < ids.length; i += FETCH_CHUNK) {
+    const chunk = ids.slice(i, i + FETCH_CHUNK);
+    const [orderItems, quoteItems, reservedInventories] = await Promise.all([
+      prisma.orderItem.groupBy({
+        by: ["variantId"],
+        where: { variantId: { in: chunk } },
+        _count: { _all: true },
+      }),
+      prisma.quoteItem.groupBy({
+        by: ["variantId"],
+        where: { variantId: { in: chunk } },
+        _count: { _all: true },
+      }),
+      prisma.inventory.groupBy({
+        by: ["variantId"],
+        where: { variantId: { in: chunk }, reservedStock: { gt: 0 } },
+        _sum: { reservedStock: true },
+      }),
+    ]);
+
+    for (const o of orderItems) {
+      if (o.variantId) {
+        orderBlockedMap.set(o.variantId, typeof o._count === "object" ? o._count._all : (o._count as number));
+      }
+    }
+    for (const q of quoteItems) {
+      if (q.variantId) {
+        quoteBlockedMap.set(q.variantId, typeof q._count === "object" ? q._count._all : (q._count as number));
+      }
+    }
+    for (const r of reservedInventories) {
+      if (r.variantId && (r._sum.reservedStock || 0) > 0) {
+        reservedBlockedMap.set(r.variantId, r._sum.reservedStock || 0);
+      }
+    }
+  }
 
   const toDeleteIds: string[] = [];
 
@@ -6661,8 +6771,10 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
       blocked.push({
         id,
         name: `${v.title} (${v.sku || "No SKU"})`,
+        productId: v.productId,
+        productTitle: v.product?.title,
         reason: `Referenced by ${orderCount} historical order item(s) and legal tax invoice(s).`,
-      });
+      } as any);
       continue;
     }
     const quoteCount = quoteBlockedMap.get(id);
@@ -6670,8 +6782,10 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
       blocked.push({
         id,
         name: `${v.title} (${v.sku || "No SKU"})`,
+        productId: v.productId,
+        productTitle: v.product?.title,
         reason: `Referenced by ${quoteCount} quote item(s).`,
-      });
+      } as any);
       continue;
     }
     const reserved = reservedBlockedMap.get(id);
@@ -6679,12 +6793,70 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
       blocked.push({
         id,
         name: `${v.title} (${v.sku || "No SKU"})`,
+        productId: v.productId,
+        productTitle: v.product?.title,
         reason: `Reserved stock (${reserved} units) exists for pending orders.`,
-      });
+      } as any);
       continue;
     }
 
     toDeleteIds.push(id);
+  }
+
+  // 2b. Attach sample order and quote references for blocked preview
+  const sampleBlockedIds = blocked.slice(0, 100).map((b) => b.id);
+  if (sampleBlockedIds.length > 0) {
+    try {
+      const [sampleOrderItems, sampleQuoteItems] = await Promise.all([
+        prisma.orderItem.findMany({
+          where: { variantId: { in: sampleBlockedIds } },
+          select: {
+            variantId: true,
+            order: { select: { id: true, orderNumber: true } },
+          },
+          take: 300,
+        }),
+        prisma.quoteItem.findMany({
+          where: { variantId: { in: sampleBlockedIds } },
+          select: {
+            variantId: true,
+            quote: { select: { id: true, quoteNumber: true } },
+          },
+          take: 300,
+        }),
+      ]);
+
+      const orderRefMap = new Map<string, Array<{ id: string; orderNumber: string }>>();
+      for (const item of sampleOrderItems) {
+        if (item.variantId && item.order) {
+          const existing = orderRefMap.get(item.variantId) || [];
+          if (existing.length < 5 && !existing.some((o) => o.id === item.order.id)) {
+            existing.push({ id: item.order.id, orderNumber: item.order.orderNumber });
+            orderRefMap.set(item.variantId, existing);
+          }
+        }
+      }
+
+      const quoteRefMap = new Map<string, Array<{ id: string; quoteNumber: string }>>();
+      for (const item of sampleQuoteItems) {
+        if (item.variantId && item.quote) {
+          const existing = quoteRefMap.get(item.variantId) || [];
+          if (existing.length < 5 && !existing.some((q) => q.id === item.quote.id)) {
+            existing.push({ id: item.quote.id, quoteNumber: item.quote.quoteNumber });
+            quoteRefMap.set(item.variantId, existing);
+          }
+        }
+      }
+
+      for (const b of blocked) {
+        if (b.id) {
+          (b as any).orders = orderRefMap.get(b.id) || [];
+          (b as any).quotes = quoteRefMap.get(b.id) || [];
+        }
+      }
+    } catch {
+      // Ignore reference lookup error if any
+    }
   }
 
   // 3. Batch delete unblocked variants in chunks of 250 with 30s timeout
@@ -6736,7 +6908,63 @@ export async function bulkPermanentDeleteVariants(ids: string[]) {
   return {
     deletedCount: deletedIds.length,
     blockedCount: blocked.length,
-    deletedIds,
-    blocked,
+    deletedIds: deletedIds.length > 500 ? deletedIds.slice(0, 500) : deletedIds,
+    blocked: blocked.slice(0, 100),
   };
 }
+
+export async function bulkUpdateVariantsGlobal(data: {
+  ids: string[];
+  action: "delete" | "restore" | "activate" | "deactivate";
+}) {
+  const ids = Array.from(new Set(data.ids ?? []));
+  if (!ids.length) {
+    throw new AppError("Select at least one variant.", 400);
+  }
+
+  // Safe chunked updates to prevent database parameter overflow
+  const CHUNK_SIZE = 5000;
+  let totalUpdated = 0;
+
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + CHUNK_SIZE);
+    if (data.action === "delete") {
+      const res = await prisma.productVariant.updateMany({
+        where: { id: { in: chunk } },
+        data: {
+          deletedAt: new Date(),
+          status: "INACTIVE",
+        },
+      });
+      totalUpdated += res.count;
+    } else if (data.action === "restore") {
+      const res = await prisma.productVariant.updateMany({
+        where: { id: { in: chunk } },
+        data: {
+          deletedAt: null,
+          status: "ACTIVE",
+        },
+      });
+      totalUpdated += res.count;
+    } else if (data.action === "activate") {
+      const res = await prisma.productVariant.updateMany({
+        where: { id: { in: chunk } },
+        data: {
+          status: "ACTIVE",
+        },
+      });
+      totalUpdated += res.count;
+    } else if (data.action === "deactivate") {
+      const res = await prisma.productVariant.updateMany({
+        where: { id: { in: chunk } },
+        data: {
+          status: "INACTIVE",
+        },
+      });
+      totalUpdated += res.count;
+    }
+  }
+
+  return { updated: totalUpdated };
+}
+

@@ -7,7 +7,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import {
   AdminInput,
   AdminSelect,
-  ConfirmModal,
+  AdminDeleteModal,
   StatCard,
   AdminStatsGrid,
   AdminListToolbar,
@@ -504,13 +504,16 @@ export default function ProductFiltersPage() {
             </div>
           </Modal>
 
-          <ConfirmModal
-            open={!!deletingId}
-            title="Remove filter?"
-            message="This will remove the attribute from the storefront filters. The attribute itself will not be deleted."
-            onConfirm={handleDeleteAttributeFilter}
-            onCancel={() => setDeletingId(null)}
-            isLoading={updateFilters.isPending}
+          <AdminDeleteModal
+            open={Boolean(deletingId)}
+            onClose={() => setDeletingId(null)}
+            itemName={attributes?.find((a: any) => a.id === deletingId)?.name || "Filter"}
+            itemType="Product Filter"
+            warningMessage="Choose the deletion method for this filter. This will remove the attribute from storefront navigation filters. The underlying attribute itself will not be deleted."
+            softDeleteDescription={`Removes "${attributes?.find((a: any) => a.id === deletingId)?.name || "filter"}" from storefront facet filters.`}
+            onSoftDelete={handleDeleteAttributeFilter}
+            isSoftDeleting={updateFilters.isPending}
+            initialDeleteType="soft"
           />
 
           {ToastComponent}

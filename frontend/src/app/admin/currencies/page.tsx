@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Coins, Copy, Download, Edit2, Filter, Globe, Plus, RefreshCw, Search, SlidersHorizontal, SquareCheckBig, Trash2, Upload, X } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
-import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, ConfirmModal, Pagination, StatCard, StatusBadge, Tooltip, useToast, LoadingButton, DataTable, type Column } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminStatsGrid, AdminListToolbar, AdminDeleteModal, Pagination, StatCard, StatusBadge, Tooltip, useToast, LoadingButton, DataTable, type Column } from "@/components/admin/AdminComponents";
 import { AdminRowActions, AdminActionButton } from "@/components/admin/AdminRowActions";
 import { AdminBulkActionsBar } from "@/components/admin/AdminBulkActionsBar";
 import { AdminImportWizard, WizardColumnDef, WizardExpectedColumn } from "@/components/admin/AdminImportWizard";
@@ -1023,13 +1023,16 @@ export default function CurrenciesPage() {
           </form>
         </Modal>
 
-        <ConfirmModal
-          open={!!deleting}
-          title="Delete currency?"
-          message={deleting ? `Delete ${deleting.code}? This is blocked if the currency is already referenced by countries, orders, quotes, or pricing records.` : ""}
-          onConfirm={handleDelete}
-          onCancel={() => setDeleting(null)}
-          isLoading={deleteCurrency.isPending}
+        <AdminDeleteModal
+          open={Boolean(deleting)}
+          onClose={() => setDeleting(null)}
+          itemName={deleting?.code}
+          itemType="Currency"
+          warningMessage="Choose the deletion method for this currency. Deleting will be blocked if the currency is referenced by countries, orders, quotes, or pricing records."
+          softDeleteDescription={`Deactivates and removes currency "${deleting?.code}" from the active currency registry.`}
+          onSoftDelete={handleDelete}
+          isSoftDeleting={deleteCurrency.isPending}
+          initialDeleteType="soft"
         />
 
         {ToastComponent}

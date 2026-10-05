@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useState,
   useEffect,
@@ -1274,6 +1275,13 @@ export function ConfirmModal({
 
 // ─── AdminDeleteModal ───────────────────────────────────────
 
+export interface LinkedReferenceItem {
+  id: string;
+  label?: string;
+  type?: "order" | "quote" | "product" | "variant" | "category" | "customer" | "return" | "custom";
+  href?: string;
+}
+
 export interface AdminDeleteModalProps {
   open: boolean;
   onClose: () => void;
@@ -1295,6 +1303,169 @@ export interface AdminDeleteModalProps {
   closeOnClickOutside?: boolean;
   softDeleteButtonText?: string;
   permanentDeleteButtonText?: string;
+  linkedReferences?: LinkedReferenceItem[];
+  linkedOrders?: Array<{ id: string; orderNumber?: string }>;
+  linkedQuotes?: Array<{ id: string; quoteNumber?: string }>;
+  linkedProducts?: Array<{ id: string; title?: string }>;
+  linkedVariants?: Array<{ id: string; sku?: string; title?: string; productId?: string }>;
+  linkedReturns?: Array<{ id: string; returnNumber?: string }>;
+}
+
+function RenderDeleteModalLinks({
+  orders,
+  quotes,
+  products,
+  variants,
+  returns,
+  references,
+}: {
+  orders?: Array<{ id: string; orderNumber?: string }>;
+  quotes?: Array<{ id: string; quoteNumber?: string }>;
+  products?: Array<{ id: string; title?: string }>;
+  variants?: Array<{ id: string; sku?: string; title?: string; productId?: string }>;
+  returns?: Array<{ id: string; returnNumber?: string }>;
+  references?: LinkedReferenceItem[];
+}) {
+  const hasOrders = orders && orders.length > 0;
+  const hasQuotes = quotes && quotes.length > 0;
+  const hasProducts = products && products.length > 0;
+  const hasVariants = variants && variants.length > 0;
+  const hasReturns = returns && returns.length > 0;
+  const hasReferences = references && references.length > 0;
+
+  if (!hasOrders && !hasQuotes && !hasProducts && !hasVariants && !hasReturns && !hasReferences) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2.5 pt-2 border-t border-red-200/60 space-y-2">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-[#6B7280] flex items-center gap-1.5">
+        <span>Linked System Records:</span>
+      </div>
+
+      {hasOrders && (
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-[11px] font-semibold text-[#555]">Orders:</span>
+          {orders.map((ord) => (
+            <Link
+              key={ord.id}
+              href={`/admin/orders/${ord.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-semibold hover:bg-blue-100 hover:text-blue-900 hover:border-blue-300 transition-colors shadow-2xs"
+              title={`View Order #${ord.orderNumber || ord.id}`}
+            >
+              <span>{ord.orderNumber || ord.id}</span>
+              <ExternalLink size={10} className="shrink-0 opacity-70" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {hasQuotes && (
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-[11px] font-semibold text-[#555]">Quotes:</span>
+          {quotes.map((q) => (
+            <Link
+              key={q.id}
+              href={`/admin/quotes/${q.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-semibold hover:bg-purple-100 hover:text-purple-900 hover:border-purple-300 transition-colors shadow-2xs"
+              title={`View Quote #${q.quoteNumber || q.id}`}
+            >
+              <span>{q.quoteNumber || q.id}</span>
+              <ExternalLink size={10} className="shrink-0 opacity-70" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {hasProducts && (
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-[11px] font-semibold text-[#555]">Products:</span>
+          {products.map((p) => (
+            <Link
+              key={p.id}
+              href={`/admin/products/${p.id}/edit`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 hover:text-amber-950 hover:border-amber-300 transition-colors shadow-2xs"
+              title={`Edit Product ${p.title || p.id}`}
+            >
+              <span className="max-w-[160px] truncate">{p.title || p.id}</span>
+              <ExternalLink size={10} className="shrink-0 opacity-70" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {hasVariants && (
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-[11px] font-semibold text-[#555]">Variants:</span>
+          {variants.map((v) => (
+            <Link
+              key={v.id}
+              href={v.productId ? `/admin/products/${v.productId}/edit` : `/admin/variants?search=${encodeURIComponent(v.sku || v.id)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-semibold hover:bg-emerald-100 hover:text-emerald-950 hover:border-emerald-300 transition-colors shadow-2xs"
+              title={`View Variant ${v.sku || v.title || v.id}`}
+            >
+              <span>{v.sku || v.title || v.id}</span>
+              <ExternalLink size={10} className="shrink-0 opacity-70" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {hasReturns && (
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-[11px] font-semibold text-[#555]">Returns:</span>
+          {returns.map((r) => (
+            <Link
+              key={r.id}
+              href={`/admin/returns/${r.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold hover:bg-rose-100 hover:text-rose-900 hover:border-rose-300 transition-colors shadow-2xs"
+              title={`View Return #${r.returnNumber || r.id}`}
+            >
+              <span>{r.returnNumber || r.id}</span>
+              <ExternalLink size={10} className="shrink-0 opacity-70" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {hasReferences && (
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-[11px] font-semibold text-[#555]">References:</span>
+          {references.map((ref, idx) =>
+            ref.href ? (
+              <Link
+                key={ref.id || idx}
+                href={ref.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 border border-neutral-200 text-neutral-800 text-[11px] font-semibold hover:bg-neutral-200 hover:text-black transition-colors shadow-2xs"
+              >
+                <span>{ref.label || ref.id}</span>
+                <ExternalLink size={10} className="shrink-0 opacity-70" />
+              </Link>
+            ) : (
+              <span
+                key={ref.id || idx}
+                className="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 border border-neutral-200 text-neutral-700 text-[11px] font-semibold"
+              >
+                {ref.label || ref.id}
+              </span>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AdminDeleteModal({
@@ -1318,9 +1489,23 @@ export function AdminDeleteModal({
   closeOnClickOutside = true,
   softDeleteButtonText,
   permanentDeleteButtonText,
+  linkedReferences,
+  linkedOrders,
+  linkedQuotes,
+  linkedProducts,
+  linkedVariants,
+  linkedReturns,
 }: AdminDeleteModalProps) {
   const [deleteType, setDeleteType] = useState<"soft" | "permanent">(initialDeleteType);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [localDetails, setLocalDetails] = useState<{
+    orders?: Array<{ id: string; orderNumber?: string }>;
+    quotes?: Array<{ id: string; quoteNumber?: string }>;
+    products?: Array<{ id: string; title?: string }>;
+    variants?: Array<{ id: string; sku?: string; title?: string; productId?: string }>;
+    returns?: Array<{ id: string; returnNumber?: string }>;
+    references?: LinkedReferenceItem[];
+  } | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -1335,6 +1520,7 @@ export function AdminDeleteModal({
     if (open) {
       setDeleteType(initialDeleteType);
       setLocalError(null);
+      setLocalDetails(null);
       if (onClearError) onClearError();
     }
   }, [open, onClearError, initialDeleteType]);
@@ -1361,6 +1547,7 @@ export function AdminDeleteModal({
 
   const handleConfirm = async () => {
     setLocalError(null);
+    setLocalDetails(null);
     if (onClearError) onClearError();
     try {
       if (deleteType === "soft") {
@@ -1371,10 +1558,22 @@ export function AdminDeleteModal({
     } catch (err: unknown) {
       const msg = getAdminErrorMessage(err, "Failed to complete deletion.");
       setLocalError(msg);
+      const details = (err as { response?: { data?: { details?: any } } })?.response?.data?.details;
+      if (details) {
+        setLocalDetails(details);
+      }
     }
   };
 
   const displayName = itemName ? `"${itemName}"` : itemType.toLowerCase();
+
+  // Aggregate active links to show
+  const activeOrders = localDetails?.orders || linkedOrders;
+  const activeQuotes = localDetails?.quotes || linkedQuotes;
+  const activeProducts = localDetails?.products || linkedProducts;
+  const activeVariants = localDetails?.variants || linkedVariants;
+  const activeReturns = localDetails?.returns || linkedReturns;
+  const activeReferences = localDetails?.references || linkedReferences;
 
   return createPortal(
     <div
@@ -1382,7 +1581,7 @@ export function AdminDeleteModal({
       onClick={!activeLoading && closeOnClickOutside ? onClose : undefined}
     >
       <div
-        className="w-full max-w-[500px] rounded-2xl bg-white p-6 shadow-2xl animate-fade-in border border-[#E6E6E6] cursor-default"
+        className="w-full max-w-[520px] rounded-2xl bg-white p-6 shadow-2xl animate-fade-in border border-[#E6E6E6] cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -1425,9 +1624,19 @@ export function AdminDeleteModal({
 
         {/* In-Modal Error Banner */}
         {displayedError ? (
-          <div className="mb-3.5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-[12.5px] leading-relaxed text-red-700 animate-fade-in shadow-2xs">
-            <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-600" />
-            <div className="flex-1 font-medium">{displayedError}</div>
+          <div className="mb-3.5 flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-[12.5px] leading-relaxed text-red-700 animate-fade-in shadow-2xs">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-600" />
+              <div className="flex-1 font-medium">{displayedError}</div>
+            </div>
+            <RenderDeleteModalLinks
+              orders={activeOrders}
+              quotes={activeQuotes}
+              products={activeProducts}
+              variants={activeVariants}
+              returns={activeReturns}
+              references={activeReferences}
+            />
           </div>
         ) : null}
 
@@ -1525,9 +1734,19 @@ export function AdminDeleteModal({
                       `Physically removes ${displayName} from the database. Blocked by system guards if orders or dependencies reference it.`}
                   </p>
                   {permanentDeleteDisabled && permanentDeleteDisabledReason && (
-                    <div className="mt-2.5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/90 p-2.5 text-[12px] font-medium leading-relaxed text-amber-900">
-                      <AlertCircle size={15} className="mt-0.5 shrink-0 text-amber-700" />
-                      <span>{permanentDeleteDisabledReason}</span>
+                    <div className="mt-2.5 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50/90 p-2.5 text-[12px] font-medium leading-relaxed text-amber-900">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle size={15} className="mt-0.5 shrink-0 text-amber-700" />
+                        <span>{permanentDeleteDisabledReason}</span>
+                      </div>
+                      <RenderDeleteModalLinks
+                        orders={activeOrders}
+                        quotes={activeQuotes}
+                        products={activeProducts}
+                        variants={activeVariants}
+                        returns={activeReturns}
+                        references={activeReferences}
+                      />
                     </div>
                   )}
                 </div>

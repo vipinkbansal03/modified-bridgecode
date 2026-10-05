@@ -154,3 +154,25 @@ export const updateAddress = asyncHandler(async (req: AuthRequest, res: Response
   );
   return ApiResponse.success(res, "Customer address updated.", updated);
 });
+
+export const permanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const result = await CustomersService.permanentDeleteCustomer(String(req.params.id));
+  await prisma.activityLog
+    .create({
+      data: {
+        userId: req.user?.id,
+        action: "CUSTOMER_PERMANENTLY_DELETED",
+        entityType: "Customer",
+        entityId: String(req.params.id),
+        ipAddress: req.ip,
+      },
+    })
+    .catch(() => {});
+  return ApiResponse.success(res, "Customer permanently deleted.", result);
+});
+
+export const bulkPermanentDelete = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const result = await CustomersService.bulkPermanentDeleteCustomers({ ids });
+  return ApiResponse.success(res, "Bulk customer permanent deletion processed.", result);
+});

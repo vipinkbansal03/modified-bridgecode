@@ -25,6 +25,7 @@ import {
   AdminSelect,
   AdminStatsGrid,
   ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Pagination,
   StatusBadge,
@@ -324,7 +325,7 @@ export default function AdminCustomersPage() {
             delete={
               canDelete
                 ? {
-                    onClick: () => setDeletingCustomer(row.id),
+                    onClick: () => setDeletingCustomer(row),
                     title: "Delete account",
                   }
                 : undefined
@@ -385,23 +386,8 @@ export default function AdminCustomersPage() {
     }
   };
 
-  const [deletingCustomer, setDeletingCustomer] = useState<string | null>(null);
+  const [deletingCustomer, setDeletingCustomer] = useState<CustomerRow | null>(null);
   const [deletingLoading, setDeletingLoading] = useState(false);
-
-  const handleDeleteCustomer = async () => {
-    if (!deletingCustomer) return;
-    setDeletingLoading(true);
-    try {
-      await adminApi.delete(`/customers/${deletingCustomer}`);
-      showToast("Customer deleted successfully.");
-      customerQuery.refetch();
-    } catch (err) {
-      showToast(getAdminErrorMessage(err, "Failed to delete customer."), "error");
-    } finally {
-      setDeletingLoading(false);
-      setDeletingCustomer(null);
-    }
-  };
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
@@ -628,12 +614,50 @@ export default function AdminCustomersPage() {
         isLoading={approveCustomer.isPending || rejectCustomer.isPending}
       />
 
-      <ConfirmModal
-        open={!!deletingCustomer}
-        title="Delete customer?"
-        message="Are you sure you want to delete this customer account? This will mark the customer as deleted."
-        onConfirm={handleDeleteCustomer}
-        onCancel={() => setDeletingCustomer(null)}
+      <AdminDeleteModal
+        open={Boolean(deletingCustomer)}
+        onClose={() => setDeletingCustomer(null)}
+        itemName={deletingCustomer ? `${deletingCustomer.firstName} ${deletingCustomer.lastName}` : undefined}
+        itemType="Customer"
+        warningMessage="Choose the deletion method for this customer. Soft Delete is recommended to safely retain customer order history, invoices, quotes, and addresses."
+        softDeleteDescription={
+          deletingCustomer
+            ? `Hides ${deletingCustomer.firstName} ${deletingCustomer.lastName} from the active customer directory while safely retaining historical orders, quotes, and accounting records in the Archive.`
+            : undefined
+        }
+        permanentDeleteDescription={
+          deletingCustomer
+            ? `Physically removes ${deletingCustomer.firstName} ${deletingCustomer.lastName} and their profile from the database. Blocked by system guards if orders, quotes, or transactions are linked to this customer.`
+            : undefined
+        }
+        onSoftDelete={async () => {
+          if (!deletingCustomer) return;
+          setDeletingLoading(true);
+          try {
+            await adminApi.delete(`/customers/${deletingCustomer.id}`);
+            showToast("Customer soft-deleted successfully.");
+            customerQuery.refetch();
+          } catch (err) {
+            showToast(getAdminErrorMessage(err, "Failed to delete customer."), "error");
+          } finally {
+            setDeletingLoading(false);
+            setDeletingCustomer(null);
+          }
+        }}
+        onPermanentDelete={async () => {
+          if (!deletingCustomer) return;
+          setDeletingLoading(true);
+          try {
+            await adminApi.delete(`/customers/${deletingCustomer.id}/permanent`);
+            showToast("Customer permanently deleted.");
+            customerQuery.refetch();
+          } catch (err) {
+            showToast(getAdminErrorMessage(err, "Failed to permanently delete customer."), "error");
+          } finally {
+            setDeletingLoading(false);
+            setDeletingCustomer(null);
+          }
+        }}
         isLoading={deletingLoading}
       />
 

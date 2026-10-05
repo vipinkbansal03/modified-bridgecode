@@ -40,11 +40,20 @@ export class ApiResponse {
 export class AppError extends Error {
   statusCode: number;
   isOperational: boolean;
+  errors?: unknown[];
+  details?: Record<string, any>;
 
-  constructor(message: string, statusCode: number) {
+  constructor(
+    message: string,
+    statusCode: number,
+    errors?: unknown[],
+    details?: Record<string, any>
+  ) {
     super(message);
     this.statusCode = statusCode;
     this.isOperational = true;
+    this.errors = errors;
+    this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
 }

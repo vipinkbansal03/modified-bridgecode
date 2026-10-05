@@ -10,6 +10,7 @@ router.get("/", requirePermission("orders.view", "orders.manage"), C.list);
 router.post("/", requirePermission("orders.manage"), C.create);
 router.get("/analytics", requirePermission("orders.view", "orders.manage"), C.analytics);
 router.get("/stats/counts", requirePermission("orders.view", "orders.manage"), C.getCounts);
+router.post("/bulk/delete", requirePermission("orders.manage", "orders.delete"), C.bulkSoftDelete);
 router.post("/bulk/permanent", requirePermission("orders.manage"), C.bulkPermanentDelete);
 router.get("/:id/invoice", requirePermission("orders.manage"), C.invoice);
 router.get("/:id/invoice-data", requirePermission("orders.view", "orders.manage"), C.getInvoice);

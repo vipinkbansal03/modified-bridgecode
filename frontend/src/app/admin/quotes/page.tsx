@@ -25,7 +25,6 @@ import {
   AdminListToolbar,
   AdminSelect,
   AdminStatsGrid,
-  ConfirmModal,
   DataTable,
   Pagination,
   StatusBadge,
@@ -561,16 +560,16 @@ export default function QuotesPage() {
       />
 
       {/* BULK ARCHIVE CONFIRMATION MODAL */}
-      <ConfirmModal
+      <AdminDeleteModal
         open={isBulkDeleting}
-        onCancel={() => setIsBulkDeleting(false)}
-        onConfirm={handleBulkArchive}
-        title="Archive Selected Quotes"
-        message={`Are you sure you want to archive ${selectedIds.length} selected quote request${selectedIds.length > 1 ? "s" : ""}? They will be moved to the Archive and can be restored at any time.`}
-        confirmText={`Archive (${selectedIds.length})`}
-        loadingText="Archiving..."
-        isLoading={isBulkSubmitting}
-        danger={false}
+        onClose={() => setIsBulkDeleting(false)}
+        itemName={`${selectedIds.length} selected quotes`}
+        itemType="Quotes (Bulk)"
+        warningMessage="Choose the deletion method for these quotes (bulk). Soft Delete is recommended to safely preserve customer RFQ details and commercial records."
+        softDeleteDescription={`Hides the ${selectedIds.length} selected quote request(s) from the active quotes list while safely retaining pricing, messages, and customer RFQ data in the Archive.`}
+        onSoftDelete={handleBulkArchive}
+        isSoftDeleting={isBulkSubmitting}
+        initialDeleteType="soft"
       />
     </AdminLayout>
   );

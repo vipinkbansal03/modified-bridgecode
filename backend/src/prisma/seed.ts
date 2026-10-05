@@ -465,6 +465,40 @@ async function main() {
   await seedCustomerRole({ key: "DOCTOR_RETAILER", name: "Doctor / Retailer", description: "Registered doctors and retail clinics", status: "ACTIVE", sortOrder: 2 });
   await seedCustomerRole({ key: "DEALER", name: "Dealer / B2B Wholesale", description: "B2B wholesale dealers and distributors", status: "ACTIVE", sortOrder: 3 });
 
+  // ─── Default Warehouse ────────────────────────────────────
+  const defaultWarehouseCountry = indiaCountry || (await prisma.country.findFirst({ where: { code: "IN" } }));
+  if (defaultWarehouseCountry) {
+    const existingWarehouse = await prisma.warehouse.findFirst({ where: { name: "Modern Orthodontics Ludhiana", deletedAt: null } });
+    if (!existingWarehouse) {
+      await prisma.warehouse.create({
+        data: {
+          name: "Modern Orthodontics Ludhiana",
+          countryId: defaultWarehouseCountry.id,
+          state: "Punjab",
+          addressLine1: "Modern Orthodontics, Hambran Industrial Area",
+          addressLine2: "Mullanpur Road, Hambran",
+          city: "Ludhiana",
+          postalCode: "141110",
+          address: "Modern Orthodontics, Hambran Industrial Area, Mullanpur Road, Hambran, Ludhiana, Punjab 141110",
+          gstin: "03AAMFM0230C1Z2",
+          status: "ACTIVE",
+          deliveryZones: [
+            {
+              countryId: defaultWarehouseCountry.id,
+              states: [
+                "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh",
+                "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana",
+                "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep",
+                "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry",
+                "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
+              ],
+            },
+          ],
+        },
+      });
+    }
+  }
+
   let molarTubeCategory = await prisma.category.findFirst({ where: { slug: "molar-tubes", deletedAt: null } });
   if (!molarTubeCategory) {
     molarTubeCategory = await prisma.category.create({
@@ -1756,9 +1790,10 @@ async function main() {
     { key: "tax.invoice_title_default", value: "Tax Invoice", group: "tax", label: "Default Invoice Title", type: "string" },
     { key: "tax.invoice_prefix", value: "INV-", group: "tax", label: "Invoice Number Prefix", type: "string" },
     { key: "tax.seller_name", value: "Modern Orthodontics Pvt Ltd", group: "tax", label: "Seller Legal Name", type: "string" },
-    { key: "tax.seller_gstin", value: "03AAAAA1111A1Z1", group: "tax", label: "Seller GSTIN (India)", type: "string" },
+    { key: "tax.seller_gstin", value: "03AAMFM0230C1Z2", group: "tax", label: "Seller GSTIN (India)", type: "string" },
     { key: "tax.seller_iec", value: "0300000000", group: "tax", label: "Seller Import Export Code (IEC)", type: "string" },
     { key: "tax.ship_from_state", value: "Punjab", group: "tax", label: "Fulfillment Origin State", type: "string" },
+    { key: "tax.fulfillment_origin_state", value: "Punjab", group: "tax", label: "Fulfillment Origin State", type: "string" },
     { key: "tax.bank_name", value: "HDFC Bank", group: "tax", label: "Bank Name", type: "string" },
     { key: "tax.bank_account", value: "50200012345678", group: "tax", label: "Bank Account Number", type: "string" },
     { key: "tax.bank_ifsc", value: "HDFC0001234", group: "tax", label: "IFSC / SWIFT Code", type: "string" },

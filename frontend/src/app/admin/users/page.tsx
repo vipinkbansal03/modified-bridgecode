@@ -15,7 +15,7 @@ import {
   AdminInput,
   AdminSelect,
   AdminMultiSelect,
-  ConfirmModal,
+  AdminDeleteModal,
   useToast,
   AdminListToolbar,
   LoadingButton,
@@ -543,13 +543,16 @@ export default function UsersPage() {
           </form>
         </Modal>
 
-        <ConfirmModal
-          open={!!deleting}
-          title="Remove user?"
-          message="This will deactivate the user account."
-          onConfirm={handleDelete}
-          onCancel={() => setDeleting(null)}
-          isLoading={deletingLoading}
+        <AdminDeleteModal
+          open={Boolean(deleting)}
+          onClose={() => setDeleting(null)}
+          itemName={users.find((u: any) => u.id === deleting)?.name || "User"}
+          itemType="Staff User"
+          warningMessage="Choose the deletion method for this user account. Deactivating will disable system login while retaining audit trails."
+          softDeleteDescription={`Deactivates "${users.find((u: any) => u.id === deleting)?.name || "this user"}" and revokes administrative access.`}
+          onSoftDelete={handleDelete}
+          isSoftDeleting={deletingLoading}
+          initialDeleteType="soft"
         />
         {ToastComponent}
       </div>

@@ -647,7 +647,13 @@ export async function reorderAttributeValues(
 
 export async function bulkPermanentDeleteAttributes(ids: string[]) {
   const deletedIds: string[] = [];
-  const blocked: Array<{ id: string; name: string; reason: string }> = [];
+  const blocked: Array<{
+    id: string;
+    name: string;
+    reason: string;
+    products?: Array<{ id: string; title: string; sku?: string | null }>;
+    variants?: Array<{ id: string; title: string; sku?: string | null; productId: string }>;
+  }> = [];
 
   const uniqueIds = Array.from(new Set(ids));
   const attributes = await prisma.attribute.findMany({
@@ -666,10 +672,38 @@ export async function bulkPermanentDeleteAttributes(ids: string[]) {
       await permanentDeleteAttribute(id);
       deletedIds.push(id);
     } catch (error: any) {
+      const [productAssignments, variantAssignments] = await Promise.all([
+        prisma.productAttribute.findMany({
+          where: { attributeId: id },
+          include: { product: { select: { id: true, title: true, sku: true } } },
+          take: 10,
+        }),
+        prisma.productVariantAttributeValue.findMany({
+          where: { attributeId: id },
+          include: { variant: { select: { id: true, title: true, sku: true, productId: true } } },
+          take: 10,
+        }),
+      ]);
+
+      const linkedProducts = productAssignments
+        .filter((pa) => pa.product)
+        .map((pa) => ({ id: pa.product.id, title: pa.product.title, sku: pa.product.sku }));
+
+      const linkedVariants = variantAssignments
+        .filter((va) => va.variant)
+        .map((va) => ({
+          id: va.variant.id,
+          title: va.variant.title,
+          sku: va.variant.sku,
+          productId: va.variant.productId,
+        }));
+
       blocked.push({
         id,
         name: attr.name,
         reason: error?.message || "Failed to permanently delete attribute.",
+        products: linkedProducts,
+        variants: linkedVariants,
       });
     }
   }

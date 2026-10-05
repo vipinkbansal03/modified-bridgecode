@@ -152,7 +152,22 @@ export async function listCustomers(query: CustomerListQuery) {
       skip,
       take: limit,
       orderBy: orderBy as never,
-      include: { tier: true, customerRole: true, defaultCountry: true },
+      include: {
+        tier: true,
+        customerRole: true,
+        defaultCountry: true,
+        _count: {
+          select: { orders: true, quotes: true, returns: true },
+        },
+        orders: {
+          take: 5,
+          select: { id: true, orderNumber: true, total: true, status: true },
+        },
+        quotes: {
+          take: 5,
+          select: { id: true, quoteNumber: true, status: true },
+        },
+      },
     }),
     prisma.customer.count({ where }),
   ]);
@@ -344,6 +359,243 @@ export async function restoreCustomer(id: string) {
   });
 
   return restored;
+}
+
+export async function permanentDeleteCustomer(id: string) {
+  const customer = await prisma.customer.findUnique({
+    where: { id },
+    include: {
+      _count: {
+        select: {
+          orders: true,
+          quotes: true,
+          returns: true,
+        },
+      },
+      orders: {
+        take: 10,
+        select: { id: true, orderNumber: true, status: true },
+      },
+      quotes: {
+        take: 10,
+        select: { id: true, quoteNumber: true, status: true },
+      },
+      returns: {
+        take: 10,
+        select: { id: true, status: true },
+      },
+    },
+  });
+
+  if (!customer) {
+    throw new AppError("Customer not found.", 404);
+  }
+
+  if (!customer.deletedAt) {
+    throw new AppError(
+      "Cannot permanently delete customer: Customer must be archived before it can be permanently deleted.",
+      400
+    );
+  }
+
+  const orderCount = customer._count.orders ?? 0;
+  if (orderCount > 0) {
+    throw new AppError(
+      `Cannot permanently delete customer: Customer has ${orderCount} associated order${orderCount === 1 ? "" : "s"}. Customer records with historical orders cannot be permanently deleted to preserve financial audit history.`,
+      400,
+      undefined,
+      {
+        orders: customer.orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber || o.id })),
+        quotes: customer.quotes.map((q) => ({ id: q.id, quoteNumber: q.quoteNumber || q.id })),
+      }
+    );
+  }
+
+  const quoteCount = customer._count.quotes ?? 0;
+  if (quoteCount > 0) {
+    throw new AppError(
+      `Cannot permanently delete customer: Customer has ${quoteCount} associated quotation request${quoteCount === 1 ? "" : "s"}. Delete or reassign quotation requests first.`,
+      400,
+      undefined,
+      {
+        quotes: customer.quotes.map((q) => ({ id: q.id, quoteNumber: q.quoteNumber || q.id })),
+      }
+    );
+  }
+
+  const returnCount = customer._count.returns ?? 0;
+  if (returnCount > 0) {
+    throw new AppError(
+      `Cannot permanently delete customer: Customer has ${returnCount} associated order return${returnCount === 1 ? "" : "s"}.`,
+      400,
+      undefined,
+      {
+        returns: customer.returns.map((r) => ({ id: r.id, returnNumber: r.id })),
+      }
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.deviceToken.deleteMany({ where: { customerId: id } });
+    await tx.wishlist.deleteMany({ where: { customerId: id } });
+    await tx.notification.deleteMany({ where: { customerId: id } });
+    await tx.customerAddress.deleteMany({ where: { customerId: id } });
+    await tx.customer.delete({ where: { id } });
+  });
+
+  return {
+    id,
+    name: `${customer.firstName} ${customer.lastName}`.trim() || customer.email,
+    success: true,
+  };
+}
+
+export async function bulkPermanentDeleteCustomers(input: { ids: string[] }) {
+  if (!Array.isArray(input.ids) || input.ids.length === 0) {
+    throw new AppError("Select at least one customer.", 400);
+  }
+
+  const ids = Array.from(new Set(input.ids.map((id) => id.trim()).filter(Boolean)));
+  const customers = await prisma.customer.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      deletedAt: true,
+      _count: {
+        select: {
+          orders: true,
+          quotes: true,
+          returns: true,
+        },
+      },
+      orders: {
+        take: 10,
+        select: { id: true, orderNumber: true, total: true, status: true },
+      },
+      quotes: {
+        take: 10,
+        select: { id: true, quoteNumber: true, status: true },
+      },
+      returns: {
+        take: 10,
+        select: { id: true, status: true },
+      },
+    },
+  });
+
+  if (customers.length !== ids.length) {
+    const found = new Set(customers.map((c) => c.id));
+    const missing = ids.filter((id) => !found.has(id));
+    throw new AppError(`Customer not found for: ${missing.join(", ")}`, 404);
+  }
+
+  const results: Array<{
+    id: string;
+    name: string;
+    email?: string;
+    orders?: Array<{ id: string; orderNumber: string }>;
+    quotes?: Array<{ id: string; quoteNumber: string }>;
+    returns?: Array<{ id: string; returnNumber: string }>;
+    success: boolean;
+    error?: string;
+  }> = [];
+
+  for (const cust of customers) {
+    const name = `${cust.firstName} ${cust.lastName}`.trim() || cust.email;
+    if (!cust.deletedAt) {
+      results.push({
+        id: cust.id,
+        name,
+        email: cust.email,
+        success: false,
+        error: "Customer must be archived before it can be permanently deleted.",
+      });
+      continue;
+    }
+
+    if ((cust._count.orders ?? 0) > 0) {
+      results.push({
+        id: cust.id,
+        name,
+        email: cust.email,
+        orders: cust.orders.map((o) => ({ id: o.id, orderNumber: o.orderNumber || o.id })),
+        quotes: cust.quotes.map((q) => ({ id: q.id, quoteNumber: q.quoteNumber || q.id })),
+        success: false,
+        error: `Customer is linked to ${cust._count.orders} order(s). Customer records with historical orders cannot be permanently deleted.`,
+      });
+      continue;
+    }
+
+    if ((cust._count.quotes ?? 0) > 0) {
+      results.push({
+        id: cust.id,
+        name,
+        email: cust.email,
+        quotes: cust.quotes.map((q) => ({ id: q.id, quoteNumber: q.quoteNumber || q.id })),
+        success: false,
+        error: `Customer is linked to ${cust._count.quotes} quotation request(s).`,
+      });
+      continue;
+    }
+
+    if ((cust._count.returns ?? 0) > 0) {
+      results.push({
+        id: cust.id,
+        name,
+        email: cust.email,
+        returns: cust.returns.map((r) => ({ id: r.id, returnNumber: r.id })),
+        success: false,
+        error: `Customer has ${cust._count.returns} order return(s).`,
+      });
+      continue;
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.deviceToken.deleteMany({ where: { customerId: cust.id } });
+        await tx.wishlist.deleteMany({ where: { customerId: cust.id } });
+        await tx.notification.deleteMany({ where: { customerId: cust.id } });
+        await tx.customerAddress.deleteMany({ where: { customerId: cust.id } });
+        await tx.customer.delete({ where: { id: cust.id } });
+      });
+      results.push({ id: cust.id, name, success: true });
+    } catch (err) {
+      results.push({
+        id: cust.id,
+        name,
+        email: cust.email,
+        success: false,
+        error: err instanceof Error ? err.message : "Failed to permanently delete customer.",
+      });
+    }
+  }
+
+  const succeeded = results.filter((r) => r.success);
+  const failed = results.filter((r) => !r.success);
+
+  return {
+    action: "PERMANENT_DELETE",
+    results,
+    summary: {
+      total: ids.length,
+      succeeded: succeeded.length,
+      failed: failed.length,
+    },
+    deletedCount: succeeded.length,
+    blockedCount: failed.length,
+    deletedIds: succeeded.map((r) => r.id),
+    blocked: failed.map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      reason: r.error || "Blocked",
+      orders: r.orders || [],
+      quotes: r.quotes || [],
+    })),
+  };
 }
 
 export async function updateCustomerAddress(customerId: string, addressId: string, data: any) {

@@ -24,7 +24,7 @@ import {
   AdminListToolbar,
   AdminSelect,
   AdminStatsGrid,
-  ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Pagination,
   StatusBadge,
@@ -863,22 +863,28 @@ export default function CouponsPage() {
       </Modal>
 
       {/* DELETE CONFIRMATION MODALS */}
-      <ConfirmModal
-        open={!!deleting}
-        title="Delete coupon?"
-        message={deleting ? `Are you sure you want to delete coupon ${deleting.code}? This will stop being available immediately.` : ""}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteCoupon.isPending}
+      <AdminDeleteModal
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        itemName={deleting?.code}
+        itemType="Coupon"
+        warningMessage="Choose the deletion method for this coupon. Once deleted, customers will no longer be able to apply this promotion."
+        softDeleteDescription={`Deactivates and removes coupon code "${deleting?.code}" from the active coupons list.`}
+        onSoftDelete={confirmDelete}
+        isSoftDeleting={deleteCoupon.isPending}
+        initialDeleteType="soft"
       />
 
-      <ConfirmModal
+      <AdminDeleteModal
         open={bulkDeleting}
-        title="Delete selected coupons?"
-        message={`Are you sure you want to permanently delete the ${selectedIds.length} selected coupon(s)? This action cannot be undone.`}
-        onConfirm={confirmBulkDelete}
-        onCancel={() => setBulkDeleting(false)}
-        isLoading={bulkSaving}
+        onClose={() => setBulkDeleting(false)}
+        itemName={`${selectedIds.length} selected coupons`}
+        itemType="Coupons (Bulk)"
+        warningMessage="Choose the deletion method for these coupons (bulk). Once deleted, customers will no longer be able to apply these promotions."
+        softDeleteDescription={`Deactivates and removes the ${selectedIds.length} selected coupon(s) from the active promotions list.`}
+        onSoftDelete={confirmBulkDelete}
+        isSoftDeleting={bulkSaving}
+        initialDeleteType="soft"
       />
 
       {ToastComponent}

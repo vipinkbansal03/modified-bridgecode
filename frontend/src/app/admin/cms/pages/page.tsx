@@ -35,7 +35,7 @@ import {
   AdminSelect,
   AdminTextarea,
   AdminStatsGrid,
-  ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   type Column,
   StatCard,
@@ -1136,16 +1136,17 @@ function CmsPagesManagementContent() {
         </form>
       </Modal>
 
-      {/* Delete Page Confirm Modal */}
-      <ConfirmModal
+      {/* Delete Page Modal */}
+      <AdminDeleteModal
         open={Boolean(deletingPageId)}
-        onCancel={() => setDeletingPageId(null)}
-        onConfirm={handleDeletePage}
-        title="Delete CMS Page"
-        message="Are you sure you want to delete this custom page? This action will remove the page and all its content from the live storefront. This action cannot be undone."
-        confirmText="Yes, Delete Page"
-        danger
-        isLoading={isDeleting}
+        onClose={() => setDeletingPageId(null)}
+        itemName={pages.find((p) => p.id === deletingPageId)?.title || "CMS Page"}
+        itemType="CMS Page"
+        warningMessage="Choose the deletion method for this custom page. This action will remove the page and all its content from the live storefront."
+        softDeleteDescription={`Removes "${pages.find((p) => p.id === deletingPageId)?.title || "this page"}" and its sections from active storefront routing.`}
+        onSoftDelete={handleDeletePage}
+        isSoftDeleting={isDeleting}
+        initialDeleteType="soft"
       />
     </AdminLayout>
   );

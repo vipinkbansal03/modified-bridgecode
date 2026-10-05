@@ -460,6 +460,13 @@ export const bulkPermanentDeleteVariants = asyncHandler(async (req: AuthRequest,
   return ApiResponse.success(res, "Bulk permanent delete processed.", result);
 });
 
+export const bulkUpdateVariantsGlobal = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const action = req.body?.action;
+  const result = await ProductService.bulkUpdateVariantsGlobal({ ids, action });
+  return ApiResponse.success(res, "Bulk variant action processed.", result);
+});
+
 export const cloneVariant = asyncHandler(async (req: AuthRequest, res: Response) => {
   const variant = await ProductService.cloneVariant(req.params.id as string, req.params.variantId as string);
   return ApiResponse.created(res, "Variant cloned.", variant);

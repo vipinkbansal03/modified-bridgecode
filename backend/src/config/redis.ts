@@ -25,6 +25,7 @@ if (process.env.NODE_ENV !== "production") {
 
 redis.on("connect", () => {
   logger.info(`Redis client connected to ${REDIS_HOST}:${REDIS_PORT}`);
+  redis.config("SET", "stop-writes-on-bgsave-error", "no").catch(() => {});
 });
 
 redis.on("error", (err: Error) => {

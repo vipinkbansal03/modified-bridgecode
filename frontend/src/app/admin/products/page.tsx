@@ -175,6 +175,7 @@ export default function AdminProductsPage() {
           warehouseId: warehouseFilterId || undefined,
           limit: 999999,
           ignoreMaxLimit: "true",
+          idsOnly: "true",
           sortBy,
           sortDir,
         },

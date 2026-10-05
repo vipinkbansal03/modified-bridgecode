@@ -9,7 +9,7 @@ import {
   AdminInput,
   AdminSelect,
   AdminStatsGrid,
-  ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Pagination,
   StatusBadge,
@@ -826,25 +826,27 @@ export default function ShippingBoxesPage() {
         </form>
       </Modal>
 
-      {deletingBox && (
-        <ConfirmModal
-          open={!!deletingBox}
-          title="Delete Box"
-          message={`Are you sure you want to delete "${deletingBox.name}"? This action cannot be undone.`}
-          onConfirm={async () => {
-            try {
-              await deleteMutation.mutateAsync(deletingBox.id);
-              showToast("Box deleted.");
-            } catch (error) {
-              showToast(getAdminErrorMessage(error, "Failed to delete box."), "error");
-            } finally {
-              setDeletingBox(null);
-            }
-          }}
-          onCancel={() => setDeletingBox(null)}
-          isLoading={deleteMutation.isPending}
-        />
-      )}
+      <AdminDeleteModal
+        open={Boolean(deletingBox)}
+        onClose={() => setDeletingBox(null)}
+        itemName={deletingBox?.name}
+        itemType="Shipping Box"
+        warningMessage="Choose the deletion method for this shipping box configuration."
+        softDeleteDescription={`Removes packaging box "${deletingBox?.name}" from shipping calculation algorithms.`}
+        onSoftDelete={async () => {
+          if (!deletingBox) return;
+          try {
+            await deleteMutation.mutateAsync(deletingBox.id);
+            showToast("Box deleted.");
+          } catch (error) {
+            showToast(getAdminErrorMessage(error, "Failed to delete box."), "error");
+          } finally {
+            setDeletingBox(null);
+          }
+        }}
+        isSoftDeleting={deleteMutation.isPending}
+        initialDeleteType="soft"
+      />
 
       {ToastComponent}
     </AdminLayout>

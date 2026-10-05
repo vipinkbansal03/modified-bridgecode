@@ -12,7 +12,6 @@ import { Modal } from "@/components/ui/Modal";
 import {
   AdminStatsGrid,
   AdminListToolbar,
-  ConfirmModal,
   AdminDeleteModal,
   LoadingButton,
   DataTable,
@@ -902,15 +901,16 @@ export default function AdminReviewsPage() {
       />
 
       {/* BULK ARCHIVE CONFIRM MODAL */}
-      <ConfirmModal
+      <AdminDeleteModal
         open={showBulkDeleteModal}
-        title={`Archive ${selectedIds.length} reviews?`}
-        message={`Are you sure you want to archive the selected ${selectedIds.length} review(s)? They will be moved to the Central Archive and hidden from storefront product pages.`}
-        confirmText="Archive Reviews"
-        onConfirm={confirmBulkDelete}
-        onCancel={() => setShowBulkDeleteModal(false)}
-        isLoading={bulkSaving}
-        danger
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selectedIds.length} selected reviews`}
+        itemType="Reviews (Bulk)"
+        warningMessage="Choose the deletion method for these reviews (bulk). Soft Delete will hide them from storefront pages while preserving them in the Central Archive."
+        softDeleteDescription={`Hides the selected ${selectedIds.length} review(s) from storefront product pages and archives them.`}
+        onSoftDelete={confirmBulkDelete}
+        isSoftDeleting={bulkSaving}
+        initialDeleteType="soft"
       />
 
       {ToastComponent}

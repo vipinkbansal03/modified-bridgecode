@@ -555,7 +555,7 @@ export async function createCustomerOrder(
           create: orderItems.map((item) => ({
             productId: item.product.id,
             variantId: item.variant?.id ?? null,
-            title: item.variant?.title ?? item.product.title,
+            title: item.product.title,
             sku: item.variant?.sku ?? item.product.sku,
             quantity: item.quantity,
             unitPrice: item.unitPriceBeforeTax,
@@ -939,8 +939,8 @@ export async function getCustomerOrderTracking(
 
     const items: CustomerTrackingItem[] = shipmentItems.map((item) => ({
       orderItemId: item.id,
-      title: item.title,
-      variantTitle: item.variant?.title ?? null,
+      title: item.product?.title || item.title,
+      variantTitle: item.variant?.title ?? (item.product?.title && item.title !== item.product.title ? item.title : null),
       sku: item.sku ?? item.variant?.sku ?? null,
       quantity: item.quantity,
     }));

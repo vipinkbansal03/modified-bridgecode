@@ -18,14 +18,13 @@ import {
   useToast,
   type Column,
   AdminBulkActionsBar,
-  ConfirmModal,
   AdminDeleteModal,
   AdminRowActions,
   AdminActionButton,
 } from "@/components/admin/AdminComponents";
 import { AdminSearchableSelect } from "@/components/admin/AdminSearchableSelect";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
-import { useAdminCountries, useAdminOrders, useAdminProducts, useOrderAnalytics, useUpdateOrderStatus, useUpdatePaymentStatus, useDeleteOrder, usePermanentDeleteOrder } from "@/hooks/admin/useAdminHooks";
+import { useAdminCountries, useAdminOrders, useAdminProducts, useOrderAnalytics, useUpdateOrderStatus, useUpdatePaymentStatus, useDeleteOrder, useBulkDeleteOrders, usePermanentDeleteOrder } from "@/hooks/admin/useAdminHooks";
 import { adminApi, getAdminErrorMessage } from "@/services/adminApi";
 
 type OrderRow = {
@@ -93,6 +92,7 @@ export default function OrdersPage() {
   const updateOrderStatus = useUpdateOrderStatus();
   const updatePaymentStatusMutation = useUpdatePaymentStatus();
   const deleteOrderMutation = useDeleteOrder();
+  const bulkDeleteOrdersMutation = useBulkDeleteOrders();
   const permanentDeleteOrderMutation = usePermanentDeleteOrder();
 
   const [deletingOrder, setDeletingOrder] = useState<OrderRow | null>(null);
@@ -103,6 +103,7 @@ export default function OrdersPage() {
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkPaymentStatus, setBulkPaymentStatus] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const handleSelectAll = async (checked: boolean) => {
     if (!checked) {
@@ -137,6 +138,11 @@ export default function OrdersPage() {
   const handleBulkAction = async () => {
     if (selectedIds.length === 0 || !bulkAction) return;
 
+    if (bulkAction === "delete") {
+      setShowBulkDeleteModal(true);
+      return;
+    }
+
     setBulkSaving(true);
     try {
       if (bulkAction === "updateStatus") {
@@ -163,6 +169,23 @@ export default function OrdersPage() {
       refetch();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkSaving(true);
+    try {
+      await bulkDeleteOrdersMutation.mutateAsync(selectedIds);
+      showToast(`Successfully soft-deleted ${selectedIds.length} order(s) and moved to Archive.`, "success");
+      setSelectedIds([]);
+      setBulkAction("");
+      setShowBulkDeleteModal(false);
+      refetch();
+    } catch (error) {
+      showToast(getAdminErrorMessage(error, "Failed to delete selected orders."), "error");
     } finally {
       setBulkSaving(false);
     }
@@ -551,6 +574,7 @@ export default function OrdersPage() {
                 actions={[
                   { value: "updateStatus", label: "Update Order Status" },
                   { value: "updatePayment", label: "Update Payment Status" },
+                  ...(canDelete ? [{ value: "delete", label: "Delete / Archive Selected" }] : []),
                 ]}
                 onApply={handleBulkAction}
                 applyLoading={bulkSaving}
@@ -601,6 +625,18 @@ export default function OrdersPage() {
           )}
         </div>
       </div>
+
+      <AdminDeleteModal
+        open={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selectedIds.length} selected orders`}
+        itemType="Orders (Bulk)"
+        warningMessage="Choose the deletion method for these orders (bulk). Soft Delete is recommended for maintaining customer order history, invoices, and financial records."
+        softDeleteDescription={`Hides the ${selectedIds.length} selected order(s) from the active orders list while safely retaining customer history, invoices, and accounting records in the Archive.`}
+        onSoftDelete={handleConfirmBulkDelete}
+        isSoftDeleting={bulkSaving}
+        initialDeleteType="soft"
+      />
 
       <AdminDeleteModal
         open={Boolean(deletingOrder)}

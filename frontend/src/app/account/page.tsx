@@ -675,12 +675,12 @@ function AccountPageContent() {
                                       href={item.product?.slug ? `/products/${item.product.slug}` : "#"}
                                       className="font-bold text-[13.5px] text-[#111827] hover:text-[#E31E24] transition-colors line-clamp-1"
                                     >
-                                      {item.title}
+                                      {item.product?.title || item.title}
                                     </Link>
                                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[#6B7280]">
-                                      {item.variant?.title && (
+                                      {(item.variant?.title || (item.product?.title && item.title !== item.product.title ? item.title : null)) && (
                                         <span className="rounded bg-gray-100 px-2 py-0.5 font-medium text-gray-700">
-                                          {item.variant.title}
+                                          {item.variant?.title || item.title}
                                         </span>
                                       )}
                                       {item.sku && <span>SKU: {item.sku}</span>}

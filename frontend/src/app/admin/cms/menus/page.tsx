@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Edit2, Trash2, Search, ArrowUp, ArrowDown, Globe, Link2, FolderTree, ExternalLink, X, Settings, GripVertical, Check, ArrowRight, ArrowLeft } from "lucide-react";
-import { AdminInput, AdminSelect, AdminTextarea, ConfirmModal, Modal, useToast } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminTextarea, AdminDeleteModal, Modal, useToast } from "@/components/admin/AdminComponents";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminCategories, useAdminCmsMenus, useAdminCmsPages, useAdminLanguages, useAdminCollections, useAdminBlogs, useAdminProducts } from "@/hooks/admin/useAdminHooks";
 import { CMS_MENU_LOCATIONS } from "@/lib/cmsNavigation";
@@ -1464,10 +1464,28 @@ export default function CmsMenusPage() {
       </Modal>
 
       {/* Delete Item Confirmation Modal */}
-      <ConfirmModal open={!!deleteItemId} title="Remove item" message="Are you sure you want to remove this menu item?" onConfirm={removeItem} onCancel={() => setDeleteItemId(null)} danger />
+      <AdminDeleteModal
+        open={Boolean(deleteItemId)}
+        onClose={() => setDeleteItemId(null)}
+        itemName="Menu Item"
+        itemType="Menu Item"
+        warningMessage="Choose the deletion method for this menu item. This will remove it from the navigation structure."
+        softDeleteDescription="Removes this item from the active navigation menu hierarchy."
+        onSoftDelete={removeItem}
+        initialDeleteType="soft"
+      />
       
       {/* Delete Menu Location Confirmation Modal */}
-      <ConfirmModal open={!!deleteMenuTarget} title="Delete Menu" message={`Are you sure you want to delete the menu "${deleteMenuTarget?.name}"? This action cannot be undone.`} onConfirm={removeMenu} onCancel={() => setDeleteMenuTarget(null)} danger />
+      <AdminDeleteModal
+        open={Boolean(deleteMenuTarget)}
+        onClose={() => setDeleteMenuTarget(null)}
+        itemName={deleteMenuTarget?.name}
+        itemType="CMS Menu"
+        warningMessage="Choose the deletion method for this navigation menu."
+        softDeleteDescription={`Removes menu "${deleteMenuTarget?.name}" and all its assigned navigation links.`}
+        onSoftDelete={removeMenu}
+        initialDeleteType="soft"
+      />
     </AdminLayout>
   );
 }

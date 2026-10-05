@@ -17,6 +17,7 @@ router.get("/sample-template", requirePermission("products.view", "products.crea
 router.post("/import/preview", requirePermission("products.create"), upload.single("file"), C.previewImport);
 router.get("/variants", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.listVariants);
 router.get("/variants/stats/counts", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.getVariantCounts);
+router.post("/variants/bulk", requirePermission("products.update", "products.delete", "products.manage"), C.bulkUpdateVariantsGlobal);
 router.post("/variants/bulk/permanent", requirePermission("products.delete", "products.manage"), C.bulkPermanentDeleteVariants);
 router.get("/attribute-mappings/sample-template", requirePermission("products.view", "products.create", "products.update", "products.delete"), C.downloadCatalogAttributeMappingsSampleTemplate);
 router.post("/attribute-mappings/preview", requirePermission("products.update", "products.create"), upload.single("file"), C.previewCatalogAttributeMappingsImport);

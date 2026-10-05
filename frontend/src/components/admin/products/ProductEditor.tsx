@@ -3765,6 +3765,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       setSelectedVariantIds([]);
       setDeletingBulkVariantsModal(false);
       await refetch();
+      await refetchVariants();
+      await refetchAllVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Bulk delete failed."), "error");
     } finally {
@@ -5042,7 +5046,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     try {
       await adminApi.post(`/products/${productId}/variants/${variantId}/clone`);
       showToast("Variant cloned.");
-      refetch();
+      await refetch();
+      await refetchVariants();
+      await refetchAllVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch {
       showToast("Failed to clone variant.", "error");
     }
@@ -5052,7 +5060,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
     try {
       await adminApi.delete(`/products/${productId}/variants/${variantId}`);
       showToast("Variant deleted.");
-      refetch();
+      await refetch();
+      await refetchVariants();
+      await refetchAllVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch {
       showToast("Failed to delete variant.", "error");
     } finally {
@@ -5115,7 +5127,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         showToast(result.data.message || "Variants created.");
       }
       setManualVariantOpen(false);
-      refetch();
+      await refetch();
+      await refetchVariants();
+      await refetchAllVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to create variant."), "error");
     }
@@ -5210,7 +5226,11 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
       showToast("Variant updated.");
       closeEditVariantModal();
-      refetch();
+      await refetch();
+      await refetchVariants();
+      await refetchAllVariants();
+      queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
     } catch (error) {
       showToast("Failed to update variant.", "error");
     } finally {
@@ -6845,6 +6865,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                         setBulkActionValue("");
                         setBulkActionType("Bulk Action");
                         await refetch();
+                        await refetchVariants();
+                        await refetchAllVariants();
+                        queryClient.invalidateQueries({ queryKey: ["admin-product", productId] });
+                        queryClient.invalidateQueries({ queryKey: ["admin-product-variants", productId] });
                       } catch (error) {
                         showToast(getAdminErrorMessage(error, "Bulk update failed."), "error");
                       } finally {

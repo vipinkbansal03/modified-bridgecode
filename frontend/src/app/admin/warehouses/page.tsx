@@ -833,15 +833,16 @@ export default function WarehousesPage() {
       />
 
       {/* BULK ARCHIVE CONFIRM MODAL */}
-      <ConfirmModal
+      <AdminDeleteModal
         open={showBulkDeleteConfirm}
-        title="Archive Selected Warehouses"
-        message={`Are you sure you want to archive ${selectedIds.length} selected warehouse(s)? They will be deactivated and moved to the central Archive while safely preserving all historical orders, invoices, and stock logs.`}
-        danger={true}
-        confirmText="Archive Warehouses"
-        isLoading={bulkLoading}
-        onConfirm={executeBulkDelete}
-        onCancel={() => setShowBulkDeleteConfirm(false)}
+        onClose={() => setShowBulkDeleteConfirm(false)}
+        itemName={`${selectedIds.length} selected warehouses`}
+        itemType="Warehouses (Bulk)"
+        warningMessage="Choose the deletion method for these warehouses (bulk). Soft Delete is recommended to maintain commercial order history and inventory records."
+        softDeleteDescription={`Deactivates the ${selectedIds.length} selected warehouse(s) and moves them to the central Archive while safely preserving all historical orders, invoices, and stock logs.`}
+        onSoftDelete={executeBulkDelete}
+        isSoftDeleting={bulkLoading}
+        initialDeleteType="soft"
       />
 
       {/* SINGLE WAREHOUSE DELETE / ARCHIVE MODAL */}

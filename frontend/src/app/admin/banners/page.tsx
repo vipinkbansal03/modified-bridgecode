@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { ArrowLeft, Edit2, GripVertical, Plus, Save, Trash2, Upload, X, Image as ImageIcon, Globe, Calendar, ExternalLink, Sparkles, CheckCircle2, Info, Play, Video } from "lucide-react";
-import { AdminInput, AdminSelect, ConfirmModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
+import { AdminInput, AdminSelect, AdminDeleteModal, StatusBadge, useToast, LoadingButton, DataTable, TableStatusAction, AdminBulkActionsBar } from "@/components/admin/AdminComponents";
 import { AdminMultiSearchableSelect } from "@/components/admin/AdminMultiSearchableSelect";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { Modal } from "@/components/ui/Modal";
@@ -1169,13 +1169,14 @@ export default function BannersPage() {
       </Modal>
 
       {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        open={!!deleting}
-        title="Delete banner?"
-        message="This will permanently delete this banner record."
-        onCancel={() => setDeleting(null)}
-        isLoading={deleteBanner.isPending}
-        onConfirm={async () => {
+      <AdminDeleteModal
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        itemName={allBanners.find((b) => b.id === deleting)?.title || "Banner"}
+        itemType="Banner"
+        warningMessage="Choose the deletion method for this banner. This will remove it from the active storefront placement."
+        softDeleteDescription={`Removes "${allBanners.find((b) => b.id === deleting)?.title || "this banner"}" from storefront banners and displays.`}
+        onSoftDelete={async () => {
           if (!deleting) return;
           try {
             await deleteBanner.mutateAsync(deleting);
@@ -1186,16 +1187,21 @@ export default function BannersPage() {
             setDeleting(null);
           }
         }}
+        isSoftDeleting={deleteBanner.isPending}
+        initialDeleteType="soft"
       />
 
       {/* Bulk Delete Confirmation Modal */}
-      <ConfirmModal
+      <AdminDeleteModal
         open={showBulkDeleteModal}
-        title={`Delete ${selected.length} ${selected.length === 1 ? "banner" : "banners"}?`}
-        message="This will permanently delete the selected banner records. This action cannot be undone."
-        onCancel={() => setShowBulkDeleteModal(false)}
-        isLoading={bulkBanners.isPending}
-        onConfirm={handleConfirmBulkDelete}
+        onClose={() => setShowBulkDeleteModal(false)}
+        itemName={`${selected.length} selected banners`}
+        itemType="Banners (Bulk)"
+        warningMessage="Choose the deletion method for these banners (bulk). This will remove them from storefront placements."
+        softDeleteDescription={`Removes the ${selected.length} selected banner record(s) from active storefront placements.`}
+        onSoftDelete={handleConfirmBulkDelete}
+        isSoftDeleting={bulkBanners.isPending}
+        initialDeleteType="soft"
       />
 
       <MediaSelectorModal

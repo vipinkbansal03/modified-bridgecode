@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Copy, FileText, Image as ImageIcon, Layers, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, ExternalLink, FileText, Image as ImageIcon, Layers, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { formatDate } from "@/utils/formatDate";
@@ -15,7 +15,6 @@ import {
   AdminSelect,
   AdminRowActions,
   AdminDeleteModal,
-  ConfirmModal,
   DataTable,
   Pagination,
   StatusBadge,
@@ -32,6 +31,7 @@ import {
   useRestoreVariant,
   usePermanentDeleteVariant,
   useBulkPermanentDeleteVariants,
+  useBulkVariants,
   useDuplicateVariant,
   useUpdateVariant,
 } from "@/hooks/admin/useAdminHooks";
@@ -152,6 +152,7 @@ function VariantsList() {
           sortDir,
           limit: 999999,
           ignoreMaxLimit: "true",
+          idsOnly: "true",
         },
       });
       const allIds = (res.data.data ?? []).map((v: any) => v.id);
@@ -177,49 +178,19 @@ function VariantsList() {
     setBulkSaving(true);
     try {
       if (bulkAction === "restore") {
-        await Promise.all(
-          selectedIds.map((id) => {
-            const variant = variants.find((v) => v.id === id);
-            return restoreVariant.mutateAsync({
-              productId: variant?.product.id ?? "",
-              variantId: id,
-            });
-          })
-        );
+        await bulkVariants.mutateAsync({ ids: selectedIds, action: "restore" });
         showToast(`Successfully restored ${selectedIds.length} variant(s).`, "success");
-        await refetch();
-        void refetchVariantCounts();
       } else if (bulkAction === "activate") {
-        await Promise.all(
-          selectedIds.map((id) => {
-            const variant = variants.find((v) => v.id === id);
-            return updateVariant.mutateAsync({
-              productId: variant?.product.id ?? "",
-              variantId: id,
-              data: { status: "ACTIVE" },
-            });
-          })
-        );
+        await bulkVariants.mutateAsync({ ids: selectedIds, action: "activate" });
         showToast(`Successfully activated ${selectedIds.length} variant(s).`, "success");
-        await refetch();
-        void refetchVariantCounts();
       } else if (bulkAction === "deactivate") {
-        await Promise.all(
-          selectedIds.map((id) => {
-            const variant = variants.find((v) => v.id === id);
-            return updateVariant.mutateAsync({
-              productId: variant?.product.id ?? "",
-              variantId: id,
-              data: { status: "INACTIVE" },
-            });
-          })
-        );
+        await bulkVariants.mutateAsync({ ids: selectedIds, action: "deactivate" });
         showToast(`Successfully deactivated ${selectedIds.length} variant(s).`, "success");
-        await refetch();
-        void refetchVariantCounts();
       }
       setSelectedIds([]);
       setBulkAction("");
+      await refetch();
+      void refetchVariantCounts();
     } catch (error) {
       showToast(getAdminErrorMessage(error, "Failed to complete bulk action."), "error");
     } finally {
@@ -269,6 +240,7 @@ function VariantsList() {
   const restoreVariant = useRestoreVariant();
   const permanentDeleteVariant = usePermanentDeleteVariant();
   const bulkPermanentDeleteVariants = useBulkPermanentDeleteVariants();
+  const bulkVariants = useBulkVariants();
 
   const variants: VariantRow[] = data?.data ?? [];
 
@@ -360,10 +332,11 @@ function VariantsList() {
         const deletedCount = typeof payload?.deletedCount === "number" ? payload.deletedCount : deletedIds.length;
         const blockedCount = typeof payload?.blockedCount === "number" ? payload.blockedCount : (blocked.length || Math.max(0, totalSelected - deletedCount));
 
-        if (blockedCount > 0 && deletedIds.length > 0) {
-          setSelectedIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
-        } else if (deletedCount > 0 && blockedCount === 0) {
+        if (blockedCount === 0 || deletedCount >= totalSelected) {
           setSelectedIds([]);
+        } else if (deletedIds.length > 0) {
+          const deletedSet = new Set(deletedIds);
+          setSelectedIds((prev) => prev.filter((id) => !deletedSet.has(id)));
         }
 
         setBulkPermanentResult({
@@ -1029,27 +1002,81 @@ function VariantsList() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[12.5px] font-semibold text-[#1A1A1A]">
-                    Protected Records ({bulkPermanentResult.blocked.length}):
+                    Protected Records ({bulkPermanentResult.blockedCount ?? bulkPermanentResult.blocked.length}):
                   </span>
                   <span className="text-[11px] text-[#888]">
                     Untouched in database
                   </span>
                 </div>
-                <div className="max-h-60 overflow-y-auto space-y-2 border border-[#E6E6E6] rounded-lg p-2.5 bg-[#FAFAFA]">
-                  {bulkPermanentResult.blocked.map((item: any, index: number) => (
-                    <div key={item.id || index} className="text-[12px] bg-white p-3 rounded-lg border border-[#E6E6E6] shadow-2xs">
+                <div className="max-h-72 overflow-y-auto space-y-2.5 border border-[#E6E6E6] rounded-lg p-2.5 bg-[#FAFAFA]">
+                  {bulkPermanentResult.blocked.slice(0, 50).map((item: any, index: number) => (
+                    <div key={item.id || index} className="text-[12px] bg-white p-3.5 rounded-lg border border-[#E6E6E6] shadow-2xs space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-[#1A1A1A]">{item.name || item.id}</span>
                         <span className="inline-flex shrink-0 items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-800 border border-amber-200">
                           Protected
                         </span>
                       </div>
-                      <div className="text-amber-900 mt-1 flex items-start gap-1">
+
+                      {item.productTitle && item.productId && (
+                        <div className="text-[11.5px] text-[#666] flex items-center gap-1.5">
+                          <span>Product:</span>
+                          <Link
+                            href={`/admin/products/${item.productId}/edit`}
+                            target="_blank"
+                            className="font-medium text-[#E31E24] hover:underline inline-flex items-center gap-0.5"
+                          >
+                            <span>{item.productTitle}</span>
+                            <ExternalLink size={10} className="shrink-0 opacity-70" />
+                          </Link>
+                        </div>
+                      )}
+
+                      <div className="text-amber-900 mt-0.5 flex items-start gap-1">
                         <span className="font-medium shrink-0">Reason:</span>
                         <span>{item.reason}</span>
                       </div>
+
+                      {item.orders && item.orders.length > 0 && (
+                        <div className="pt-1.5 border-t border-amber-100 flex items-center flex-wrap gap-1.5">
+                          <span className="text-[11px] font-semibold text-[#666]">Linked Orders:</span>
+                          {item.orders.map((ord: any) => (
+                            <Link
+                              key={ord.id}
+                              href={`/admin/orders/${ord.id}`}
+                              target="_blank"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-medium hover:bg-blue-100 hover:text-blue-900 transition-colors"
+                            >
+                              <span>{ord.orderNumber || ord.id}</span>
+                              <ExternalLink size={10} className="shrink-0 opacity-70" />
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+
+                      {item.quotes && item.quotes.length > 0 && (
+                        <div className="pt-1.5 border-t border-amber-100 flex items-center flex-wrap gap-1.5">
+                          <span className="text-[11px] font-semibold text-[#666]">Linked Quotes:</span>
+                          {item.quotes.map((q: any) => (
+                            <Link
+                              key={q.id}
+                              href={`/admin/quotes/${q.id}`}
+                              target="_blank"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-medium hover:bg-purple-100 hover:text-purple-900 transition-colors"
+                            >
+                              <span>{q.quoteNumber || q.id}</span>
+                              <ExternalLink size={10} className="shrink-0 opacity-70" />
+                            </Link>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
+                  {(bulkPermanentResult.blockedCount > 50 || bulkPermanentResult.blocked.length > 50) && (
+                    <div className="text-center py-2 text-[11.5px] text-[#888] italic">
+                      Showing first 50 of {bulkPermanentResult.blockedCount ?? bulkPermanentResult.blocked.length} protected records.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1066,15 +1093,7 @@ function VariantsList() {
         onSoftDelete={async () => {
           setBulkSaving(true);
           try {
-            await Promise.all(
-              selectedIds.map((id) => {
-                const variant = variants.find((v) => v.id === id);
-                return deleteVariant.mutateAsync({
-                  productId: variant?.product.id ?? "",
-                  variantId: id,
-                });
-              })
-            );
+            await bulkVariants.mutateAsync({ ids: selectedIds, action: "delete" });
             showToast(`Successfully soft-deleted ${selectedIds.length} variant(s).`, "success");
             setSelectedIds([]);
             setBulkAction("");
@@ -1087,7 +1106,7 @@ function VariantsList() {
             setBulkSaving(false);
           }
         }}
-        isSoftDeleting={bulkSaving && deleteVariant.isPending}
+        isSoftDeleting={bulkSaving && bulkVariants.isPending}
         softDeleteDescription={`Hides the ${selectedIds.length} selected variants from the active catalog while safely retaining order and quote history.`}
       />
 

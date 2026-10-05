@@ -12,7 +12,7 @@ import {
   AdminSelect,
   AdminMultiSelect,
   AdminRowActions,
-  ConfirmModal,
+  AdminDeleteModal,
   DataTable,
   Pagination,
   StatCard,
@@ -1339,13 +1339,16 @@ export default function AdminTaxPage() {
         </form>
       </Modal>
 
-      <ConfirmModal
-        open={!!deleteTarget}
-        title="Delete tax rule?"
-        message={deleteTarget ? `Delete ${deleteTarget.name}?` : ""}
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
-        isLoading={deleteRule.isPending}
+      <AdminDeleteModal
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        itemName={deleteTarget?.name}
+        itemType="Tax Rule"
+        warningMessage="Choose the deletion method for this tax rule."
+        softDeleteDescription={`Deactivates and removes tax rule "${deleteTarget?.name}" from checkout tax calculations.`}
+        onSoftDelete={handleDelete}
+        isSoftDeleting={deleteRule.isPending}
+        initialDeleteType="soft"
       />
 
       {ToastComponent}

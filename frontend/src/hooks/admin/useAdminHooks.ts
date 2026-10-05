@@ -469,6 +469,18 @@ export const useBulkPermanentDeleteVariants = () => {
   });
 };
 
+export const useBulkVariants = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: string[]; action: "delete" | "restore" | "activate" | "deactivate" }) =>
+      adminApi.post("/products/variants/bulk", data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-variants"] });
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+    },
+  });
+};
+
 export const useBulkPermanentDeleteQuotes = () => {
   const qc = useQueryClient();
   return useMutation({
@@ -2334,6 +2346,35 @@ export const useRestoreCustomer = () => {
   });
 };
 
+export const usePermanentDeleteCustomer = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      adminApi.delete(`/customers/${id}/permanent`).then((r) => r.data),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+      qc.invalidateQueries({ queryKey: ["admin-customers-infinite"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-customers"] });
+      qc.invalidateQueries({ queryKey: ["admin-customer", id] });
+    },
+  });
+};
+
+export const useBulkPermanentDeleteCustomers = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      adminApi
+        .post("/customers/bulk/permanent", { ids })
+        .then((r) => (r.data?.data ?? r.data) as BulkPermanentDeleteResult),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+      qc.invalidateQueries({ queryKey: ["admin-customers-infinite"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-customers"] });
+    },
+  });
+};
+
 // ─── Coupons ─────────────────────────────────────────────
 
 export const useAdminCoupons = (params?: {
@@ -3057,6 +3098,19 @@ export const useDeleteOrder = () => {
       qc.invalidateQueries({ queryKey: ["admin-orders"] });
       qc.invalidateQueries({ queryKey: ["admin-archived-orders"] });
       qc.invalidateQueries({ queryKey: ["admin-order", id] });
+      qc.invalidateQueries({ queryKey: ["admin-order-counts"] });
+    },
+  });
+};
+
+export const useBulkDeleteOrders = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => adminApi.post("/orders/bulk/delete", { ids }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-archived-orders"] });
+      qc.invalidateQueries({ queryKey: ["admin-order-counts"] });
     },
   });
 };
