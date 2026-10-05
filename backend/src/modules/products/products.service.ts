@@ -3275,6 +3275,7 @@ export async function generateVariants(
     packageIds?: string[];
     attributes?: { attributeId: string; attributeValueIds: string[] }[];
     allowUnmappedAttributeOverride?: boolean;
+    deactivateOutdated?: boolean;
   }
 ) {
   const product = await getProduct(productId);
@@ -3647,6 +3648,20 @@ export async function generateVariants(
 
   if (newOrRestoredActiveIds.length > 0) {
     await syncVariantsStorefrontVisibility(newOrRestoredActiveIds, productId);
+  }
+
+  if (data?.deactivateOutdated) {
+    const generatedKeys = new Set(targets.map((t) => t.variantKey));
+    const outdatedIds = existingVariants
+      .filter((v) => !generatedKeys.has(v.variantKey) && v.status === "ACTIVE")
+      .map((v) => v.id);
+
+    if (outdatedIds.length > 0) {
+      await prisma.productVariant.updateMany({
+        where: { id: { in: outdatedIds } },
+        data: { status: "INACTIVE" },
+      });
+    }
   }
 
   const newCount = createdVariantsList.length;

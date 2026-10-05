@@ -40,6 +40,7 @@ router.get("/currencies", C.getCurrencies);
 router.get("/countries", C.getCountries);
 router.get("/inventory", C.checkInventory);
 router.post("/inventory", C.checkInventory);
+router.get("/catalog-updates", C.getCatalogUpdates);
 
 // ─── Write endpoints (form submissions) ──────────────────
 router.post("/quotes", formLimiter, C.submitQuote);

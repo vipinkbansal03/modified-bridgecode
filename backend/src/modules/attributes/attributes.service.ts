@@ -328,10 +328,12 @@ export async function updateAttribute(
   if (data.role && data.role !== current.role) {
     await validateRoleChange(id, data.role);
   }
+  const isNameChanged = Boolean(data.name && data.name.trim() !== current.name);
   return prisma.attribute.update({
     where: { id },
     data: {
       ...(data.name ? { name: data.name.trim(), slug: slugify(data.name) } : {}),
+      ...(isNameChanged ? ({ previousName: current.name, renamedAt: new Date() } as any) : {}),
       ...(data.role ? { role: data.role } : {}),
       ...(data.status ? { status: data.status as "ACTIVE" | "INACTIVE" } : {}),
       ...(data.sortOrder != null ? { sortOrder: data.sortOrder } : {}),
@@ -579,10 +581,12 @@ export async function updateAttributeValue(id: string, data: ValueInput) {
 
   validateValueForRole(getValidationRole(current.attribute.role, merged), merged);
 
+  const isValueChanged = Boolean(data.value !== undefined && merged.value!.trim() !== current.value);
   return prisma.attributeValue.update({
     where: { id },
     data: {
       ...(data.value !== undefined ? { value: merged.value!.trim() } : {}),
+      ...(isValueChanged ? ({ previousValue: current.value, renamedAt: new Date() } as any) : {}),
       ...(merged.slug ? { slug: merged.slug } : {}),
       ...(data.image !== undefined ? { image: data.image } : {}),
       ...(data.note !== undefined ? { note: data.note } : {}),

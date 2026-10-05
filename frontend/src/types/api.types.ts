@@ -31,6 +31,8 @@ export interface ApiAttributeValue {
   id: string;
   attributeId?: string;
   value: string;
+  previousValue?: string | null;
+  renamedAt?: string | null;
   slug: string;
   sortOrder: number;
   image?: string | null;
@@ -54,6 +56,8 @@ export interface ApiAttributeValue {
 export interface ApiAttribute {
   id: string;
   name: string;
+  previousName?: string | null;
+  renamedAt?: string | null;
   slug?: string;
   role: "DROPDOWN" | "X_GRID" | "Y_GRID";
   displayType?: "DROPDOWN" | "X_GRID" | "Y_GRID";

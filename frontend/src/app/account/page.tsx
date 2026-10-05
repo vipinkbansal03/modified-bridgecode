@@ -18,6 +18,7 @@ import {
   RotateCcw,
   X,
   Bell,
+  Info,
   FileText,
   ShieldCheck,
   ExternalLink,
@@ -51,6 +52,7 @@ import { useCart } from "@/contexts/CartContext";
 import EditProfileModal from "./EditProfileModal";
 import AddressModal from "./AddressModal";
 import { useToast } from "@/components/ui/ToastProvider";
+import { apiClient } from "@/lib/apiClient";
 
 function formatPhone(phone?: string | null) {
   if (!phone) return "Not added";
@@ -156,9 +158,23 @@ function AccountPageContent() {
   const [error, setError] = useState<string | null>(null);
   const { clearCart, addItems } = useCart();
   const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const [catalogUpdates, setCatalogUpdates] = useState<string[]>([]);
+  const [isExpandedUpdates, setIsExpandedUpdates] = useState(false);
+  const [isDismissedUpdates, setIsDismissedUpdates] = useState(false);
 
   // Tab management (defaults to 'all' or read from query param)
   const [activeTab, setActiveTab] = useState<TabType>("all");
+
+  useEffect(() => {
+    apiClient
+      .get<{ data: string[] }>("/catalog-updates")
+      .then((res) => {
+        if (Array.isArray(res.data?.data)) {
+          setCatalogUpdates(res.data.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const tab = searchParams?.get("tab") as TabType;
@@ -170,30 +186,49 @@ function AccountPageContent() {
   const handleReorder = async (order: CustomerOrderSummary) => {
     setReorderingId(order.id);
     try {
-      const cartItems = order.items
-        .filter((item) => item.product?.id)
-        .map((item) => ({
-          variantId: item.variant?.id ?? item.product!.id,
-          productId: item.product!.id,
-          productSlug: item.product!.slug,
-          productTitle: item.product!.title,
-          variantTitle: item.variant?.title ?? "",
-          sku: item.sku,
-          quantity: item.quantity,
-          unitPrice: Number(item.unitPrice),
-          currencyCode: order.currency?.code ?? "INR",
-          currencySymbol: order.currency?.symbol ?? "Rs ",
-          selectedAttributes: {},
-        }));
-
-      if (cartItems.length === 0) {
-        showToast("The items in this order are no longer available for purchase.", "warning");
+      const validItems = order.items.filter((item) => item.product?.id);
+      if (validItems.length === 0) {
+        showToast("The products in this order are no longer available.", "warning");
         return;
       }
 
+      // Check if any variant is inactive or deleted
+      const hasInactiveVariant = validItems.some(
+        (item) => item.variant && (item.variant.status === "INACTIVE" || (item.variant as any).deletedAt)
+      );
+
+      if (hasInactiveVariant) {
+        const firstUpdatedProduct = validItems.find(
+          (item) => item.variant && (item.variant.status === "INACTIVE" || (item.variant as any).deletedAt)
+        )?.product;
+
+        showToast(
+          "Packaging and product options for this item have been updated. Redirecting you to the product page to choose available options.",
+          "info"
+        );
+        if (firstUpdatedProduct?.slug) {
+          router.push(`/products/${firstUpdatedProduct.slug}`);
+          return;
+        }
+      }
+
+      const cartItems = validItems.map((item) => ({
+        variantId: item.variant?.id ?? item.product!.id,
+        productId: item.product!.id,
+        productSlug: item.product!.slug,
+        productTitle: item.product!.title,
+        variantTitle: item.variant?.title ?? "",
+        sku: item.sku,
+        quantity: item.quantity,
+        unitPrice: Number(item.unitPrice),
+        currencyCode: order.currency?.code ?? "INR",
+        currencySymbol: order.currency?.symbol ?? "Rs ",
+        selectedAttributes: {},
+      }));
+
       clearCart();
       addItems(cartItems);
-      showToast("Order items added to cart!", "success");
+      showToast("Order items added to cart with latest specifications!", "success");
       router.push("/cart");
     } catch (err) {
       console.error("Reorder failed", err);
@@ -575,6 +610,69 @@ function AccountPageContent() {
                 {orders.length} {orders.length === 1 ? "order" : "orders"} placed
               </span>
             </div>
+
+            {/* Dynamic Attribute & Reorder Transparency Notice */}
+            {catalogUpdates.length > 0 && !isDismissedUpdates && (
+              <div className="mb-6 rounded-xl border border-[#E31E24]/30 bg-[#FFF5F5] p-3 sm:px-4 sm:py-3 text-[13px] text-[#111827] shadow-2xs transition-all">
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                    <Info size={16} className="shrink-0 text-[#E31E24] mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="leading-snug text-[#111827]">
+                        <span className="font-bold text-[#E31E24]">Catalog Updates:</span>{" "}
+                        When you reorder, older attributes are automatically mapped to current specifications:{" "}
+                        {catalogUpdates.length <= 2 ? (
+                          <span className="font-medium text-[#111827]">{catalogUpdates.join("; ")}</span>
+                        ) : (
+                          <span>
+                            <span className="font-medium text-[#111827]">{catalogUpdates.slice(0, 2).join("; ")}</span>
+                            <button
+                              type="button"
+                              onClick={() => setIsExpandedUpdates(!isExpandedUpdates)}
+                              className="ml-1.5 inline-flex items-center gap-0.5 font-bold text-[#E31E24] underline hover:text-[#C8171D] cursor-pointer"
+                            >
+                              {isExpandedUpdates
+                                ? "Show less"
+                                : `+${catalogUpdates.length - 2} more updates`}
+                              <ChevronDown
+                                size={13}
+                                className={`transition-transform duration-200 ${isExpandedUpdates ? "rotate-180" : ""}`}
+                              />
+                            </button>
+                          </span>
+                        )}
+                        {" — "}
+                        <span className="text-[#4B5563]">all with 100% identical dimensions and quality.</span>
+                      </p>
+
+                      {/* Expandable list when multiple attributes/values are updated */}
+                      {isExpandedUpdates && catalogUpdates.length > 2 && (
+                        <div className="mt-3 pt-3 border-t border-[#E31E24]/20 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fadeIn">
+                          {catalogUpdates.map((infoText, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center gap-2 rounded-lg bg-white/80 border border-[#E31E24]/15 px-2.5 py-1.5 text-[12px] font-medium text-[#111827]"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#E31E24] shrink-0" />
+                              <span className="truncate">{infoText}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsDismissedUpdates(true)}
+                    className="shrink-0 rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-red-100/50 transition-colors cursor-pointer"
+                    title="Dismiss notice"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {isFetching ? (
               <div className="space-y-4">

@@ -129,3 +129,8 @@ export const getProductWarehouses = asyncHandler(async (req: Request, res: Respo
   const data = await S.getProductWarehouses(String(req.params.slug), variantId, countryCode, state);
   return AR.success(res, "Eligible warehouses.", data);
 });
+
+export const getCatalogUpdates = asyncHandler(async (req: Request, res: Response) => {
+  const data = await S.getPublicCatalogUpdates();
+  return AR.success(res, "Catalog updates retrieved.", data);
+});

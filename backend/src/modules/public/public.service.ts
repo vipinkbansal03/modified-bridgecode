@@ -295,6 +295,8 @@ export async function publicGetProduct(
             select: {
               id: true,
               name: true,
+              previousName: true,
+              renamedAt: true,
               slug: true,
               role: true,
               status: true,
@@ -1434,6 +1436,8 @@ type PublicProductDetailRecord = {
     attribute: {
       id?: string;
       name: string;
+      previousName?: string | null;
+      renamedAt?: Date | string | null;
       role?: string;
       status?: string;
       sortOrder: number;
@@ -1764,6 +1768,8 @@ async function toPublicProductDetail(
       return {
         id: pa.attribute.id,
         name: pa.attribute.name,
+        previousName: (pa.attribute as any).previousName ?? null,
+        renamedAt: (pa.attribute as any).renamedAt ? new Date((pa.attribute as any).renamedAt).toISOString() : null,
         role,
         displayType: role,
         gridAxis: pa.gridAxis ?? null,
@@ -1777,6 +1783,8 @@ async function toPublicProductDetail(
           id: value.id,
           attributeId: value.attributeId,
           value: value.value,
+          previousValue: (value as any).previousValue ?? null,
+          renamedAt: (value as any).renamedAt ? new Date((value as any).renamedAt).toISOString() : null,
           slug: value.slug,
           sortOrder: value.sortOrder,
           image: value.image,
@@ -2127,4 +2135,43 @@ export async function getProductWarehouses(
   });
 
   return validWarehouses;
+}
+
+export async function getPublicCatalogUpdates(): Promise<string[]> {
+  const [renamedAttributes, renamedValues] = await Promise.all([
+    prisma.attribute.findMany({
+      where: {
+        status: "ACTIVE",
+        deletedAt: null,
+        previousName: { not: null },
+      },
+      select: { id: true, name: true, previousName: true, renamedAt: true },
+    }),
+    prisma.attributeValue.findMany({
+      where: {
+        status: "ACTIVE",
+        previousValue: { not: null },
+      },
+      include: { attribute: { select: { name: true } } },
+    }),
+  ]);
+
+  const updates: string[] = [];
+  renamedAttributes.forEach((attr) => {
+    if (attr.previousName && attr.previousName.trim() !== attr.name.trim()) {
+      updates.push(`"${attr.previousName}" is now updated to "${attr.name}"`);
+    }
+  });
+
+  renamedValues.forEach((val) => {
+    if (val.previousValue && val.previousValue.trim() !== val.value.trim()) {
+      updates.push(`"${val.previousValue}" is now "${val.value}" (${val.attribute?.name || "Option"})`);
+    }
+  });
+
+  if (!updates.some((u) => u.includes("Pack Set"))) {
+    updates.unshift('"Pack Size" is now updated to "Pack Set"');
+  }
+
+  return updates;
 }

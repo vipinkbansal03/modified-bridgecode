@@ -9474,6 +9474,15 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             </div>
           )}
 
+          {allVariantRows.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-[12px] text-amber-900 flex items-start gap-2">
+              <span className="shrink-0 font-bold">ℹ️ Note:</span>
+              <span>
+                If you have renamed attributes or mapped new options, generating new variants will update your active storefront combinations. Historical orders and invoices remain 100% audit-safe and preserved.
+              </span>
+            </div>
+          )}
+
           <div className="space-y-4">
             {generateAttributeIds.map((attributeId) => {
               const attribute = variantGenerationCatalog.find((item) => item.id === attributeId);

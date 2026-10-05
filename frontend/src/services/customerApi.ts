@@ -118,7 +118,7 @@ export interface CustomerOrderLineItem {
     slug: string;
     media?: Array<{ id?: string; url: string; altText?: string | null; type?: string }>;
   } | null;
-  variant?: { id: string; title: string; sku: string | null } | null;
+  variant?: { id: string; title: string; sku: string | null; status?: string } | null;
 }
 
 export interface CreateCustomerOrderPayload {
