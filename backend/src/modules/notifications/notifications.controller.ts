@@ -308,26 +308,42 @@ export const bulkDeleteLogs = asyncHandler(async (req: AuthRequest, res: Respons
     throw new AppError('IDs array is required', 400);
   }
   
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean) as string[]));
   const logs = await prisma.notificationLog.findMany({
-    where: { id: { in: ids } }
+    where: { id: { in: uniqueIds } }
   });
   
-  for (const log of logs) {
-    await prisma.notification.deleteMany({
-      where: {
-        title: log.subject || undefined,
-        message: log.message,
-        OR: [
-          { userId: log.to },
-          { customerId: log.to },
-          { targetType: "ALL_ADMINS" }
-        ]
-      }
+  // 1. Delete associated notifications in batch chunks using OR conditions
+  const LOG_CHUNK = 100;
+  for (let i = 0; i < logs.length; i += LOG_CHUNK) {
+    const chunk = logs.slice(i, i + LOG_CHUNK);
+    const deleteConditions = chunk.map((log) => ({
+      ...(log.subject ? { title: log.subject } : {}),
+      message: log.message,
+      OR: [
+        { userId: log.to },
+        { customerId: log.to },
+        { targetType: "ALL_ADMINS" as const }
+      ]
+    }));
+
+    if (deleteConditions.length > 0) {
+      await prisma.notification.deleteMany({
+        where: {
+          OR: deleteConditions
+        }
+      });
+    }
+  }
+
+  // 2. Delete notification logs in safe batch chunks
+  const DELETE_CHUNK = 500;
+  for (let i = 0; i < uniqueIds.length; i += DELETE_CHUNK) {
+    const chunk = uniqueIds.slice(i, i + DELETE_CHUNK);
+    await prisma.notificationLog.deleteMany({
+      where: { id: { in: chunk } },
     });
   }
 
-  await prisma.notificationLog.deleteMany({
-    where: { id: { in: ids } },
-  });
   return ApiResponse.success(res, 'Logs deleted successfully');
 });

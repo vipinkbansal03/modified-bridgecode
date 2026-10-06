@@ -946,7 +946,7 @@ export async function importCategoriesSpreadsheet(filePathOrRows: string | any[]
       createdBySlug.set(finalSlug, categoryId);
       createdByName.set(row.name.trim().toLowerCase(), categoryId);
     }
-  });
+  }, { timeout: 30000, maxWait: 10000 });
 
   return {
     ...summary,
@@ -972,93 +972,203 @@ export async function bulkPermanentDeleteCategories(ids: string[], options?: { f
     quotes?: Array<{ id: string; quoteNumber: string | null }>;
   }> = [];
 
-  for (const id of ids) {
-    try {
-      const cat = await prisma.category.findUnique({
-        where: { id },
-        select: { id: true, name: true },
-      });
-      if (!cat) {
-        blocked.push({ id, name: id, reason: "Category not found." });
-        continue;
-      }
-      await permanentDeleteCategory(id, options);
-      deletedIds.push(id);
-    } catch (error: any) {
-      const cat = await prisma.category.findUnique({
-        where: { id },
+  const uniqueIds = Array.from(new Set((ids ?? []).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return {
+      deletedCount: 0,
+      blockedCount: 0,
+      deletedIds: [],
+      blocked: [],
+    };
+  }
+
+  // 1. Fetch requested categories with their products and variants in one query
+  const categories = await prisma.category.findMany({
+    where: { id: { in: uniqueIds } },
+    select: {
+      id: true,
+      name: true,
+      children: { select: { id: true, name: true } },
+      products: {
         select: {
-          name: true,
-          products: {
-            select: {
-              id: true,
-              title: true,
-              sku: true,
-              variants: { select: { id: true } },
-            },
-          },
+          id: true,
+          title: true,
+          sku: true,
+          deletedAt: true,
+          variants: { select: { id: true } },
         },
-      });
+      },
+    },
+  });
 
-      let orders = error?.details?.orders;
-      let quotes = error?.details?.quotes;
-      let products = error?.details?.products;
+  const catMap = new Map(categories.map((c) => [c.id, c]));
+  const allProductIds = categories.flatMap((c) => c.products.map((p) => p.id));
+  const allVariantIds = categories.flatMap((c) => c.products.flatMap((p) => p.variants.map((v) => v.id)));
 
-      if (!orders && !quotes && !products && cat) {
-        const prodIds = cat.products.map((p) => p.id);
-        const variantIds = cat.products.flatMap((p) => p.variants.map((v) => v.id));
-        const [orderItems, quoteItems] = await Promise.all([
-          prodIds.length > 0
-            ? prisma.orderItem.findMany({
-                where: {
-                  OR: [
-                    { productId: { in: prodIds } },
-                    ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
-                  ],
-                },
-                select: { order: { select: { id: true, orderNumber: true } } },
-                take: 10,
-              })
-            : [],
-          prodIds.length > 0
-            ? prisma.quoteItem.findMany({
-                where: {
-                  OR: [
-                    { productId: { in: prodIds } },
-                    ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
-                  ],
-                },
-                select: { quote: { select: { id: true, quoteNumber: true } } },
-                take: 10,
-              })
-            : [],
-        ]);
+  // 2. Batch reference checks in parallel across orders and quotes
+  const [orderItemsByProd, quoteItemsByProd, orderItemsByVar, quoteItemsByVar] = await Promise.all([
+    allProductIds.length > 0
+      ? prisma.orderItem.groupBy({
+          by: ["productId"],
+          where: { productId: { in: allProductIds } },
+          _count: { _all: true },
+        })
+      : [],
+    allProductIds.length > 0
+      ? prisma.quoteItem.groupBy({
+          by: ["productId"],
+          where: { productId: { in: allProductIds } },
+          _count: { _all: true },
+        })
+      : [],
+    allVariantIds.length > 0
+      ? prisma.orderItem.groupBy({
+          by: ["variantId"],
+          where: { variantId: { in: allVariantIds } },
+          _count: { _all: true },
+        })
+      : [],
+    allVariantIds.length > 0
+      ? prisma.quoteItem.groupBy({
+          by: ["variantId"],
+          where: { variantId: { in: allVariantIds } },
+          _count: { _all: true },
+        })
+      : [],
+  ]);
 
-        const orderMap = new Map<string, { id: string; orderNumber: string | null }>();
-        for (const oi of orderItems) {
-          if (oi.order && !orderMap.has(oi.order.id)) {
-            orderMap.set(oi.order.id, { id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id });
-          }
-        }
-        const quoteMap = new Map<string, { id: string; quoteNumber: string | null }>();
-        for (const qi of quoteItems) {
-          if (qi.quote && !quoteMap.has(qi.quote.id)) {
-            quoteMap.set(qi.quote.id, { id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id });
-          }
-        }
+  const orderProdCountMap = new Map(orderItemsByProd.map((o) => [o.productId, typeof o._count === "object" ? o._count._all : (o._count as number)]));
+  const quoteProdCountMap = new Map(quoteItemsByProd.map((q) => [q.productId, typeof q._count === "object" ? q._count._all : (q._count as number)]));
+  const orderVarCountMap = new Map(orderItemsByVar.map((o) => [o.variantId, typeof o._count === "object" ? o._count._all : (o._count as number)]));
+  const quoteVarCountMap = new Map(quoteItemsByVar.map((q) => [q.variantId, typeof q._count === "object" ? q._count._all : (q._count as number)]));
 
-        orders = Array.from(orderMap.values());
-        quotes = Array.from(quoteMap.values());
-        products = cat.products.map((p) => ({ id: p.id, title: p.title, sku: p.sku }));
+  const eligibleCategories: typeof categories = [];
+  const refBlockedCategoryIds: string[] = [];
+
+  for (const id of uniqueIds) {
+    const cat = catMap.get(id);
+    if (!cat) {
+      blocked.push({ id, name: id, reason: "Category not found." });
+      continue;
+    }
+
+    let orderCount = 0;
+    let quoteCount = 0;
+    for (const p of cat.products) {
+      orderCount += orderProdCountMap.get(p.id) || 0;
+      quoteCount += quoteProdCountMap.get(p.id) || 0;
+      for (const v of p.variants) {
+        orderCount += orderVarCountMap.get(v.id) || 0;
+        quoteCount += quoteVarCountMap.get(v.id) || 0;
       }
+    }
 
+    if (orderCount > 0 || quoteCount > 0) {
+      refBlockedCategoryIds.push(id);
       blocked.push({
         id,
-        name: cat?.name || id,
+        name: cat.name,
+        reason: `Cannot permanently delete category "${cat.name}": contains products referenced by ${orderCount} order item(s) and ${quoteCount} quote item(s). Archiving is required for legal and tax auditing.`,
+        products: cat.products.map((p) => ({ id: p.id, title: p.title, sku: p.sku })),
+      });
+      continue;
+    }
+
+    const activeProducts = cat.products.filter((p) => !p.deletedAt);
+    if (!options?.force && activeProducts.length > 0) {
+      blocked.push({
+        id,
+        name: cat.name,
+        reason: `Cannot permanently delete category "${cat.name}": referenced by ${activeProducts.length} active product(s). Please archive or delete the products first.`,
+        products: activeProducts.map((p) => ({ id: p.id, title: p.title, sku: p.sku })),
+      });
+      continue;
+    }
+
+    eligibleCategories.push(cat);
+  }
+
+  // 3. Batch query sample orders/quotes for reference-blocked categories (capped preview)
+  if (refBlockedCategoryIds.length > 0) {
+    const sampleCatIds = refBlockedCategoryIds.slice(0, 20);
+    const sampleProdIds = categories
+      .filter((c) => sampleCatIds.includes(c.id))
+      .flatMap((c) => c.products.map((p) => p.id));
+    const sampleVarIds = categories
+      .filter((c) => sampleCatIds.includes(c.id))
+      .flatMap((c) => c.products.flatMap((p) => p.variants.map((v) => v.id)));
+
+    try {
+      const [sampleOrderItems, sampleQuoteItems] = await Promise.all([
+        sampleProdIds.length > 0
+          ? prisma.orderItem.findMany({
+              where: {
+                OR: [
+                  { productId: { in: sampleProdIds } },
+                  ...(sampleVarIds.length > 0 ? [{ variantId: { in: sampleVarIds } }] : []),
+                ],
+              },
+              select: { productId: true, variantId: true, order: { select: { id: true, orderNumber: true } } },
+              take: 200,
+            })
+          : [],
+        sampleProdIds.length > 0
+          ? prisma.quoteItem.findMany({
+              where: {
+                OR: [
+                  { productId: { in: sampleProdIds } },
+                  ...(sampleVarIds.length > 0 ? [{ variantId: { in: sampleVarIds } }] : []),
+                ],
+              },
+              select: { productId: true, variantId: true, quote: { select: { id: true, quoteNumber: true } } },
+              take: 200,
+            })
+          : [],
+      ]);
+
+      for (const b of blocked) {
+        if (!refBlockedCategoryIds.includes(b.id)) continue;
+        const cat = catMap.get(b.id);
+        if (!cat) continue;
+        const cProdIds = new Set(cat.products.map((p) => p.id));
+        const cVarIds = new Set(cat.products.flatMap((p) => p.variants.map((v) => v.id)));
+
+        const orderMap = new Map<string, { id: string; orderNumber: string | null }>();
+        for (const oi of sampleOrderItems) {
+          if ((oi.productId && cProdIds.has(oi.productId)) || (oi.variantId && cVarIds.has(oi.variantId))) {
+            if (oi.order && !orderMap.has(oi.order.id) && orderMap.size < 10) {
+              orderMap.set(oi.order.id, { id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id });
+            }
+          }
+        }
+
+        const quoteMap = new Map<string, { id: string; quoteNumber: string | null }>();
+        for (const qi of sampleQuoteItems) {
+          if ((qi.productId && cProdIds.has(qi.productId)) || (qi.variantId && cVarIds.has(qi.variantId))) {
+            if (qi.quote && !quoteMap.has(qi.quote.id) && quoteMap.size < 10) {
+              quoteMap.set(qi.quote.id, { id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id });
+            }
+          }
+        }
+
+        b.orders = orderMap.size > 0 ? Array.from(orderMap.values()) : undefined;
+        b.quotes = quoteMap.size > 0 ? Array.from(quoteMap.values()) : undefined;
+      }
+    } catch {
+      // Ignore preview lookup error
+    }
+  }
+
+  // 4. Delete eligible categories
+  for (const cat of eligibleCategories) {
+    try {
+      await permanentDeleteCategory(cat.id, options);
+      deletedIds.push(cat.id);
+    } catch (error: any) {
+      blocked.push({
+        id: cat.id,
+        name: cat.name,
         reason: error?.message || "Failed to permanently delete category.",
-        orders: orders?.length ? orders : undefined,
-        quotes: quotes?.length ? quotes : undefined,
-        products: products?.length ? products : undefined,
       });
     }
   }

@@ -659,12 +659,52 @@ export async function bulkPermanentDeleteAttributes(ids: string[]) {
     variants?: Array<{ id: string; title: string; sku?: string | null; productId: string }>;
   }> = [];
 
-  const uniqueIds = Array.from(new Set(ids));
-  const attributes = await prisma.attribute.findMany({
-    where: { id: { in: uniqueIds } },
-    select: { id: true, name: true },
-  });
+  const uniqueIds = Array.from(new Set((ids ?? []).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return {
+      deletedCount: 0,
+      blockedCount: 0,
+      deletedIds: [],
+      blocked: [],
+    };
+  }
+
+  // 1. Pre-fetch attributes and run batch reference checks in parallel
+  const [attributes, productAttrs, variantAttrs, valueSelections, filterAttrIds] = await Promise.all([
+    prisma.attribute.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, name: true },
+    }),
+    prisma.productAttribute.groupBy({
+      by: ["attributeId"],
+      where: { attributeId: { in: uniqueIds } },
+      _count: { _all: true },
+    }),
+    prisma.productVariantAttributeValue.groupBy({
+      by: ["attributeId"],
+      where: { attributeId: { in: uniqueIds } },
+      _count: { _all: true },
+    }),
+    prisma.productAttributeValueSelection.findMany({
+      where: { attributeValue: { attributeId: { in: uniqueIds } } },
+      select: { attributeValue: { select: { attributeId: true } } },
+    }),
+    getFilterConfigAttributeIds(),
+  ]);
+
   const attributeMap = new Map(attributes.map((a) => [a.id, a]));
+  const productCountMap = new Map(productAttrs.map((p) => [p.attributeId, p._count._all]));
+  const variantCountMap = new Map(variantAttrs.map((v) => [v.attributeId, v._count._all]));
+  const selectionCountMap = new Map<string, number>();
+  for (const sel of valueSelections) {
+    const aId = sel.attributeValue?.attributeId;
+    if (aId) {
+      selectionCountMap.set(aId, (selectionCountMap.get(aId) || 0) + 1);
+    }
+  }
+
+  const eligibleIds: string[] = [];
+  const blockedIdsWithReason = new Map<string, string>();
 
   for (const id of uniqueIds) {
     const attr = attributeMap.get(id);
@@ -672,43 +712,114 @@ export async function bulkPermanentDeleteAttributes(ids: string[]) {
       blocked.push({ id, name: id, reason: "Attribute not found." });
       continue;
     }
-    try {
-      await permanentDeleteAttribute(id);
-      deletedIds.push(id);
-    } catch (error: any) {
-      const [productAssignments, variantAssignments] = await Promise.all([
-        prisma.productAttribute.findMany({
-          where: { attributeId: id },
-          include: { product: { select: { id: true, title: true, sku: true } } },
-          take: 10,
-        }),
-        prisma.productVariantAttributeValue.findMany({
-          where: { attributeId: id },
-          include: { variant: { select: { id: true, title: true, sku: true, productId: true } } },
-          take: 10,
-        }),
-      ]);
 
-      const linkedProducts = productAssignments
-        .filter((pa) => pa.product)
-        .map((pa) => ({ id: pa.product.id, title: pa.product.title, sku: pa.product.sku }));
+    const pCount = productCountMap.get(id) || 0;
+    if (pCount > 0) {
+      blockedIdsWithReason.set(id, `Cannot permanently delete: Referenced by ${pCount} product assignment(s) across active and archived catalog products.`);
+      continue;
+    }
 
-      const linkedVariants = variantAssignments
-        .filter((va) => va.variant)
-        .map((va) => ({
-          id: va.variant.id,
-          title: va.variant.title,
-          sku: va.variant.sku,
-          productId: va.variant.productId,
-        }));
+    const vCount = variantCountMap.get(id) || 0;
+    if (vCount > 0) {
+      blockedIdsWithReason.set(id, `Cannot permanently delete: Referenced by ${vCount} product variant(s) across active and archived catalog items.`);
+      continue;
+    }
 
+    const sCount = selectionCountMap.get(id) || 0;
+    if (sCount > 0) {
+      blockedIdsWithReason.set(id, `Cannot permanently delete: Attribute values are referenced in ${sCount} product configuration selection(s).`);
+      continue;
+    }
+
+    if (filterAttrIds.has(id)) {
+      blockedIdsWithReason.set(id, "Cannot permanently delete: Attribute is currently configured in storefront product filter settings.");
+      continue;
+    }
+
+    eligibleIds.push(id);
+  }
+
+  // 2. Fetch sample product and variant previews in a single query for blocked items
+  const blockedIdsArray = Array.from(blockedIdsWithReason.keys());
+  if (blockedIdsArray.length > 0) {
+    const sampleIds = blockedIdsArray.slice(0, 50);
+    const [sampleProducts, sampleVariants] = await Promise.all([
+      prisma.productAttribute.findMany({
+        where: { attributeId: { in: sampleIds } },
+        include: { product: { select: { id: true, title: true, sku: true } } },
+        take: 300,
+      }),
+      prisma.productVariantAttributeValue.findMany({
+        where: { attributeId: { in: sampleIds } },
+        include: { variant: { select: { id: true, title: true, sku: true, productId: true } } },
+        take: 300,
+      }),
+    ]);
+
+    const productMap = new Map<string, Array<{ id: string; title: string; sku?: string | null }>>();
+    for (const pa of sampleProducts) {
+      if (pa.product) {
+        const list = productMap.get(pa.attributeId) || [];
+        if (list.length < 10) {
+          list.push({ id: pa.product.id, title: pa.product.title, sku: pa.product.sku });
+          productMap.set(pa.attributeId, list);
+        }
+      }
+    }
+
+    const variantMap = new Map<string, Array<{ id: string; title: string; sku?: string | null; productId: string }>>();
+    for (const va of sampleVariants) {
+      if (va.variant) {
+        const list = variantMap.get(va.attributeId) || [];
+        if (list.length < 10) {
+          list.push({ id: va.variant.id, title: va.variant.title, sku: va.variant.sku, productId: va.variant.productId });
+          variantMap.set(va.attributeId, list);
+        }
+      }
+    }
+
+    for (const id of blockedIdsArray) {
+      const attr = attributeMap.get(id);
       blocked.push({
         id,
-        name: attr.name,
-        reason: error?.message || "Failed to permanently delete attribute.",
-        products: linkedProducts,
-        variants: linkedVariants,
+        name: attr?.name || id,
+        reason: blockedIdsWithReason.get(id) || "Failed to permanently delete attribute.",
+        products: productMap.get(id),
+        variants: variantMap.get(id),
       });
+    }
+  }
+
+  // 3. Batch delete unblocked attributes in safe chunks of 100 with fallback
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < eligibleIds.length; i += CHUNK_SIZE) {
+    const chunk = eligibleIds.slice(i, i + CHUNK_SIZE);
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.attributeValue.deleteMany({ where: { attributeId: { in: chunk } } });
+          await tx.attribute.deleteMany({ where: { id: { in: chunk } } });
+        },
+        { timeout: 30000 },
+      );
+      deletedIds.push(...chunk);
+    } catch {
+      for (const singleId of chunk) {
+        try {
+          await prisma.$transaction(async (tx) => {
+            await tx.attributeValue.deleteMany({ where: { attributeId: singleId } });
+            await tx.attribute.delete({ where: { id: singleId } });
+          });
+          deletedIds.push(singleId);
+        } catch (singleErr: any) {
+          const attr = attributeMap.get(singleId);
+          blocked.push({
+            id: singleId,
+            name: attr?.name || singleId,
+            reason: singleErr?.message || "Failed to permanently delete attribute.",
+          });
+        }
+      }
     }
   }
 
@@ -1082,115 +1193,121 @@ export async function importAttributesSpreadsheet(filePathOrRows: string | any[]
     totalProcessed: aggregatedMap.size,
   };
 
-  await prisma.$transaction(async (tx) => {
-    let index = 0;
-    for (const item of aggregatedMap.values()) {
-      index++;
-      const attrName = item.attrName;
-      const role = item.role;
-      const status = item.status;
-      const sortOrder = item.sortOrder;
-      const attrSlug = item.slugProvided ? slugify(item.slugProvided) : slugify(attrName);
-      const finalAttrSlug = attrSlug || `attr-${index}`;
+  const items = Array.from(aggregatedMap.values());
+  const CHUNK_SIZE = 50;
+  let index = 0;
 
-      let attribute = await tx.attribute.findFirst({
-        where: {
-          OR: [
-            { name: { equals: attrName, mode: "insensitive" } },
-            { slug: finalAttrSlug },
-          ],
-        },
-      });
+  for (let chunkStart = 0; chunkStart < items.length; chunkStart += CHUNK_SIZE) {
+    const chunk = items.slice(chunkStart, chunkStart + CHUNK_SIZE);
+    await prisma.$transaction(async (tx) => {
+      for (const item of chunk) {
+        index++;
+        const attrName = item.attrName;
+        const role = item.role;
+        const status = item.status;
+        const sortOrder = item.sortOrder;
+        const attrSlug = item.slugProvided ? slugify(item.slugProvided) : slugify(attrName);
+        const finalAttrSlug = attrSlug || `attr-${index}`;
 
-      if (attribute) {
-        attribute = await tx.attribute.update({
-          where: { id: attribute.id },
-          data: {
-            name: attrName,
-            role,
-            status,
-            sortOrder,
-          },
-        });
-        summary.updatedAttributes++;
-      } else {
-        let uniqueSlug = finalAttrSlug;
-        let counter = 1;
-        while (await tx.attribute.findUnique({ where: { slug: uniqueSlug } })) {
-          uniqueSlug = `${finalAttrSlug}-${counter++}`;
-        }
-        attribute = await tx.attribute.create({
-          data: {
-            name: attrName,
-            slug: uniqueSlug,
-            role,
-            status,
-            sortOrder,
-          },
-        });
-        summary.createdAttributes++;
-      }
-
-      // If values are provided, parse and upsert them
-      for (const [vIdx, rawItem] of item.values.entries()) {
-        let valName = rawItem;
-        let priceAdj = 0;
-
-        // Check if format is "Name (+12)" or "Name (12)"
-        const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
-        if (priceMatch) {
-          valName = priceMatch[1].trim();
-          priceAdj = parseFloat(priceMatch[2]) || 0;
-        }
-
-        if (!valName) continue;
-
-        const rawValSlug = slugify(valName);
-        const valSlug = rawValSlug || `val-${vIdx + 1}`;
-        const existingVal = await tx.attributeValue.findFirst({
+        let attribute = await tx.attribute.findFirst({
           where: {
-            attributeId: attribute.id,
-            value: { equals: valName, mode: "insensitive" },
+            OR: [
+              { name: { equals: attrName, mode: "insensitive" } },
+              { slug: finalAttrSlug },
+            ],
           },
         });
 
-        const valSortOrder = vIdx + 1;
-
-        if (existingVal) {
-          await tx.attributeValue.update({
-            where: { id: existingVal.id },
+        if (attribute) {
+          attribute = await tx.attribute.update({
+            where: { id: attribute.id },
             data: {
-              value: valName,
-              status: "ACTIVE",
-              sortOrder: valSortOrder,
-              priceAdjustment: new Prisma.Decimal(priceAdj),
+              name: attrName,
+              role,
+              status,
+              sortOrder,
             },
           });
-          summary.updatedValues++;
+          summary.updatedAttributes++;
         } else {
-          let uniqueValSlug = valSlug;
+          let uniqueSlug = finalAttrSlug;
           let counter = 1;
-          while (
-            await tx.attributeValue.findFirst({ where: { attributeId: attribute.id, slug: uniqueValSlug } })
-          ) {
-            uniqueValSlug = `${valSlug}-${counter++}`;
+          while (await tx.attribute.findUnique({ where: { slug: uniqueSlug } })) {
+            uniqueSlug = `${finalAttrSlug}-${counter++}`;
+          }
+          attribute = await tx.attribute.create({
+            data: {
+              name: attrName,
+              slug: uniqueSlug,
+              role,
+              status,
+              sortOrder,
+            },
+          });
+          summary.createdAttributes++;
+        }
+
+        // If values are provided, parse and upsert them
+        for (const [vIdx, rawItem] of item.values.entries()) {
+          let valName = rawItem;
+          let priceAdj = 0;
+
+          // Check if format is "Name (+12)" or "Name (12)"
+          const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
+          if (priceMatch) {
+            valName = priceMatch[1].trim();
+            priceAdj = parseFloat(priceMatch[2]) || 0;
           }
 
-          await tx.attributeValue.create({
-            data: {
+          if (!valName) continue;
+
+          const rawValSlug = slugify(valName);
+          const valSlug = rawValSlug || `val-${vIdx + 1}`;
+          const existingVal = await tx.attributeValue.findFirst({
+            where: {
               attributeId: attribute.id,
-              value: valName,
-              slug: uniqueValSlug,
-              status: "ACTIVE",
-              sortOrder: valSortOrder,
-              priceAdjustment: new Prisma.Decimal(priceAdj),
+              value: { equals: valName, mode: "insensitive" },
             },
           });
-          summary.createdValues++;
+
+          const valSortOrder = vIdx + 1;
+
+          if (existingVal) {
+            await tx.attributeValue.update({
+              where: { id: existingVal.id },
+              data: {
+                value: valName,
+                status: "ACTIVE",
+                sortOrder: valSortOrder,
+                priceAdjustment: new Prisma.Decimal(priceAdj),
+              },
+            });
+            summary.updatedValues++;
+          } else {
+            let uniqueValSlug = valSlug;
+            let counter = 1;
+            while (
+              await tx.attributeValue.findFirst({ where: { attributeId: attribute.id, slug: uniqueValSlug } })
+            ) {
+              uniqueValSlug = `${valSlug}-${counter++}`;
+            }
+
+            await tx.attributeValue.create({
+              data: {
+                attributeId: attribute.id,
+                value: valName,
+                slug: uniqueValSlug,
+                status: "ACTIVE",
+                sortOrder: valSortOrder,
+                priceAdjustment: new Prisma.Decimal(priceAdj),
+              },
+            });
+            summary.createdValues++;
+          }
         }
       }
-    }
-  });
+    }, { timeout: 30000, maxWait: 10000 });
+  }
 
   return summary;
 }

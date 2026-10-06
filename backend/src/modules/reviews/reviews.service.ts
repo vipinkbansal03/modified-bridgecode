@@ -204,37 +204,74 @@ export async function bulkPermanentDeleteReviews(ids: string[]) {
   const deletedIds: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
-  for (const id of ids) {
-    try {
-      const review = await prisma.productReview.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          customerName: true,
-          status: true,
-          product: { select: { title: true } },
-        },
-      });
-      if (!review) {
-        blocked.push({ id, name: id, reason: "Review not found." });
-        continue;
-      }
-      if (review.status === "APPROVED") {
-        blocked.push({
-          id,
-          name: review.customerName || review.product?.title || id,
-          reason: "Cannot permanently delete an approved review. Approved customer reviews must be retained.",
-        });
-        continue;
-      }
-      await prisma.productReview.delete({ where: { id } });
-      deletedIds.push(id);
-    } catch (error: any) {
+  const uniqueIds = Array.from(new Set(ids ?? []));
+  if (uniqueIds.length === 0) {
+    return {
+      deletedCount: 0,
+      blockedCount: 0,
+      deletedIds: [],
+      blocked: [],
+    };
+  }
+
+  // 1. Fetch requested reviews in safe batch chunks
+  const reviews: Array<{ id: string; customerName: string | null; status: string; product: { title: string } | null }> = [];
+  const FETCH_CHUNK = 1000;
+  for (let i = 0; i < uniqueIds.length; i += FETCH_CHUNK) {
+    const chunk = uniqueIds.slice(i, i + FETCH_CHUNK);
+    const rows = await prisma.productReview.findMany({
+      where: { id: { in: chunk } },
+      select: {
+        id: true,
+        customerName: true,
+        status: true,
+        product: { select: { title: true } },
+      },
+    });
+    reviews.push(...rows);
+  }
+
+  const reviewMap = new Map(reviews.map((r) => [r.id, r]));
+  const eligibleIds: string[] = [];
+
+  for (const id of uniqueIds) {
+    const review = reviewMap.get(id);
+    if (!review) {
+      blocked.push({ id, name: id, reason: "Review not found." });
+      continue;
+    }
+    if (review.status === "APPROVED") {
       blocked.push({
         id,
-        name: id,
-        reason: error?.message || "Failed to permanently delete review.",
+        name: review.customerName || review.product?.title || id,
+        reason: "Cannot permanently delete an approved review. Approved customer reviews must be retained.",
       });
+      continue;
+    }
+    eligibleIds.push(id);
+  }
+
+  // 2. Batch delete eligible reviews in chunks of 100 with fallback
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < eligibleIds.length; i += CHUNK_SIZE) {
+    const chunk = eligibleIds.slice(i, i + CHUNK_SIZE);
+    try {
+      await prisma.productReview.deleteMany({ where: { id: { in: chunk } } });
+      deletedIds.push(...chunk);
+    } catch {
+      for (const singleId of chunk) {
+        try {
+          await prisma.productReview.delete({ where: { id: singleId } });
+          deletedIds.push(singleId);
+        } catch (singleErr: any) {
+          const rev = reviewMap.get(singleId);
+          blocked.push({
+            id: singleId,
+            name: rev?.customerName || rev?.product?.title || singleId,
+            reason: singleErr?.message || "Failed to permanently delete review.",
+          });
+        }
+      }
     }
   }
 

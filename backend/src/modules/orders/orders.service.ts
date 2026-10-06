@@ -2,8 +2,8 @@ import { prisma } from "../../config/database";
 import type { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { sanitizeCustomerName, isValidCustomerName, cleanSingleName } from "../../utils/nameValidation";
-import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
-import { resolvePrice } from "../pricing/priceResolver.service";
+import { assertActiveCountry, assertSellableInCountry, assertSellableInCountryBatch } from "../countries/countryAvailability.service";
+import { resolvePrice, createSharedPricingContext } from "../pricing/priceResolver.service";
 import { reserveOrderInventory, commitOrderReservation, releaseOrderReservation } from "../inventory/inventoryReservation.service";
 import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
 import { sendOrderConfirmationEmail } from "../../utils/email";
@@ -311,6 +311,19 @@ export async function createAdminOrder(input: {
   const destinationCountryCode = country.code;
   const destinationCountryId = country.id;
 
+  await assertSellableInCountryBatch({
+    countryId: country.id,
+    items: input.items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+    })),
+  });
+
+  const sharedPricingContext = await createSharedPricingContext({
+    countryId: country.id,
+    customerId: customer?.id ?? null,
+  });
+
   const orderItems = await Promise.all(input.items.map(async (item) => {
     const product = productMap.get(item.productId);
     if (!product) throw new AppError("Product not found.", 400);
@@ -333,17 +346,18 @@ export async function createAdminOrder(input: {
       destinationCountryId,
     });
 
-    await assertSellableInCountry({
-      countryId: country.id,
-      productId: product.id,
-      variantId: variant?.id ?? null,
-    });
-
     const overridePrice = item.overridePrice === undefined || item.overridePrice === null || item.overridePrice === "" ? null : Number(item.overridePrice);
     if (overridePrice !== null && (!Number.isFinite(overridePrice) || overridePrice < 0)) throw new AppError("Override price must be a non-negative number.", 400);
     const resolvedPrice = overridePrice !== null
       ? null
-      : await resolvePrice({ productId: product.id, variantId: variant?.id ?? null, countryId: country.id, customerId: customer?.id ?? null, quantity });
+      : await resolvePrice({
+          productId: product.id,
+          variantId: variant?.id ?? null,
+          countryId: country.id,
+          customerId: customer?.id ?? null,
+          quantity,
+          sharedContext: sharedPricingContext,
+        });
     const unitPrice = overridePrice ?? resolvedPrice!.finalPrice;
 
     return {
@@ -869,35 +883,108 @@ export async function bulkPermanentDeleteOrders(ids: string[]) {
   const deletedIds: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
-  for (const id of ids) {
-    try {
-      const order = await prisma.order.findUnique({
-        where: { id },
-        select: { id: true, orderNumber: true },
-      });
-      if (!order) {
-        blocked.push({ id, name: id, reason: "Order not found." });
-        continue;
-      }
-      await permanentDeleteOrder(id);
-      deletedIds.push(id);
-    } catch (error: any) {
-      const order = await prisma.order.findUnique({
-        where: { id },
-        select: { orderNumber: true },
-      });
+  if (!ids || ids.length === 0) {
+    return {
+      deletedCount: 0,
+      blockedCount: 0,
+      deletedIds: [],
+      blocked: [],
+    };
+  }
+
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+
+  // 1. Fetch requested orders in safe chunks
+  const orders: Array<{ id: string; orderNumber: string | null; deletedAt: Date | null; isTest: boolean }> = [];
+  const FETCH_CHUNK = 500;
+  for (let i = 0; i < uniqueIds.length; i += FETCH_CHUNK) {
+    const chunk = uniqueIds.slice(i, i + FETCH_CHUNK);
+    const rows = await prisma.order.findMany({
+      where: { id: { in: chunk } },
+      select: { id: true, orderNumber: true, deletedAt: true, isTest: true },
+    });
+    orders.push(...rows);
+  }
+  const orderMap = new Map(orders.map((o) => [o.id, o]));
+
+  const toDeleteIds: string[] = [];
+
+  for (const id of uniqueIds) {
+    const order = orderMap.get(id);
+    if (!order) {
+      blocked.push({ id, name: id, reason: "Order not found." });
+      continue;
+    }
+
+    if (!order.deletedAt && !order.isTest) {
       blocked.push({
         id,
-        name: order?.orderNumber ? `Order #${order.orderNumber}` : id,
-        reason: error?.message || "Failed to permanently delete order.",
+        name: order.orderNumber ? `Order #${order.orderNumber}` : id,
+        reason: "Cannot permanently delete order: Order must be archived before it can be permanently deleted.",
       });
+      continue;
+    }
+
+    toDeleteIds.push(id);
+  }
+
+  // 2. Batch delete unblocked orders in chunks of 100 with set-based deleteMany
+  const BATCH_DELETE_CHUNK = 100;
+  for (let i = 0; i < toDeleteIds.length; i += BATCH_DELETE_CHUNK) {
+    const chunk = toDeleteIds.slice(i, i + BATCH_DELETE_CHUNK);
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          for (const orderId of chunk) {
+            await releaseOrderReservation(orderId, tx);
+          }
+          await tx.inventoryAdjustment.deleteMany({
+            where: {
+              adjustedBy: { in: chunk.map((c) => `system:reservation;order:${c}`) },
+            },
+          });
+          await tx.orderShippingBox.deleteMany({ where: { orderId: { in: chunk } } });
+          await tx.shipmentEvent.deleteMany({
+            where: { shipment: { orderId: { in: chunk } } },
+          });
+          await tx.shipment.deleteMany({ where: { orderId: { in: chunk } } });
+          await tx.paymentTransaction.deleteMany({ where: { orderId: { in: chunk } } });
+          await tx.orderReturnItem.deleteMany({
+            where: { orderReturn: { orderId: { in: chunk } } },
+          });
+          await tx.orderReturn.deleteMany({ where: { orderId: { in: chunk } } });
+          await tx.quote.updateMany({
+            where: { convertedOrderId: { in: chunk } },
+            data: { convertedOrderId: null },
+          });
+          await tx.orderItem.deleteMany({ where: { orderId: { in: chunk } } });
+          await tx.order.deleteMany({ where: { id: { in: chunk } } });
+        },
+        { timeout: 30000 }
+      );
+      deletedIds.push(...chunk);
+    } catch {
+      // If batch fails, fallback to individual for this chunk to isolate any error
+      for (const chunkId of chunk) {
+        try {
+          await permanentDeleteOrder(chunkId);
+          deletedIds.push(chunkId);
+        } catch (individualError: any) {
+          const o = orderMap.get(chunkId);
+          blocked.push({
+            id: chunkId,
+            name: o?.orderNumber ? `Order #${o.orderNumber}` : chunkId,
+            reason: individualError?.message || "Failed to permanently delete order.",
+          });
+        }
+      }
     }
   }
 
   return {
     deletedCount: deletedIds.length,
     blockedCount: blocked.length,
-    deletedIds,
-    blocked,
+    deletedIds: deletedIds.length > 500 ? deletedIds.slice(0, 500) : deletedIds,
+    blocked: blocked.slice(0, 100),
   };
 }

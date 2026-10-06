@@ -306,8 +306,6 @@ export function DynamicVariantMatrixConfigurator({
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
   const [userSelected, setUserSelected] = useState(false);
   const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
-  const [isExpandedUpdates, setIsExpandedUpdates] = useState(false);
-  const [isDismissedNotice, setIsDismissedNotice] = useState(false);
 
   useEffect(() => {
     setUserSelected(false);
@@ -330,30 +328,6 @@ export function DynamicVariantMatrixConfigurator({
       })),
     [apiProduct.attributes],
   );
-
-  const renamedAttributesInfo = useMemo(() => {
-    const list: string[] = [];
-    
-    // Check renamed attributes
-    attributes.forEach((attr) => {
-      if (attr.previousName && attr.previousName.trim() !== attr.name.trim()) {
-        list.push(`"${attr.previousName}" is now updated to "${attr.name}"`);
-      } else if (attr.name.toLowerCase() === "pack set" && !attr.previousName) {
-        list.push(`"Pack Size" is now updated to "${attr.name}"`);
-      }
-    });
-
-    // Check renamed attribute values
-    attributes.forEach((attr) => {
-      (attr.values ?? []).forEach((val) => {
-        if (val.previousValue && val.previousValue.trim() !== val.value.trim()) {
-          list.push(`"${val.previousValue}" is now "${val.value}" (${attr.name})`);
-        }
-      });
-    });
-
-    return list;
-  }, [attributes]);
 
   const normalizedVariants = useMemo<NormalizedVariant[]>(
     () =>
@@ -1023,68 +997,6 @@ export function DynamicVariantMatrixConfigurator({
             </p>
           </div>
         </div>
-
-        {/* Simple Dynamic Attribute & Specification Update Notice */}
-        {renamedAttributesInfo.length > 0 && !isDismissedNotice && (
-          <div className="mt-4 mb-6 rounded-xl border border-[#E31E24]/30 bg-[#FFF5F5] p-3 sm:px-4 sm:py-3 text-[13px] text-[#111827] shadow-2xs transition-all">
-            <div className="flex items-start justify-between gap-2.5">
-              <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                <Info size={16} className="shrink-0 text-[#E31E24] mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <p className="leading-snug text-[#111827]">
-                    <span className="font-bold text-[#E31E24]">Catalog Update:</span>{" "}
-                    {renamedAttributesInfo.length <= 2 ? (
-                      <span>{renamedAttributesInfo.join("; ")}</span>
-                    ) : (
-                      <span>
-                        {renamedAttributesInfo.slice(0, 2).join("; ")}
-                        <button
-                          type="button"
-                          onClick={() => setIsExpandedUpdates(!isExpandedUpdates)}
-                          className="ml-1.5 inline-flex items-center gap-0.5 font-bold text-[#E31E24] underline hover:text-[#C8171D] cursor-pointer"
-                        >
-                          {isExpandedUpdates
-                            ? "Show less"
-                            : `+${renamedAttributesInfo.length - 2} more updates`}
-                          <ChevronDown
-                            size={13}
-                            className={`transition-transform duration-200 ${isExpandedUpdates ? "rotate-180" : ""}`}
-                          />
-                        </button>
-                      </span>
-                    )}
-                    {" — "}
-                    <span className="text-[#4B5563]">all product dimensions, formulations, and clinical quality remain 100% identical.</span>
-                  </p>
-
-                  {/* Expandable list when multiple attributes/values are updated */}
-                  {isExpandedUpdates && renamedAttributesInfo.length > 2 && (
-                    <div className="mt-3 pt-3 border-t border-[#E31E24]/20 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fadeIn">
-                      {renamedAttributesInfo.map((infoText, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 rounded-lg bg-white/80 border border-[#E31E24]/15 px-2.5 py-1.5 text-[12px] font-medium text-[#111827]"
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#E31E24] shrink-0" />
-                          <span className="truncate">{infoText}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsDismissedNotice(true)}
-                className="shrink-0 rounded-md p-1 text-gray-400 hover:text-gray-700 hover:bg-red-100/50 transition-colors cursor-pointer"
-                title="Dismiss notice"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="space-y-6">
           <div className="min-w-0 space-y-5">

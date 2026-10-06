@@ -1054,82 +1054,157 @@ export async function bulkPermanentDeletePricing(ids: string[]) {
   const deletedIds: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
-  for (const id of ids) {
+  const uniqueIds = Array.from(new Set((ids ?? []).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return {
+      deletedCount: 0,
+      blockedCount: 0,
+      deletedIds: [],
+      blocked: [],
+    };
+  }
+
+  // 1. Batch query matching rules across all 3 pricing tables in parallel
+  const [productPrices, tierPricings, moqPricings] = await Promise.all([
+    prisma.productPrice.findMany({
+      where: { id: { in: uniqueIds } },
+      include: { product: true, variant: true },
+    }),
+    prisma.tierPricing.findMany({
+      where: { id: { in: uniqueIds } },
+      include: { tier: true, product: true },
+    }),
+    prisma.moqPricing.findMany({
+      where: { id: { in: uniqueIds } },
+      include: { product: true },
+    }),
+  ]);
+
+  const ppMap = new Map(productPrices.map((p) => [p.id, p]));
+  const tpMap = new Map(tierPricings.map((t) => [t.id, t]));
+  const mpMap = new Map(moqPricings.map((m) => [m.id, m]));
+
+  const eligiblePpIds: string[] = [];
+  const eligibleTpIds: string[] = [];
+  const eligibleMpIds: string[] = [];
+
+  for (const id of uniqueIds) {
+    const pp = ppMap.get(id);
+    if (pp) {
+      const ruleName = pp.variantId
+        ? `${pp.product.title} / ${pp.variant?.title ?? "Variant"} country price`
+        : `${pp.product.title} country price`;
+
+      if (!pp.deletedAt) {
+        blocked.push({
+          id,
+          name: ruleName,
+          reason: "Cannot permanently delete an active pricing rule. Please archive it first.",
+        });
+        continue;
+      }
+
+      const check = await checkSoleActiveBasePrice(id, "delete");
+      if (check.isSole) {
+        blocked.push({
+          id,
+          name: ruleName,
+          reason: check.reason || "Cannot permanently delete sole active pricing rule.",
+        });
+        continue;
+      }
+
+      eligiblePpIds.push(id);
+      continue;
+    }
+
+    const tp = tpMap.get(id);
+    if (tp) {
+      const ruleName = `${tp.tier.name} tier pricing (${tp.product.title})`;
+      if (!tp.deletedAt) {
+        blocked.push({
+          id,
+          name: ruleName,
+          reason: "Cannot permanently delete an active tier pricing rule. Please archive it first.",
+        });
+        continue;
+      }
+      eligibleTpIds.push(id);
+      continue;
+    }
+
+    const mp = mpMap.get(id);
+    if (mp) {
+      const ruleName = `${mp.minQuantity}+ MOQ pricing (${mp.product.title})`;
+      if (!mp.deletedAt) {
+        blocked.push({
+          id,
+          name: ruleName,
+          reason: "Cannot permanently delete an active MOQ pricing rule. Please archive it first.",
+        });
+        continue;
+      }
+      eligibleMpIds.push(id);
+      continue;
+    }
+
+    blocked.push({ id, name: id, reason: "Pricing rule not found." });
+  }
+
+  // 2. Batch delete eligible rules in chunks of 100 with fallback
+  const CHUNK_SIZE = 100;
+
+  for (let i = 0; i < eligiblePpIds.length; i += CHUNK_SIZE) {
+    const chunk = eligiblePpIds.slice(i, i + CHUNK_SIZE);
     try {
-      const pp = await prisma.productPrice.findUnique({
-        where: { id },
-        include: { product: true, variant: true },
-      });
-      if (pp) {
-        const ruleName = pp.variantId
-          ? `${pp.product.title} / ${pp.variant?.title ?? "Variant"} country price`
-          : `${pp.product.title} country price`;
-
-        if (!pp.deletedAt) {
-          blocked.push({
-            id,
-            name: ruleName,
-            reason: "Cannot permanently delete an active pricing rule. Please archive it first.",
-          });
-          continue;
+      await prisma.productPrice.deleteMany({ where: { id: { in: chunk } } });
+      deletedIds.push(...chunk);
+    } catch {
+      for (const singleId of chunk) {
+        try {
+          await prisma.productPrice.delete({ where: { id: singleId } });
+          deletedIds.push(singleId);
+        } catch (err: any) {
+          const pp = ppMap.get(singleId);
+          blocked.push({ id: singleId, name: pp?.product.title || singleId, reason: err?.message || "Failed to permanently delete pricing rule." });
         }
-
-        const check = await checkSoleActiveBasePrice(id, "delete");
-        if (check.isSole) {
-          blocked.push({
-            id,
-            name: ruleName,
-            reason: check.reason || "Cannot permanently delete sole active pricing rule.",
-          });
-          continue;
-        }
-
-        await prisma.productPrice.delete({ where: { id } });
-        deletedIds.push(id);
-        continue;
       }
+    }
+  }
 
-      const tp = await prisma.tierPricing.findUnique({
-        where: { id },
-        include: { tier: true, product: true },
-      });
-      if (tp) {
-        const ruleName = `${tp.tier.name} tier pricing (${tp.product.title})`;
-        if (!tp.deletedAt) {
-          blocked.push({
-            id,
-            name: ruleName,
-            reason: "Cannot permanently delete an active tier pricing rule. Please archive it first.",
-          });
-          continue;
+  for (let i = 0; i < eligibleTpIds.length; i += CHUNK_SIZE) {
+    const chunk = eligibleTpIds.slice(i, i + CHUNK_SIZE);
+    try {
+      await prisma.tierPricing.deleteMany({ where: { id: { in: chunk } } });
+      deletedIds.push(...chunk);
+    } catch {
+      for (const singleId of chunk) {
+        try {
+          await prisma.tierPricing.delete({ where: { id: singleId } });
+          deletedIds.push(singleId);
+        } catch (err: any) {
+          const tp = tpMap.get(singleId);
+          blocked.push({ id: singleId, name: tp?.product.title || singleId, reason: err?.message || "Failed to permanently delete tier pricing rule." });
         }
-        await prisma.tierPricing.delete({ where: { id } });
-        deletedIds.push(id);
-        continue;
       }
+    }
+  }
 
-      const mp = await prisma.moqPricing.findUnique({
-        where: { id },
-        include: { product: true },
-      });
-      if (mp) {
-        const ruleName = `${mp.minQuantity}+ MOQ pricing (${mp.product.title})`;
-        if (!mp.deletedAt) {
-          blocked.push({
-            id,
-            name: ruleName,
-            reason: "Cannot permanently delete an active MOQ pricing rule. Please archive it first.",
-          });
-          continue;
+  for (let i = 0; i < eligibleMpIds.length; i += CHUNK_SIZE) {
+    const chunk = eligibleMpIds.slice(i, i + CHUNK_SIZE);
+    try {
+      await prisma.moqPricing.deleteMany({ where: { id: { in: chunk } } });
+      deletedIds.push(...chunk);
+    } catch {
+      for (const singleId of chunk) {
+        try {
+          await prisma.moqPricing.delete({ where: { id: singleId } });
+          deletedIds.push(singleId);
+        } catch (err: any) {
+          const mp = mpMap.get(singleId);
+          blocked.push({ id: singleId, name: mp?.product.title || singleId, reason: err?.message || "Failed to permanently delete MOQ pricing rule." });
         }
-        await prisma.moqPricing.delete({ where: { id } });
-        deletedIds.push(id);
-        continue;
       }
-
-      blocked.push({ id, name: id, reason: "Pricing rule not found." });
-    } catch (err: any) {
-      blocked.push({ id, name: id, reason: err?.message || "Failed to permanently delete pricing rule." });
     }
   }
 
@@ -1145,13 +1220,155 @@ export async function bulkRestorePricing(ids: string[]) {
   const restoredIds: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
-  for (const id of ids) {
-    try {
-      await restorePrice(id);
-      restoredIds.push(id);
-    } catch (err: any) {
-      blocked.push({ id, name: id, reason: err?.message || "Failed to restore pricing rule." });
+  const uniqueIds = Array.from(new Set((ids ?? []).filter(Boolean)));
+  if (uniqueIds.length === 0) {
+    return {
+      restoredCount: 0,
+      blockedCount: 0,
+      restoredIds: [],
+      blocked: [],
+    };
+  }
+
+  // 1. Batch fetch matching archived rules across all 3 tables in parallel
+  const [productPrices, tierPricings, moqPricings] = await Promise.all([
+    prisma.productPrice.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, productId: true, variantId: true, countryId: true, deletedAt: true },
+    }),
+    prisma.tierPricing.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, tierId: true, productId: true, variantId: true, countryId: true, deletedAt: true },
+    }),
+    prisma.moqPricing.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, productId: true, variantId: true, countryId: true, minQuantity: true, deletedAt: true },
+    }),
+  ]);
+
+  const ppMap = new Map(productPrices.map((p) => [p.id, p]));
+  const tpMap = new Map(tierPricings.map((t) => [t.id, t]));
+  const mpMap = new Map(moqPricings.map((m) => [m.id, m]));
+
+  const eligiblePpIds: string[] = [];
+  const eligibleTpIds: string[] = [];
+  const eligibleMpIds: string[] = [];
+
+  for (const id of uniqueIds) {
+    const pp = ppMap.get(id);
+    if (pp) {
+      if (!pp.deletedAt) {
+        blocked.push({ id, name: id, reason: "Pricing rule is already active." });
+        continue;
+      }
+      const conflict = await prisma.productPrice.findFirst({
+        where: {
+          productId: pp.productId,
+          variantId: pp.variantId,
+          countryId: pp.countryId,
+          deletedAt: null,
+          NOT: { id },
+        },
+      });
+      if (conflict) {
+        blocked.push({
+          id,
+          name: id,
+          reason: "Cannot restore this pricing rule because an active pricing rule already exists for this product/variant and country combination.",
+        });
+        continue;
+      }
+      eligiblePpIds.push(id);
+      continue;
     }
+
+    const tp = tpMap.get(id);
+    if (tp) {
+      if (!tp.deletedAt) {
+        blocked.push({ id, name: id, reason: "Tier pricing rule is already active." });
+        continue;
+      }
+      const conflict = await prisma.tierPricing.findFirst({
+        where: {
+          tierId: tp.tierId,
+          productId: tp.productId,
+          variantId: tp.variantId,
+          countryId: tp.countryId,
+          deletedAt: null,
+          NOT: { id },
+        },
+      });
+      if (conflict) {
+        blocked.push({
+          id,
+          name: id,
+          reason: "Cannot restore this tier pricing rule because an active rule already exists for this tier, product/variant, and country combination.",
+        });
+        continue;
+      }
+      eligibleTpIds.push(id);
+      continue;
+    }
+
+    const mp = mpMap.get(id);
+    if (mp) {
+      if (!mp.deletedAt) {
+        blocked.push({ id, name: id, reason: "MOQ pricing rule is already active." });
+        continue;
+      }
+      const conflict = await prisma.moqPricing.findFirst({
+        where: {
+          productId: mp.productId,
+          variantId: mp.variantId,
+          countryId: mp.countryId,
+          minQuantity: mp.minQuantity,
+          deletedAt: null,
+          NOT: { id },
+        },
+      });
+      if (conflict) {
+        blocked.push({
+          id,
+          name: id,
+          reason: "Cannot restore this MOQ pricing rule because an active rule already exists for this MOQ quantity, product/variant, and country combination.",
+        });
+        continue;
+      }
+      eligibleMpIds.push(id);
+      continue;
+    }
+
+    blocked.push({ id, name: id, reason: "Pricing rule not found." });
+  }
+
+  // 2. Batch restore eligible rules in chunks of 100 with updateMany
+  const CHUNK_SIZE = 100;
+
+  for (let i = 0; i < eligiblePpIds.length; i += CHUNK_SIZE) {
+    const chunk = eligiblePpIds.slice(i, i + CHUNK_SIZE);
+    await prisma.productPrice.updateMany({
+      where: { id: { in: chunk } },
+      data: { deletedAt: null },
+    });
+    restoredIds.push(...chunk);
+  }
+
+  for (let i = 0; i < eligibleTpIds.length; i += CHUNK_SIZE) {
+    const chunk = eligibleTpIds.slice(i, i + CHUNK_SIZE);
+    await prisma.tierPricing.updateMany({
+      where: { id: { in: chunk } },
+      data: { deletedAt: null },
+    });
+    restoredIds.push(...chunk);
+  }
+
+  for (let i = 0; i < eligibleMpIds.length; i += CHUNK_SIZE) {
+    const chunk = eligibleMpIds.slice(i, i + CHUNK_SIZE);
+    await prisma.moqPricing.updateMany({
+      where: { id: { in: chunk } },
+      data: { deletedAt: null },
+    });
+    restoredIds.push(...chunk);
   }
 
   return {
@@ -1184,17 +1401,100 @@ async function bulkPricingAction(input: PricingBulkInput) {
     const deletedIds: string[] = [];
     const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
+    const [productPrices, tierPricings, moqPricings] = await Promise.all([
+      prisma.productPrice.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, deletedAt: true },
+      }),
+      prisma.tierPricing.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, deletedAt: true },
+      }),
+      prisma.moqPricing.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, deletedAt: true },
+      }),
+    ]);
+
+    const ppMap = new Map(productPrices.map((p) => [p.id, p]));
+    const tpMap = new Map(tierPricings.map((t) => [t.id, t]));
+    const mpMap = new Map(moqPricings.map((m) => [m.id, m]));
+
+    const eligiblePpIds: string[] = [];
+    const eligibleTpIds: string[] = [];
+    const eligibleMpIds: string[] = [];
+
     for (const id of uniqueIds) {
-      try {
-        await softDeletePrice(id);
-        deletedIds.push(id);
-      } catch (err: any) {
-        blocked.push({
-          id,
-          name: id,
-          reason: err?.message || "Cannot archive pricing rule.",
-        });
+      const pp = ppMap.get(id);
+      if (pp) {
+        if (pp.deletedAt) {
+          deletedIds.push(id);
+          continue;
+        }
+        const check = await checkSoleActiveBasePrice(id, "archive");
+        if (check.isSole) {
+          blocked.push({
+            id,
+            name: id,
+            reason: check.reason || "Cannot archive this pricing rule because it is the only active price available for this product/variant. Add another active base price or fallback first.",
+          });
+          continue;
+        }
+        eligiblePpIds.push(id);
+        continue;
       }
+
+      const tp = tpMap.get(id);
+      if (tp) {
+        if (tp.deletedAt) {
+          deletedIds.push(id);
+          continue;
+        }
+        eligibleTpIds.push(id);
+        continue;
+      }
+
+      const mp = mpMap.get(id);
+      if (mp) {
+        if (mp.deletedAt) {
+          deletedIds.push(id);
+          continue;
+        }
+        eligibleMpIds.push(id);
+        continue;
+      }
+
+      blocked.push({ id, name: id, reason: "Pricing rule not found." });
+    }
+
+    const CHUNK_SIZE = 100;
+    const now = new Date();
+
+    for (let i = 0; i < eligiblePpIds.length; i += CHUNK_SIZE) {
+      const chunk = eligiblePpIds.slice(i, i + CHUNK_SIZE);
+      await prisma.productPrice.updateMany({
+        where: { id: { in: chunk } },
+        data: { deletedAt: now },
+      });
+      deletedIds.push(...chunk);
+    }
+
+    for (let i = 0; i < eligibleTpIds.length; i += CHUNK_SIZE) {
+      const chunk = eligibleTpIds.slice(i, i + CHUNK_SIZE);
+      await prisma.tierPricing.updateMany({
+        where: { id: { in: chunk } },
+        data: { deletedAt: now },
+      });
+      deletedIds.push(...chunk);
+    }
+
+    for (let i = 0; i < eligibleMpIds.length; i += CHUNK_SIZE) {
+      const chunk = eligibleMpIds.slice(i, i + CHUNK_SIZE);
+      await prisma.moqPricing.updateMany({
+        where: { id: { in: chunk } },
+        data: { deletedAt: now },
+      });
+      deletedIds.push(...chunk);
     }
 
     return {
@@ -1211,14 +1511,15 @@ async function bulkPricingAction(input: PricingBulkInput) {
     if (rules.length !== uniqueIds.length) throw new AppError("One or more pricing rules were not found.", 404);
 
     if (input.action === "ENABLE") {
-      return prisma.$transaction(
-        uniqueIds.map((ruleId) =>
-          prisma.productPrice.update({
-            where: { id: ruleId },
-            data: { status: "ACTIVE" },
-          }),
-        ),
-      );
+      await prisma.productPrice.updateMany({
+        where: { id: { in: uniqueIds } },
+        data: { status: "ACTIVE" },
+      });
+      return {
+        affected: uniqueIds.length,
+        affectedCount: uniqueIds.length,
+        updatedIds: uniqueIds,
+      };
     }
 
     if (input.action === "DISABLE") {
@@ -1242,11 +1543,9 @@ async function bulkPricingAction(input: PricingBulkInput) {
       }
 
       if (updatedIds.length > 0) {
-        await prisma.$transaction(async (tx) => {
-          await tx.productPrice.updateMany({
-            where: { id: { in: updatedIds } },
-            data: { status: "INACTIVE" },
-          });
+        await prisma.productPrice.updateMany({
+          where: { id: { in: updatedIds } },
+          data: { status: "INACTIVE" },
         });
       }
 
@@ -1269,14 +1568,15 @@ async function bulkPricingAction(input: PricingBulkInput) {
 
     if (input.countryId) {
       const country = await assertActiveCountry(input.countryId);
-      return prisma.$transaction(
-        rules.map((rule) =>
-          prisma.productPrice.update({
-            where: { id: rule.id },
-            data: { countryId: country.id },
-          }),
-        ),
-      );
+      await prisma.productPrice.updateMany({
+        where: { id: { in: uniqueIds } },
+        data: { countryId: country.id },
+      });
+      return {
+        affected: uniqueIds.length,
+        affectedCount: uniqueIds.length,
+        updatedIds: uniqueIds,
+      };
     }
 
     throw new AppError("Unsupported bulk action for product pricing rules.", 400);
@@ -1292,27 +1592,29 @@ async function bulkPricingAction(input: PricingBulkInput) {
 
     if (input.countryId) {
       const country = await assertActiveCountry(input.countryId);
-      return prisma.$transaction(
-        rules.map((rule) =>
-          prisma.tierPricing.update({
-            where: { id: rule.id },
-            data: { countryId: country.id },
-          }),
-        ),
-      );
+      await prisma.tierPricing.updateMany({
+        where: { id: { in: uniqueIds } },
+        data: { countryId: country.id },
+      });
+      return {
+        affected: uniqueIds.length,
+        affectedCount: uniqueIds.length,
+        updatedIds: uniqueIds,
+      };
     }
 
     if (input.tierId) {
       const tierId = input.tierId;
       await assertTierUsable(tierId);
-      return prisma.$transaction(
-        rules.map((rule) =>
-          prisma.tierPricing.update({
-            where: { id: rule.id },
-            data: { tierId },
-          }),
-        ),
-      );
+      await prisma.tierPricing.updateMany({
+        where: { id: { in: uniqueIds } },
+        data: { tierId },
+      });
+      return {
+        affected: uniqueIds.length,
+        affectedCount: uniqueIds.length,
+        updatedIds: uniqueIds,
+      };
     }
 
     throw new AppError("Unsupported bulk action for tier pricing rules.", 400);
@@ -1328,14 +1630,15 @@ async function bulkPricingAction(input: PricingBulkInput) {
 
     if (input.countryId) {
       const country = await assertActiveCountry(input.countryId);
-      return prisma.$transaction(
-        rules.map((rule) =>
-          prisma.moqPricing.update({
-            where: { id: rule.id },
-            data: { countryId: country.id },
-          }),
-        ),
-      );
+      await prisma.moqPricing.updateMany({
+        where: { id: { in: uniqueIds } },
+        data: { countryId: country.id },
+      });
+      return {
+        affected: uniqueIds.length,
+        affectedCount: uniqueIds.length,
+        updatedIds: uniqueIds,
+      };
     }
 
     throw new AppError("Unsupported bulk action for MOQ pricing rules.", 400);
@@ -1699,9 +2002,12 @@ async function importPriceSpreadsheet(filePathOrRows: string | Record<string, un
   }
 
   const summary = { created: 0, updated: 0 };
-  await prisma.$transaction(async (tx) => {
-    for (const raw of rawRows) {
-      const row = raw as Record<string, any>;
+  const CHUNK_SIZE = 100;
+  for (let chunkStart = 0; chunkStart < rawRows.length; chunkStart += CHUNK_SIZE) {
+    const chunkRows = rawRows.slice(chunkStart, chunkStart + CHUNK_SIZE);
+    await prisma.$transaction(async (tx) => {
+      for (const raw of chunkRows) {
+        const row = raw as Record<string, any>;
       const productId = getRowField(row, "productId", "product_id", "id");
       const productCode = getRowField(row, "productCode", "product_code", "code");
       const productSlug = getRowField(row, "productSlug", "product_slug", "slug");
@@ -1839,7 +2145,8 @@ async function importPriceSpreadsheet(filePathOrRows: string | Record<string, un
         }
       }
     }
-  });
+  }, { timeout: 30000, maxWait: 10000 });
+}
 
   return {
     ...summary,
@@ -1848,10 +2155,110 @@ async function importPriceSpreadsheet(filePathOrRows: string | Record<string, un
 }
 
 export async function getPricingDashboard() {
-  const { counts, data: recentRules } = await collectPricingRows({});
+  const [
+    productPricesTotal,
+    productPricesActive,
+    productPricesArchived,
+    productPricesVariant,
+    productPricesCustomerRole,
+    tierPricesTotal,
+    tierPricesActive,
+    tierPricesArchived,
+    moqPricesTotal,
+    moqPricesActive,
+    moqPricesArchived,
+    recentProductPrices,
+    recentTierPrices,
+    recentMoqPrices,
+  ] = await Promise.all([
+    prisma.productPrice.count({ where: { deletedAt: null, product: { deletedAt: null } } }),
+    prisma.productPrice.count({ where: { status: "ACTIVE", deletedAt: null, product: { deletedAt: null } } }),
+    prisma.productPrice.count({ where: { deletedAt: { not: null } } }),
+    prisma.productPrice.count({ where: { variantId: { not: null }, deletedAt: null, product: { deletedAt: null } } }),
+    prisma.productPrice.count({
+      where: {
+        OR: [{ dealerPrice: { not: null } }, { distributorPrice: { not: null } }],
+        deletedAt: null,
+        product: { deletedAt: null },
+      },
+    }),
+    prisma.tierPricing.count({ where: { deletedAt: null, product: { deletedAt: null } } }),
+    prisma.tierPricing.count({
+      where: {
+        deletedAt: null,
+        product: { deletedAt: null, status: "ACTIVE" },
+        country: { status: "ACTIVE" },
+        tier: { status: "ACTIVE" },
+      },
+    }),
+    prisma.tierPricing.count({ where: { deletedAt: { not: null } } }),
+    prisma.moqPricing.count({ where: { deletedAt: null, product: { deletedAt: null } } }),
+    prisma.moqPricing.count({
+      where: {
+        deletedAt: null,
+        product: { deletedAt: null, status: "ACTIVE" },
+        country: { status: "ACTIVE" },
+      },
+    }),
+    prisma.moqPricing.count({ where: { deletedAt: { not: null } } }),
+    prisma.productPrice.findMany({
+      where: { deletedAt: null, product: { deletedAt: null } },
+      take: 10,
+      orderBy: { updatedAt: "desc" },
+      include: {
+        product: { select: { id: true, title: true, sku: true, status: true } },
+        variant: { select: { id: true, title: true, sku: true, status: true } },
+        country: { select: { id: true, name: true, code: true, status: true } },
+        currency: true,
+      },
+    }),
+    prisma.tierPricing.findMany({
+      where: { deletedAt: null, product: { deletedAt: null } },
+      take: 10,
+      orderBy: { updatedAt: "desc" },
+      include: {
+        tier: { select: { id: true, name: true, status: true } },
+        product: { select: { id: true, title: true, sku: true, status: true } },
+        variant: { select: { id: true, title: true, sku: true, status: true } },
+        country: { select: { id: true, name: true, code: true, status: true } },
+      },
+    }),
+    prisma.moqPricing.findMany({
+      where: { deletedAt: null, product: { deletedAt: null } },
+      take: 10,
+      orderBy: { updatedAt: "desc" },
+      include: {
+        product: { select: { id: true, title: true, sku: true, status: true } },
+        variant: { select: { id: true, title: true, sku: true, status: true } },
+        country: { select: { id: true, name: true, code: true, status: true } },
+      },
+    }),
+  ]);
+
+  const totalRules = productPricesTotal + tierPricesTotal + moqPricesTotal;
+  const activeRules = productPricesActive + tierPricesActive + moqPricesActive;
+  const inactiveRules = totalRules - activeRules;
+  const archivedRules = productPricesArchived + tierPricesArchived + moqPricesArchived;
+
+  const recentRules: NormalizedPricingRow[] = [
+    ...recentProductPrices.map((p, i) => mapProductPriceRow(p, i)),
+    ...recentTierPrices.map((t, i) => mapTierPriceRow(t, i)),
+    ...recentMoqPrices.map((m, i) => mapMoqPriceRow(m, i)),
+  ]
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, 10);
+
   return {
-    ...counts,
-    recentlyUpdatedRules: recentRules.slice(0, 10),
+    totalRules,
+    activeRules,
+    inactiveRules,
+    archivedRules,
+    countryPricingRules: productPricesTotal,
+    tierPricingRules: tierPricesTotal,
+    moqPricingRules: moqPricesTotal,
+    variantPricingRules: productPricesVariant,
+    customerSpecificPricing: productPricesCustomerRole,
+    recentlyUpdatedRules: recentRules,
   };
 }
 
@@ -2094,8 +2501,23 @@ export async function previewPricing(input: PricingPreviewInput) {
 }
 
 export async function exportPricingSpreadsheet(query: PricingListQuery) {
-  const result = await collectPricingRows(query);
-  return exportRows(result.data);
+  const BATCH_SIZE = 500;
+  let page = 1;
+  const allRows: NormalizedPricingRow[] = [];
+
+  while (true) {
+    const result = await collectPricingRows({
+      ...query,
+      page: String(page),
+      limit: String(BATCH_SIZE),
+    });
+    if (!result.data || result.data.length === 0) break;
+    allRows.push(...result.data);
+    if (result.data.length < BATCH_SIZE) break;
+    page += 1;
+  }
+
+  return exportRows(allRows);
 }
 
 export function generateSamplePricingTemplate() {

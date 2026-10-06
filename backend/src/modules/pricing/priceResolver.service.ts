@@ -21,7 +21,19 @@ export type TaxBreakdownStructure = {
   ruleIdsApplied: string[];
 };
 
-type ResolvePriceInput = {
+export type SharedPriceResolutionContext = {
+  pricingContext?: ResolvedPricingContext;
+  destinationCountryCode?: string;
+  defaultSellerState?: string;
+  customerTaxStatus?: {
+    customerTaxExempt: boolean;
+    customerTaxId: string | null;
+    customerTaxIdType: string | null;
+  };
+  countryTaxRules?: any[];
+};
+
+export type ResolvePriceInput = {
   productId: string;
   variantId?: string | null;
   countryId: string;
@@ -31,9 +43,10 @@ type ResolvePriceInput = {
   quantity: number;
   buyerState?: string | null;
   sellerState?: string | null;
+  sharedContext?: SharedPriceResolutionContext;
 };
 
-type ResolvedPricingContext = {
+export type ResolvedPricingContext = {
   role: Awaited<ReturnType<typeof resolveCustomerRoleFromCustomer>>;
   tierId: string | null;
   tierEligibleForCountry: boolean;
@@ -362,6 +375,59 @@ async function resolvePricingContext(input: ResolvePriceInput): Promise<Resolved
   };
 }
 
+export async function createSharedPricingContext(options: {
+  countryId: string;
+  customerId?: string | null;
+  customerRoleKey?: string | null;
+  tierId?: string | null;
+}): Promise<SharedPriceResolutionContext> {
+  const [pricingContext, shipFromStateSetting, destinationCountry, customer, countryTaxRules] = await Promise.all([
+    resolvePricingContext({
+      productId: "",
+      countryId: options.countryId,
+      customerId: options.customerId,
+      customerRoleKey: options.customerRoleKey,
+      tierId: options.tierId,
+      quantity: 1,
+    }),
+    prisma.setting.findFirst({ where: { key: "tax.ship_from_state" } }),
+    prisma.country.findUnique({ where: { id: options.countryId }, select: { code: true } }),
+    options.customerId
+      ? prisma.customer.findUnique({
+          where: { id: options.customerId },
+          select: { taxId: true, taxIdType: true, taxIdStatus: true },
+        })
+      : null,
+    (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
+      where: {
+        OR: [
+          { countries: { some: { countryId: options.countryId } } },
+          { countries: { none: {} } },
+        ],
+        status: "ACTIVE",
+      },
+      include: {
+        products: { select: { id: true } },
+        categories: { select: { id: true } },
+        variants: { select: { id: true } },
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+  ]);
+
+  return {
+    pricingContext,
+    destinationCountryCode: destinationCountry?.code?.toUpperCase() || "IN",
+    defaultSellerState: shipFromStateSetting?.value || "Punjab",
+    customerTaxStatus: {
+      customerTaxExempt: customer?.taxIdStatus === "VALID",
+      customerTaxId: customer?.taxIdStatus === "VALID" ? customer.taxId : null,
+      customerTaxIdType: customer?.taxIdStatus === "VALID" ? customer.taxIdType : null,
+    },
+    countryTaxRules,
+  };
+}
+
 async function findTierRule(
   input: ResolvePriceInput,
   tierId: string,
@@ -449,7 +515,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
       where: { id: input.productId },
       select: { categoryId: true, collections: { select: { collectionId: true } } },
     }),
-    resolvePricingContext(input),
+    input.sharedContext?.pricingContext ?? resolvePricingContext(input),
   ]);
 
   if (!basePrice) {
@@ -575,18 +641,20 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   let totalTaxAmount = 0;
 
   // 1. Fetch dynamic settings and tax rules
-  const [shipFromStateSetting, destinationCountry] = await Promise.all([
-    prisma.setting.findFirst({ where: { key: "tax.ship_from_state" } }),
-    prisma.country.findUnique({ where: { id: input.countryId }, select: { code: true } }),
-  ]);
-  const defaultSellerState = shipFromStateSetting?.value || "Punjab";
-  const destinationCountryCode = destinationCountry?.code?.toUpperCase() || "IN";
+  const [shipFromStateSetting, destinationCountry] = input.sharedContext
+    ? [null, null]
+    : await Promise.all([
+        prisma.setting.findFirst({ where: { key: "tax.ship_from_state" } }),
+        prisma.country.findUnique({ where: { id: input.countryId }, select: { code: true } }),
+      ]);
+  const defaultSellerState = input.sharedContext?.defaultSellerState ?? (shipFromStateSetting?.value || "Punjab");
+  const destinationCountryCode = input.sharedContext?.destinationCountryCode ?? (destinationCountry?.code?.toUpperCase() || "IN");
 
   // 2. Fetch customer tax verification status
-  let customerTaxExempt = false;
-  let customerTaxId = null;
-  let customerTaxIdType = null;
-  if (input.customerId) {
+  let customerTaxExempt = input.sharedContext?.customerTaxStatus?.customerTaxExempt ?? false;
+  let customerTaxId = input.sharedContext?.customerTaxStatus?.customerTaxId ?? null;
+  let customerTaxIdType = input.sharedContext?.customerTaxStatus?.customerTaxIdType ?? null;
+  if (!input.sharedContext?.customerTaxStatus && input.customerId) {
     const customer = await prisma.customer.findUnique({
       where: { id: input.customerId },
       select: { taxId: true, taxIdType: true, taxIdStatus: true }
@@ -599,7 +667,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
   }
 
   // 3. Fetch tax rules from database
-  const countryTaxRules = (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
+  const countryTaxRules = (input.sharedContext?.countryTaxRules ?? (await (prisma as unknown as { taxRule: { findMany: (args: unknown) => Promise<any[]> } }).taxRule.findMany({
     where: {
       OR: [
         { countries: { some: { countryId: input.countryId } } },
@@ -613,7 +681,7 @@ export async function resolvePrice(input: ResolvePriceInput): Promise<ResolvedPr
       variants: { select: { id: true } },
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  })) as any[];
+  }))) as any[];
 
   // Find rules matching specific variant first
   const variantSpecificRules = input.variantId

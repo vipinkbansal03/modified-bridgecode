@@ -503,6 +503,8 @@ export async function bulkPermanentDeleteCustomers(input: { ids: string[] }) {
     error?: string;
   }> = [];
 
+  const eligibleCustomers: Array<{ id: string; name: string; email?: string }> = [];
+
   for (const cust of customers) {
     const name = `${cust.firstName} ${cust.lastName}`.trim() || cust.email;
     if (!cust.deletedAt) {
@@ -553,23 +555,49 @@ export async function bulkPermanentDeleteCustomers(input: { ids: string[] }) {
       continue;
     }
 
+    eligibleCustomers.push({ id: cust.id, name, email: cust.email });
+  }
+
+  // Batch delete eligible customers in chunks of 100 with per-record fallback
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < eligibleCustomers.length; i += CHUNK_SIZE) {
+    const chunk = eligibleCustomers.slice(i, i + CHUNK_SIZE);
+    const chunkIds = chunk.map((c) => c.id);
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.deviceToken.deleteMany({ where: { customerId: cust.id } });
-        await tx.wishlist.deleteMany({ where: { customerId: cust.id } });
-        await tx.notification.deleteMany({ where: { customerId: cust.id } });
-        await tx.customerAddress.deleteMany({ where: { customerId: cust.id } });
-        await tx.customer.delete({ where: { id: cust.id } });
-      });
-      results.push({ id: cust.id, name, success: true });
-    } catch (err) {
-      results.push({
-        id: cust.id,
-        name,
-        email: cust.email,
-        success: false,
-        error: err instanceof Error ? err.message : "Failed to permanently delete customer.",
-      });
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.deviceToken.deleteMany({ where: { customerId: { in: chunkIds } } });
+          await tx.wishlist.deleteMany({ where: { customerId: { in: chunkIds } } });
+          await tx.notification.deleteMany({ where: { customerId: { in: chunkIds } } });
+          await tx.customerAddress.deleteMany({ where: { customerId: { in: chunkIds } } });
+          await tx.customer.deleteMany({ where: { id: { in: chunkIds } } });
+        },
+        { timeout: 30000 },
+      );
+      for (const item of chunk) {
+        results.push({ id: item.id, name: item.name, success: true });
+      }
+    } catch {
+      for (const item of chunk) {
+        try {
+          await prisma.$transaction(async (tx) => {
+            await tx.deviceToken.deleteMany({ where: { customerId: item.id } });
+            await tx.wishlist.deleteMany({ where: { customerId: item.id } });
+            await tx.notification.deleteMany({ where: { customerId: item.id } });
+            await tx.customerAddress.deleteMany({ where: { customerId: item.id } });
+            await tx.customer.delete({ where: { id: item.id } });
+          });
+          results.push({ id: item.id, name: item.name, success: true });
+        } catch (err) {
+          results.push({
+            id: item.id,
+            name: item.name,
+            email: item.email,
+            success: false,
+            error: err instanceof Error ? err.message : "Failed to permanently delete customer.",
+          });
+        }
+      }
     }
   }
 

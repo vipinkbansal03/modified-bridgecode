@@ -219,11 +219,21 @@ export async function publicListProducts(
   return { data: products.map(toPublicProduct), total, page, limit };
 }
 
+const FACETS_CACHE_TTL_MS = 5 * 60 * 1000;
+const publicFacetsCache = new Map<string, { data: Array<{ attributeName: string; value: string }>; expiresAt: number }>();
+
 export async function publicListProductFacets(countryCode?: string) {
   const country = await resolvePublicCountry(countryCode);
   if (!country) return [];
 
+  const now = Date.now();
+  const cached = publicFacetsCache.get(country.id);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   const rows = await prisma.productVariantAttributeValue.findMany({
+    distinct: ["attributeId", "attributeValueId"],
     where: {
       attributeValue: { status: "ACTIVE" },
       variant: {
@@ -258,6 +268,7 @@ export async function publicListProductFacets(countryCode?: string) {
       value: row.attributeValue.value,
     });
   }
+  publicFacetsCache.set(country.id, { data: facets, expiresAt: now + FACETS_CACHE_TTL_MS });
   return facets;
 }
 
@@ -1069,55 +1080,86 @@ export async function publicSearch(
 
 // ─── Currency / country detection ────────────────────────
 
+const PUBLIC_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let publicCurrenciesCache: { data: any[]; expiresAt: number } | null = null;
+
 export async function getPublicCurrencies() {
-  return prisma.currency.findMany({
+  const now = Date.now();
+  if (publicCurrenciesCache && publicCurrenciesCache.expiresAt > now) {
+    return publicCurrenciesCache.data;
+  }
+  const data = await prisma.currency.findMany({
     where: { status: "ACTIVE" },
     orderBy: { code: "asc" },
   });
+  publicCurrenciesCache = { data, expiresAt: now + PUBLIC_CACHE_TTL_MS };
+  return data;
 }
 
+let publicCountriesCache: { data: any[]; expiresAt: number } | null = null;
+
 export async function getPublicCountries() {
-  return prisma.country.findMany({
+  const now = Date.now();
+  if (publicCountriesCache && publicCountriesCache.expiresAt > now) {
+    return publicCountriesCache.data;
+  }
+  const data = await prisma.country.findMany({
     where: {
       status: "ACTIVE",
     },
     include: { currency: true },
     orderBy: { name: "asc" },
   });
+  publicCountriesCache = { data, expiresAt: now + PUBLIC_CACHE_TTL_MS };
+  return data;
 }
 
 // ─── Inventory availability check ────────────────────────
 
-async function resolvePublicCountry(countryCode?: string): Promise<{ id: string; code: string } | null> {
-  const normalizedCode = countryCode?.trim().toUpperCase();
+const publicCountryResolutionCache = new Map<string, { data: { id: string; code: string } | null; expiresAt: number }>();
 
-  if (normalizedCode) {
-    return prisma.country.findFirst({
+async function resolvePublicCountry(countryCode?: string): Promise<{ id: string; code: string } | null> {
+  const normalizedCode = countryCode?.trim().toUpperCase() || "__DEFAULT__";
+  const now = Date.now();
+  const cached = publicCountryResolutionCache.get(normalizedCode);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  let result: { id: string; code: string } | null = null;
+  if (normalizedCode !== "__DEFAULT__") {
+    result = await prisma.country.findFirst({
       where: {
         code: normalizedCode,
         status: "ACTIVE",
       },
       select: { id: true, code: true },
     });
+  } else {
+    const defaultCountry = await prisma.country.findFirst({
+      where: {
+        isDefault: true,
+        status: "ACTIVE",
+      },
+      select: { id: true, code: true },
+    });
+
+    if (defaultCountry) {
+      result = defaultCountry;
+    } else {
+      result = await prisma.country.findFirst({
+        where: {
+          status: "ACTIVE",
+        },
+        orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+        select: { id: true, code: true },
+      });
+    }
   }
 
-  const defaultCountry = await prisma.country.findFirst({
-    where: {
-      isDefault: true,
-      status: "ACTIVE",
-    },
-    select: { id: true, code: true },
-  });
-
-  if (defaultCountry) return defaultCountry;
-
-  return prisma.country.findFirst({
-    where: {
-      status: "ACTIVE",
-    },
-    orderBy: [{ isDefault: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
-    select: { id: true, code: true },
-  });
+  publicCountryResolutionCache.set(normalizedCode, { data: result, expiresAt: now + PUBLIC_CACHE_TTL_MS });
+  return result;
 }
 
 export async function checkInventory(

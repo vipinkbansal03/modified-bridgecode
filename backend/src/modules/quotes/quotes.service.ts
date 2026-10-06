@@ -2,8 +2,8 @@ import { prisma } from "../../config/database";
 import { Prisma } from "@prisma/client";
 import { AppError, getPagination } from "../../utils/apiResponse";
 import { sanitizeCustomerName, cleanSingleName, isValidCustomerName } from "../../utils/nameValidation";
-import { assertActiveCountry, assertSellableInCountry } from "../countries/countryAvailability.service";
-import { resolvePrice } from "../pricing/priceResolver.service";
+import { assertActiveCountry, assertSellableInCountry, assertSellableInCountryBatch } from "../countries/countryAvailability.service";
+import { resolvePrice, createSharedPricingContext } from "../pricing/priceResolver.service";
 import { sendQuoteConvertedEmail, sendQuoteSentEmail } from "../../utils/email";
 import { reserveOrderInventory } from "../inventory/inventoryReservation.service";
 import { resolveItemFulfillmentWarehouse } from "../warehouse/warehouseResolver.service";
@@ -132,6 +132,19 @@ export async function createAdminQuote(input: {
   if (!fallbackCountryId) throw new AppError("Country is required for quote pricing.", 400);
   const country = await assertActiveCountry(fallbackCountryId);
 
+  await assertSellableInCountryBatch({
+    countryId: country.id,
+    items: input.items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+    })),
+  });
+
+  const sharedPricingContext = await createSharedPricingContext({
+    countryId: country.id,
+    customerId: customer?.id ?? null,
+  });
+
   const quoteItems = await Promise.all(input.items.map(async (item) => {
     const product = productMap.get(item.productId);
     if (!product) throw new AppError("Product not found.", 400);
@@ -144,12 +157,6 @@ export async function createAdminQuote(input: {
     if (!Number.isInteger(quantity) || quantity < 1) {
       throw new AppError("Quote item quantity must be at least 1.", 400);
     }
-
-    await assertSellableInCountry({
-      countryId: country.id,
-      productId: product.id,
-      variantId: variant?.id ?? null,
-    });
 
     const overridePrice = item.overridePrice === undefined || item.overridePrice === null || item.overridePrice === ""
       ? null
@@ -166,6 +173,7 @@ export async function createAdminQuote(input: {
           countryId: country.id,
           customerId: customer?.id ?? null,
           quantity,
+          sharedContext: sharedPricingContext,
         });
 
     const unitPrice = overridePrice ?? resolvedPrice!.finalPrice;
@@ -541,35 +549,86 @@ export async function bulkPermanentDeleteQuotes(ids: string[]) {
   const deletedIds: string[] = [];
   const blocked: Array<{ id: string; name: string; reason: string }> = [];
 
-  for (const id of ids) {
-    try {
-      const quote = await prisma.quote.findUnique({
-        where: { id },
-        select: { id: true, quoteNumber: true },
-      });
-      if (!quote) {
-        blocked.push({ id, name: id, reason: "Quote not found." });
-        continue;
-      }
-      await permanentDeleteQuote(id);
-      deletedIds.push(id);
-    } catch (error: any) {
-      const quote = await prisma.quote.findUnique({
-        where: { id },
-        select: { quoteNumber: true },
-      });
+  if (!ids || ids.length === 0) {
+    return {
+      deletedCount: 0,
+      blockedCount: 0,
+      deletedIds: [],
+      blocked: [],
+    };
+  }
+
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+
+  // 1. Fetch requested quotes in safe chunks
+  const quotes: Array<{ id: string; quoteNumber: string | null; deletedAt: Date | null }> = [];
+  const FETCH_CHUNK = 500;
+  for (let i = 0; i < uniqueIds.length; i += FETCH_CHUNK) {
+    const chunk = uniqueIds.slice(i, i + FETCH_CHUNK);
+    const rows = await prisma.quote.findMany({
+      where: { id: { in: chunk } },
+      select: { id: true, quoteNumber: true, deletedAt: true },
+    });
+    quotes.push(...rows);
+  }
+  const quoteMap = new Map(quotes.map((q) => [q.id, q]));
+
+  const toDeleteIds: string[] = [];
+
+  for (const id of uniqueIds) {
+    const quote = quoteMap.get(id);
+    if (!quote) {
+      blocked.push({ id, name: id, reason: "Quote not found." });
+      continue;
+    }
+
+    if (!quote.deletedAt) {
       blocked.push({
         id,
-        name: quote?.quoteNumber ? `Quote #${quote.quoteNumber}` : id,
-        reason: error?.message || "Failed to permanently delete quote.",
+        name: quote.quoteNumber ? `Quote #${quote.quoteNumber}` : id,
+        reason: "Cannot permanently delete quote: Quote must be archived first.",
       });
+      continue;
+    }
+
+    toDeleteIds.push(id);
+  }
+
+  // 2. Batch delete unblocked quotes in chunks of 100 with set-based deleteMany
+  const BATCH_DELETE_CHUNK = 100;
+  for (let i = 0; i < toDeleteIds.length; i += BATCH_DELETE_CHUNK) {
+    const chunk = toDeleteIds.slice(i, i + BATCH_DELETE_CHUNK);
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.quoteItem.deleteMany({ where: { quoteId: { in: chunk } } });
+          await tx.quoteNote.deleteMany({ where: { quoteId: { in: chunk } } });
+          await tx.quote.deleteMany({ where: { id: { in: chunk } } });
+        },
+        { timeout: 30000 }
+      );
+      deletedIds.push(...chunk);
+    } catch {
+      for (const chunkId of chunk) {
+        try {
+          await permanentDeleteQuote(chunkId);
+          deletedIds.push(chunkId);
+        } catch (individualError: any) {
+          const q = quoteMap.get(chunkId);
+          blocked.push({
+            id: chunkId,
+            name: q?.quoteNumber ? `Quote #${q.quoteNumber}` : chunkId,
+            reason: individualError?.message || "Failed to permanently delete quote.",
+          });
+        }
+      }
     }
   }
 
   return {
     deletedCount: deletedIds.length,
     blockedCount: blocked.length,
-    deletedIds,
-    blocked,
+    deletedIds: deletedIds.length > 500 ? deletedIds.slice(0, 500) : deletedIds,
+    blocked: blocked.slice(0, 100),
   };
 }

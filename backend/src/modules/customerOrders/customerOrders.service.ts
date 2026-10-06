@@ -4,8 +4,8 @@ import { AppError } from "../../utils/apiResponse";
 import { sanitizeCustomerName } from "../../utils/nameValidation";
 import { decrementVariantStock } from "../inventory/inventory.service";
 import { reserveOrderInventory, releaseOrderReservation } from "../inventory/inventoryReservation.service";
-import { assertSellableInCountry } from "../countries/countryAvailability.service";
-import { resolvePrice } from "../pricing/priceResolver.service";
+import { assertSellableInCountry, assertSellableInCountryBatch } from "../countries/countryAvailability.service";
+import { resolvePrice, createSharedPricingContext } from "../pricing/priceResolver.service";
 import { calculateRequiredShipping } from "../shipping/shipping.service";
 import { calculateShipment } from "../shipping/shippingCalculator.service";
 import { validateCoupon } from "../coupons/coupons.service";
@@ -108,6 +108,20 @@ async function calculateCustomerOrder(
     throw new AppError("Selected shipping country is inactive.", 400);
   }
 
+  const resolvedOrderCountryId = orderCountry.id ?? products[0]?.defaultCountryId;
+  await assertSellableInCountryBatch({
+    countryId: resolvedOrderCountryId,
+    items: input.items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId ?? null,
+    })),
+  });
+
+  const sharedPricingContext = await createSharedPricingContext({
+    countryId: resolvedOrderCountryId,
+    customerId: customer.id,
+  });
+
   const productMap = new Map(products.map((p) => [p.id, p]));
   const variantMap = new Map(variants.map((v) => [v.id, v]));
   const orderItems = await Promise.all(
@@ -136,11 +150,6 @@ async function calculateCustomerOrder(
       }
 
       const itemCountryId = orderCountry.id ?? product.defaultCountryId;
-      await assertSellableInCountry({
-        countryId: itemCountryId,
-        productId: product.id,
-        variantId: variant?.id ?? null,
-      });
       const resolvedPrice = await resolvePrice({
         productId: product.id,
         variantId: variant?.id ?? null,
@@ -149,6 +158,7 @@ async function calculateCustomerOrder(
         quantity: item.quantity,
         buyerState: input.shippingAddress?.state ?? null,
         sellerState: stockRecord?.warehouse?.state ?? null,
+        sharedContext: sharedPricingContext,
       });
 
       if (resolvedPrice.finalPrice <= 0 || resolvedPrice.basePrice <= 0) {

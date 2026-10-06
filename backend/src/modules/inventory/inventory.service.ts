@@ -590,25 +590,32 @@ export async function bulkUpdateInventory(input: InventoryBulkUpdateInput) {
 
   const results = uniqueIds.map((id) => ({ id, success: false as boolean, error: undefined as string | undefined }));
 
-  await prisma.$transaction(async (tx) => {
-    for (let index = 0; index < uniqueIds.length; index += 1) {
-      const id = uniqueIds[index];
-      try {
-        await updateInventory(
-          id,
-          {
-            ...(stock !== undefined ? { stock } : {}),
-            ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
-            ...(warehouseId !== undefined ? { warehouseId } : {}),
-          },
-          tx,
-        );
-        results[index].success = true;
-      } catch (error) {
-        results[index].error = error instanceof Error ? error.message : "Failed to update inventory.";
-      }
-    }
-  });
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    const chunk = uniqueIds.slice(i, i + BATCH_SIZE);
+    await prisma.$transaction(
+      async (tx) => {
+        for (const id of chunk) {
+          const index = uniqueIds.indexOf(id);
+          try {
+            await updateInventory(
+              id,
+              {
+                ...(stock !== undefined ? { stock } : {}),
+                ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
+                ...(warehouseId !== undefined ? { warehouseId } : {}),
+              },
+              tx,
+            );
+            results[index].success = true;
+          } catch (error) {
+            results[index].error = error instanceof Error ? error.message : "Failed to update inventory.";
+          }
+        }
+      },
+      { timeout: 30000 }
+    );
+  }
 
   return {
     results,
@@ -841,60 +848,65 @@ export async function importInventorySpreadsheet(filePathOrRows: string | any[],
   }
 
   const summary = { created: 0, updated: 0 };
+  const CHUNK_SIZE = 100;
 
-  await prisma.$transaction(async (tx) => {
-    for (const [index, row] of preview.rows.entries()) {
-      const variant =
-        (row.variantId ? preview.variantById.get(row.variantId) : undefined) ||
-        (row.variantSku ? preview.variantBySku.get(row.variantSku) : undefined) ||
-        (row.productSku ? preview.variantsByProductSku.get(row.productSku) : undefined);
+  for (let i = 0; i < preview.rows.length; i += CHUNK_SIZE) {
+    const chunk = preview.rows.slice(i, i + CHUNK_SIZE);
+    await prisma.$transaction(async (tx) => {
+      for (const [chunkIdx, row] of chunk.entries()) {
+        const index = i + chunkIdx;
+        const variant =
+          (row.variantId ? preview.variantById.get(row.variantId) : undefined) ||
+          (row.variantSku ? preview.variantBySku.get(row.variantSku) : undefined) ||
+          (row.productSku ? preview.variantsByProductSku.get(row.productSku) : undefined);
 
-      if (!variant) {
-        throw new AppError(`Variant not found during import on row ${index + 2}.`, 400);
-      }
-
-      const warehouseId = row.warehouseId ? preview.countryByCode.get(row.warehouseId)?.id ?? null : null;
-      const existing = await tx.inventory.findFirst({ where: { variantId: variant.id, warehouseId } });
-      const baseInventory = variant.inventories[0];
-      const stock = parseOptionalInt(row.stock, "Stock") ?? existing?.stock ?? baseInventory?.stock ?? 0;
-      const reservedStock = parseOptionalInt(row.reservedStock, "Reserved stock") ?? existing?.reservedStock ?? baseInventory?.reservedStock ?? 0;
-      const lowStockThreshold = parseOptionalInt(row.lowStockThreshold, "Low stock threshold") ?? existing?.lowStockThreshold ?? baseInventory?.lowStockThreshold ?? 10;
-      if (stock < 0) throw new AppError("Stock cannot be negative.", 400);
-      if (reservedStock < 0) throw new AppError("Reserved stock cannot be negative.", 400);
-      if (lowStockThreshold < 0) throw new AppError("Low stock threshold cannot be negative.", 400);
-      if (existing) {
-        await tx.inventory.update({
-          where: { id: existing.id },
-          data: {
-            stock,
-            reservedStock,
-            lowStockThreshold,
-            status: getInventoryStatus(stock, lowStockThreshold),
-          },
-        });
-        if (stock !== existing.stock) {
-          await createAdjustment(tx, existing.id, variant.id, existing.stock, stock, "inventory_import");
+        if (!variant) {
+          throw new AppError(`Variant not found during import on row ${index + 2}.`, 400);
         }
-        summary.updated += 1;
-      } else {
-        const created = await tx.inventory.create({
-          data: {
-            productId: variant.productId,
-            variantId: variant.id,
-            warehouseId,
-            stock,
-            reservedStock,
-            lowStockThreshold,
-            status: getInventoryStatus(stock, lowStockThreshold),
-          },
-        });
-        if (stock !== 0) {
-          await createAdjustment(tx, created.id, variant.id, 0, stock, "inventory_import");
+
+        const warehouseId = row.warehouseId ? preview.countryByCode.get(row.warehouseId)?.id ?? null : null;
+        const existing = await tx.inventory.findFirst({ where: { variantId: variant.id, warehouseId } });
+        const baseInventory = variant.inventories[0];
+        const stock = parseOptionalInt(row.stock, "Stock") ?? existing?.stock ?? baseInventory?.stock ?? 0;
+        const reservedStock = parseOptionalInt(row.reservedStock, "Reserved stock") ?? existing?.reservedStock ?? baseInventory?.reservedStock ?? 0;
+        const lowStockThreshold = parseOptionalInt(row.lowStockThreshold, "Low stock threshold") ?? existing?.lowStockThreshold ?? baseInventory?.lowStockThreshold ?? 10;
+        if (stock < 0) throw new AppError("Stock cannot be negative.", 400);
+        if (reservedStock < 0) throw new AppError("Reserved stock cannot be negative.", 400);
+        if (lowStockThreshold < 0) throw new AppError("Low stock threshold cannot be negative.", 400);
+        if (existing) {
+          await tx.inventory.update({
+            where: { id: existing.id },
+            data: {
+              stock,
+              reservedStock,
+              lowStockThreshold,
+              status: getInventoryStatus(stock, lowStockThreshold),
+            },
+          });
+          if (stock !== existing.stock) {
+            await createAdjustment(tx, existing.id, variant.id, existing.stock, stock, "inventory_import");
+          }
+          summary.updated += 1;
+        } else {
+          const created = await tx.inventory.create({
+            data: {
+              productId: variant.productId,
+              variantId: variant.id,
+              warehouseId,
+              stock,
+              reservedStock,
+              lowStockThreshold,
+              status: getInventoryStatus(stock, lowStockThreshold),
+            },
+          });
+          if (stock !== 0) {
+            await createAdjustment(tx, created.id, variant.id, 0, stock, "inventory_import");
+          }
+          summary.created += 1;
         }
-        summary.created += 1;
       }
-    }
-  });
+    }, { timeout: 30000, maxWait: 10000 });
+  }
 
   return {
     ...summary,
@@ -932,14 +944,29 @@ export async function exportInventorySpreadsheet(query: InventoryListQuery & { i
     ? { id: { in: ids } }
     : await buildInventoryWhere(query);
 
-  const inventories = await prisma.inventory.findMany({
-    where,
-    orderBy: buildInventoryOrder(query),
-    include: inventoryInclude(),
-  });
+  const CHUNK_SIZE = 500;
+  let offset = 0;
+  const rows: ReturnType<typeof buildInventoryExportRow>[] = [];
+
+  while (true) {
+    const chunk = await prisma.inventory.findMany({
+      where,
+      orderBy: buildInventoryOrder(query),
+      take: CHUNK_SIZE,
+      skip: offset,
+      include: inventoryInclude(),
+    });
+
+    if (chunk.length === 0) break;
+    for (const inv of chunk) {
+      rows.push(buildInventoryExportRow(inv));
+    }
+    if (chunk.length < CHUNK_SIZE) break;
+    offset += chunk.length;
+  }
 
   return writeSpreadsheetBuffer(
-    inventories.map(buildInventoryExportRow),
+    rows,
     "Inventory",
     INVENTORY_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
   );
@@ -1067,10 +1094,20 @@ export async function bulkDeleteInventory(params: {
   let targetIds: string[] = [];
 
   if (params.all) {
-    const allRecords = await prisma.inventory.findMany({
-      select: { id: true },
-    });
-    targetIds = allRecords.map((r) => r.id);
+    let cursor: string | undefined = undefined;
+    while (true) {
+      const page: Array<{ id: string }> = await prisma.inventory.findMany({
+        take: 5000,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined,
+        select: { id: true },
+        orderBy: { id: "asc" },
+      });
+      if (!page.length) break;
+      targetIds.push(...page.map((r) => r.id));
+      cursor = page[page.length - 1].id;
+      if (page.length < 5000) break;
+    }
   } else if (Array.isArray(params.ids) && params.ids.length > 0) {
     targetIds = params.ids;
   }

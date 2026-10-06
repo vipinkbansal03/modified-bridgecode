@@ -1753,17 +1753,21 @@ export async function bulkUpdateProducts(data: {
     if (!countryIds.length) throw new AppError("Select at least one country.", 400);
     const countries = await prisma.country.findMany({ where: { id: { in: countryIds } }, select: { id: true } });
     if (countries.length !== countryIds.length) throw new AppError("One or more countries were not found.", 400);
-    await prisma.$transaction(
-      ids.flatMap((productId) =>
-        countryIds.map((countryId) =>
-          prisma.productCountry.upsert({
-            where: { productId_countryId: { productId, countryId } },
-            update: { enabled: true },
-            create: { productId, countryId, enabled: true },
-          })
+    const PRODUCT_CHUNK = 50;
+    for (let i = 0; i < ids.length; i += PRODUCT_CHUNK) {
+      const pChunk = ids.slice(i, i + PRODUCT_CHUNK);
+      await prisma.$transaction(
+        pChunk.flatMap((productId) =>
+          countryIds.map((countryId) =>
+            prisma.productCountry.upsert({
+              where: { productId_countryId: { productId, countryId } },
+              update: { enabled: true },
+              create: { productId, countryId, enabled: true },
+            })
+          )
         )
-      )
-    );
+      );
+    }
     return { updated: ids.length };
   }
 
@@ -1772,17 +1776,21 @@ export async function bulkUpdateProducts(data: {
     if (!collectionIds.length) throw new AppError("Select at least one collection.", 400);
     const collections = await prisma.collection.findMany({ where: { id: { in: collectionIds } }, select: { id: true } });
     if (collections.length !== collectionIds.length) throw new AppError("One or more collections were not found.", 400);
-    await prisma.$transaction(
-      ids.flatMap((productId) =>
-        collectionIds.map((collectionId) =>
-          prisma.collectionProduct.upsert({
-            where: { collectionId_productId: { collectionId, productId } },
-            update: {},
-            create: { collectionId, productId },
-          }),
+    const PRODUCT_CHUNK = 50;
+    for (let i = 0; i < ids.length; i += PRODUCT_CHUNK) {
+      const pChunk = ids.slice(i, i + PRODUCT_CHUNK);
+      await prisma.$transaction(
+        pChunk.flatMap((productId) =>
+          collectionIds.map((collectionId) =>
+            prisma.collectionProduct.upsert({
+              where: { collectionId_productId: { collectionId, productId } },
+              update: {},
+              create: { collectionId, productId },
+            }),
+          ),
         ),
-      ),
-    );
+      );
+    }
     return { updated: ids.length };
   }
 
@@ -3119,10 +3127,27 @@ export async function importCatalogAttributeMappingsSpreadsheet(filePathOrRows: 
     throw new AppError("Uploaded spreadsheet is empty.", 400);
   }
 
-  const allProducts = await prisma.product.findMany({
-    where: { deletedAt: null },
-    select: { id: true, sku: true, productCode: true, title: true, slug: true },
-  });
+  const uniqueProductKeys = new Set<string>();
+  for (const row of rawRows) {
+    const k = getProductAttrRowField(row, "productSku", "sku", "productCode", "code", "productTitle", "product", "title", "productId", "id");
+    if (k) uniqueProductKeys.add(String(k).trim());
+  }
+  const keyArray = Array.from(uniqueProductKeys);
+  const allProducts = keyArray.length > 0
+    ? await prisma.product.findMany({
+        where: {
+          deletedAt: null,
+          OR: [
+            { id: { in: keyArray } },
+            { sku: { in: keyArray } },
+            { productCode: { in: keyArray } },
+            { slug: { in: keyArray } },
+            { title: { in: keyArray, mode: "insensitive" } },
+          ],
+        },
+        select: { id: true, sku: true, productCode: true, title: true, slug: true },
+      })
+    : [];
   const productBySku = new Map(allProducts.filter((p) => p.sku).map((p) => [p.sku!.trim().toLowerCase(), p]));
   const productByCode = new Map(allProducts.filter((p) => p.productCode).map((p) => [p.productCode!.trim().toLowerCase(), p]));
   const productByTitle = new Map(allProducts.map((p) => [p.title.trim().toLowerCase(), p]));
@@ -3142,9 +3167,12 @@ export async function importCatalogAttributeMappingsSpreadsheet(filePathOrRows: 
   };
 
   const modifiedProductIds = new Set<string>();
+  const CHUNK_SIZE = 100;
 
-  await prisma.$transaction(async (tx) => {
-    for (const row of rawRows) {
+  for (let chunkStart = 0; chunkStart < rawRows.length; chunkStart += CHUNK_SIZE) {
+    const chunkRows = rawRows.slice(chunkStart, chunkStart + CHUNK_SIZE);
+    await prisma.$transaction(async (tx) => {
+      for (const row of chunkRows) {
       const prodKey = getProductAttrRowField(row, "productSku", "sku", "productCode", "code", "productTitle", "product", "title", "productId", "id");
       const attrName = getProductAttrRowField(row, "attributeName", "name", "attribute", "attribute_name");
       const slugStr = getProductAttrRowField(row, "slug", "attributeSlug");
@@ -3262,7 +3290,9 @@ export async function importCatalogAttributeMappingsSpreadsheet(filePathOrRows: 
         data: { hasVariants: true },
       });
     }
-  });
+    }, { timeout: 30000, maxWait: 10000 });
+    modifiedProductIds.clear();
+  }
 
   return summary;
 }
@@ -3928,71 +3958,78 @@ export async function bulkUpdateVariants(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
-    for (const row of validRows) {
-      if (row.action) {
-        const isDeleteOrArchive = row.action === "delete" || row.action === "archive";
-        const isRestore = row.action === "restore";
-        await tx.productVariant.update({
-          where: { id: row.variantId },
-          data: {
-            status: (isRestore || row.action === "active") ? "ACTIVE" : "INACTIVE",
-            ...(isDeleteOrArchive ? { deletedAt: new Date() } : {}),
-            ...(isRestore ? { deletedAt: null } : {}),
-          },
-        });
-        results[row.index].success = true;
-        continue;
-      }
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
+    const chunk = validRows.slice(i, i + CHUNK_SIZE);
+    await prisma.$transaction(
+      async (tx) => {
+        for (const row of chunk) {
+          if (row.action) {
+            const isDeleteOrArchive = row.action === "delete" || row.action === "archive";
+            const isRestore = row.action === "restore";
+            await tx.productVariant.update({
+              where: { id: row.variantId },
+              data: {
+                status: (isRestore || row.action === "active") ? "ACTIVE" : "INACTIVE",
+                ...(isDeleteOrArchive ? { deletedAt: new Date() } : {}),
+                ...(isRestore ? { deletedAt: null } : {}),
+              },
+            });
+            results[row.index].success = true;
+            continue;
+          }
 
-      if (row.price && row.countryId && row.currencyId) {
-        const createMrp = row.price.mrp ?? row.price.sellingPrice ?? Number(row.existingPrice?.mrp ?? 0);
-        const createSellingPrice = row.price.sellingPrice ?? row.price.mrp ?? Number(row.existingPrice?.sellingPrice ?? 0);
-        await tx.productPrice.upsert({
-          where: {
-            productId_variantId_countryId: {
-              productId,
-              variantId: row.variantId,
-              countryId: row.countryId,
-            },
-          },
-          update: {
-            ...(row.price.mrp !== undefined ? { mrp: row.price.mrp } : {}),
-            ...(row.price.sellingPrice !== undefined ? { sellingPrice: row.price.sellingPrice } : {}),
-            ...(row.price.dealerPrice !== undefined ? { dealerPrice: row.price.dealerPrice } : {}),
-            ...(row.price.distributorPrice !== undefined ? { distributorPrice: row.price.distributorPrice } : {}),
-            ...(row.price.taxPercentage !== undefined ? { taxPercentage: row.price.taxPercentage } : {}),
-          },
-          create: {
-            productId,
-            variantId: row.variantId,
-            countryId: row.countryId,
-            currencyId: row.currencyId,
-            mrp: createMrp,
-            sellingPrice: createSellingPrice,
-            ...(row.price.dealerPrice !== undefined ? { dealerPrice: row.price.dealerPrice } : {}),
-            ...(row.price.distributorPrice !== undefined ? { distributorPrice: row.price.distributorPrice } : {}),
-            ...(row.price.taxPercentage !== undefined ? { taxPercentage: row.price.taxPercentage } : {}),
-            status: "ACTIVE",
-          },
-        });
-      }
+          if (row.price && row.countryId && row.currencyId) {
+            const createMrp = row.price.mrp ?? row.price.sellingPrice ?? Number(row.existingPrice?.mrp ?? 0);
+            const createSellingPrice = row.price.sellingPrice ?? row.price.mrp ?? Number(row.existingPrice?.sellingPrice ?? 0);
+            await tx.productPrice.upsert({
+              where: {
+                productId_variantId_countryId: {
+                  productId,
+                  variantId: row.variantId,
+                  countryId: row.countryId,
+                },
+              },
+              update: {
+                ...(row.price.mrp !== undefined ? { mrp: row.price.mrp } : {}),
+                ...(row.price.sellingPrice !== undefined ? { sellingPrice: row.price.sellingPrice } : {}),
+                ...(row.price.dealerPrice !== undefined ? { dealerPrice: row.price.dealerPrice } : {}),
+                ...(row.price.distributorPrice !== undefined ? { distributorPrice: row.price.distributorPrice } : {}),
+                ...(row.price.taxPercentage !== undefined ? { taxPercentage: row.price.taxPercentage } : {}),
+              },
+              create: {
+                productId,
+                variantId: row.variantId,
+                countryId: row.countryId,
+                currencyId: row.currencyId,
+                mrp: createMrp,
+                sellingPrice: createSellingPrice,
+                ...(row.price.dealerPrice !== undefined ? { dealerPrice: row.price.dealerPrice } : {}),
+                ...(row.price.distributorPrice !== undefined ? { distributorPrice: row.price.distributorPrice } : {}),
+                ...(row.price.taxPercentage !== undefined ? { taxPercentage: row.price.taxPercentage } : {}),
+                status: "ACTIVE",
+              },
+            });
+          }
 
-      if (row.stock !== undefined) {
-        const updatedInventory = await setVariantStock(
-          row.variantId,
-          row.stock,
-          { reason: "bulk_admin_edit", adjustedBy },
-          tx
-        );
-        if (!updatedInventory) throw new AppError(`Inventory not found for variant ${row.variantId}.`, 400);
-      }
+          if (row.stock !== undefined) {
+            const updatedInventory = await setVariantStock(
+              row.variantId,
+              row.stock,
+              { reason: "bulk_admin_edit", adjustedBy },
+              tx
+            );
+            if (!updatedInventory) throw new AppError(`Inventory not found for variant ${row.variantId}.`, 400);
+          }
 
-      results[row.index].success = true;
-    }
-  }, {
-    timeout: 60000 // 60s timeout for large bulk updates
-  });
+          results[row.index].success = true;
+        }
+      },
+      {
+        timeout: 30000,
+      }
+    );
+  }
 
   return {
     results,
@@ -4827,20 +4864,35 @@ function buildProductExportRow(product: any) {
 
 export async function exportProductsSpreadsheet(query: ProductListQuery) {
   const where = buildProductWhere(query);
-  const products = await prisma.product.findMany({
-    where,
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-    include: {
-      category: { select: { slug: true, name: true } },
-      countries: { where: { enabled: true }, include: { country: { select: { code: true } } } },
-      media: { orderBy: { sortOrder: "asc" }, select: { url: true } },
-      inventories: { select: { stock: true, reservedStock: true, lowStockThreshold: true, variantId: true, warehouseId: true, countryId: true } },
-      prices: { where: { status: "ACTIVE", deletedAt: null }, select: { sellingPrice: true, mrp: true, dealerPrice: true, distributorPrice: true, variantId: true, status: true } },
-    },
-  });
+  const CHUNK_SIZE = 500;
+  let offset = 0;
+  const rows: ReturnType<typeof buildProductExportRow>[] = [];
+
+  while (true) {
+    const chunk = await prisma.product.findMany({
+      where,
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }, { id: "asc" }],
+      take: CHUNK_SIZE,
+      skip: offset,
+      include: {
+        category: { select: { slug: true, name: true } },
+        countries: { where: { enabled: true }, include: { country: { select: { code: true } } } },
+        media: { orderBy: { sortOrder: "asc" }, select: { url: true } },
+        inventories: { select: { stock: true, reservedStock: true, lowStockThreshold: true, variantId: true, warehouseId: true, countryId: true } },
+        prices: { where: { status: "ACTIVE", deletedAt: null }, select: { sellingPrice: true, mrp: true, dealerPrice: true, distributorPrice: true, variantId: true, status: true } },
+      },
+    });
+
+    if (chunk.length === 0) break;
+    for (const p of chunk) {
+      rows.push(buildProductExportRow(p));
+    }
+    if (chunk.length < CHUNK_SIZE) break;
+    offset += chunk.length;
+  }
 
   return writeSpreadsheetBuffer(
-    products.map(buildProductExportRow),
+    rows,
     "Products",
     PRODUCT_EXPORT_COLUMNS.map((column) => ({ key: column.key, header: column.header })),
   );
@@ -5092,11 +5144,15 @@ export async function importProductsSpreadsheet(filePathOrRows: string | any) {
   const summary = { created: 0, updated: 0 };
   const suffix = Date.now().toString().slice(-6);
 
-  await prisma.$transaction(async (tx) => {
-    for (const [index, row] of parsedRows.entries()) {
-      const categoryKey = row.categorySlug?.toLowerCase().trim();
-      const category = categoryKey ? preview.categoryBySlug.get(categoryKey) : null;
-      if (!category) throw new AppError(`Category '${row.categorySlug || ""}' not found during import.`, 400);
+  const CHUNK_SIZE = 50;
+  for (let chunkStart = 0; chunkStart < parsedRows.length; chunkStart += CHUNK_SIZE) {
+    const chunkRows = parsedRows.slice(chunkStart, chunkStart + CHUNK_SIZE);
+    await prisma.$transaction(async (tx) => {
+      for (const [cIdx, row] of chunkRows.entries()) {
+        const index = chunkStart + cIdx;
+        const categoryKey = row.categorySlug?.toLowerCase().trim();
+        const category = categoryKey ? preview.categoryBySlug.get(categoryKey) : null;
+        if (!category) throw new AppError(`Category '${row.categorySlug || ""}' not found during import.`, 400);
 
       const normalizedSku = row.sku?.trim() || null;
       const normalizedProductCode = row.productCode?.trim() || null;
@@ -5265,10 +5321,14 @@ export async function importProductsSpreadsheet(filePathOrRows: string | any) {
         }
       }
     }
+  }, { timeout: 30000, maxWait: 10000 });
+}
 
-    // Apply Tier Pricing rules from Sheet 2 (if provided)
-    if (tierPricingList.length > 0) {
-      const allTiers = await tx.tier.findMany({ where: { deletedAt: null } });
+  // Apply Tier & MOQ Pricing rules from Sheet 2 & 3 (if provided)
+  if (tierPricingList.length > 0 || moqPricingList.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      if (tierPricingList.length > 0) {
+        const allTiers = await tx.tier.findMany({ where: { deletedAt: null } });
       const tierByName = new Map(allTiers.map((t) => [t.name.trim().toLowerCase(), t]));
       const tierById = new Map(allTiers.map((t) => [t.id, t]));
 
@@ -5430,7 +5490,8 @@ export async function importProductsSpreadsheet(filePathOrRows: string | any) {
         }
       }
     }
-  });
+  }, { timeout: 30000, maxWait: 10000 });
+  }
 
   return {
     ...summary,
@@ -6629,73 +6690,204 @@ export async function bulkPermanentDeleteProducts(ids: string[]) {
     quotes?: Array<{ id: string; quoteNumber: string | null }>;
   }> = [];
 
-  for (const id of ids) {
-    try {
-      const prod = await prisma.product.findUnique({
-        where: { id },
-        select: { id: true, title: true },
-      });
-      if (!prod) {
-        blocked.push({ id, name: id, reason: "Product not found." });
-        continue;
+  if (!ids || ids.length === 0) {
+    return {
+      deletedCount: 0,
+      blockedCount: 0,
+      deletedIds: [],
+      blocked: [],
+    };
+  }
+
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+
+  // 1. Fetch requested products in safe chunks
+  const products: Array<{ id: string; title: string; sku: string | null }> = [];
+  const FETCH_CHUNK = 1000;
+  for (let i = 0; i < uniqueIds.length; i += FETCH_CHUNK) {
+    const chunk = uniqueIds.slice(i, i + FETCH_CHUNK);
+    const rows = await prisma.product.findMany({
+      where: { id: { in: chunk } },
+      select: { id: true, title: true, sku: true },
+    });
+    products.push(...rows);
+  }
+  const productMap = new Map(products.map((p) => [p.id, p]));
+
+  // 2. Pre-check order and quote reference protection in batch chunks
+  const orderBlockedMap = new Map<string, number>();
+  const quoteBlockedMap = new Map<string, number>();
+
+  for (let i = 0; i < uniqueIds.length; i += FETCH_CHUNK) {
+    const chunk = uniqueIds.slice(i, i + FETCH_CHUNK);
+    const [orderItems, quoteItems] = await Promise.all([
+      prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: { productId: { in: chunk } },
+        _count: { _all: true },
+      }),
+      prisma.quoteItem.groupBy({
+        by: ["productId"],
+        where: { productId: { in: chunk } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    for (const o of orderItems) {
+      if (o.productId) {
+        orderBlockedMap.set(o.productId, typeof o._count === "object" ? o._count._all : (o._count as number));
       }
-      await permanentDeleteProduct(id);
-      deletedIds.push(id);
-    } catch (error: any) {
-      const prod = await prisma.product.findUnique({
-        where: { id },
-        select: { title: true, sku: true },
-      });
-
-      let orders = error?.details?.orders;
-      let quotes = error?.details?.quotes;
-
-      if (!orders && !quotes) {
-        const [orderItems, quoteItems] = await Promise.all([
-          prisma.orderItem.findMany({
-            where: { productId: id },
-            take: 10,
-            select: { order: { select: { id: true, orderNumber: true } } },
-          }),
-          prisma.quoteItem.findMany({
-            where: { productId: id },
-            take: 10,
-            select: { quote: { select: { id: true, quoteNumber: true } } },
-          }),
-        ]);
-
-        const orderMap = new Map<string, { id: string; orderNumber: string | null }>();
-        for (const oi of orderItems) {
-          if (oi.order && !orderMap.has(oi.order.id)) {
-            orderMap.set(oi.order.id, { id: oi.order.id, orderNumber: oi.order.orderNumber || oi.order.id });
-          }
-        }
-        const quoteMap = new Map<string, { id: string; quoteNumber: string | null }>();
-        for (const qi of quoteItems) {
-          if (qi.quote && !quoteMap.has(qi.quote.id)) {
-            quoteMap.set(qi.quote.id, { id: qi.quote.id, quoteNumber: qi.quote.quoteNumber || qi.quote.id });
-          }
-        }
-
-        orders = Array.from(orderMap.values());
-        quotes = Array.from(quoteMap.values());
+    }
+    for (const q of quoteItems) {
+      if (q.productId) {
+        quoteBlockedMap.set(q.productId, typeof q._count === "object" ? q._count._all : (q._count as number));
       }
+    }
+  }
 
+  const toDeleteIds: string[] = [];
+
+  for (const id of uniqueIds) {
+    const prod = productMap.get(id);
+    if (!prod) {
+      blocked.push({ id, name: id, reason: "Product not found." });
+      continue;
+    }
+
+    const orderCount = orderBlockedMap.get(id) || 0;
+    const quoteCount = quoteBlockedMap.get(id) || 0;
+
+    if (orderCount > 0 || quoteCount > 0) {
       blocked.push({
         id,
-        name: prod?.title ? `${prod.title}${prod.sku ? ` (${prod.sku})` : ""}` : id,
-        reason: error?.message || "Failed to permanently delete product.",
-        orders: orders?.length ? orders : undefined,
-        quotes: quotes?.length ? quotes : undefined,
+        name: prod.title ? `${prod.title}${prod.sku ? ` (${prod.sku})` : ""}` : id,
+        reason: `Cannot permanently delete product: referenced by ${orderCount} order item(s) and ${quoteCount} quote item(s). Use normal delete (Soft Delete) instead to protect order history.`,
       });
+      continue;
+    }
+
+    toDeleteIds.push(id);
+  }
+
+  // 2b. Attach sample order & quote references for blocked preview (up to 100)
+  const sampleBlockedIds = blocked.slice(0, 100).map((b) => b.id);
+  if (sampleBlockedIds.length > 0) {
+    try {
+      const [sampleOrderItems, sampleQuoteItems] = await Promise.all([
+        prisma.orderItem.findMany({
+          where: { productId: { in: sampleBlockedIds } },
+          select: {
+            productId: true,
+            order: { select: { id: true, orderNumber: true } },
+          },
+          take: 300,
+        }),
+        prisma.quoteItem.findMany({
+          where: { productId: { in: sampleBlockedIds } },
+          select: {
+            productId: true,
+            quote: { select: { id: true, quoteNumber: true } },
+          },
+          take: 300,
+        }),
+      ]);
+
+      const orderRefMap = new Map<string, Array<{ id: string; orderNumber: string }>>();
+      for (const item of sampleOrderItems) {
+        if (item.productId && item.order) {
+          const existing = orderRefMap.get(item.productId) || [];
+          if (existing.length < 5 && !existing.some((o) => o.id === item.order.id)) {
+            existing.push({ id: item.order.id, orderNumber: item.order.orderNumber || item.order.id });
+            orderRefMap.set(item.productId, existing);
+          }
+        }
+      }
+
+      const quoteRefMap = new Map<string, Array<{ id: string; quoteNumber: string }>>();
+      for (const item of sampleQuoteItems) {
+        if (item.productId && item.quote) {
+          const existing = quoteRefMap.get(item.productId) || [];
+          if (existing.length < 5 && !existing.some((q) => q.id === item.quote.id)) {
+            existing.push({ id: item.quote.id, quoteNumber: item.quote.quoteNumber || item.quote.id });
+            quoteRefMap.set(item.productId, existing);
+          }
+        }
+      }
+
+      for (const b of blocked) {
+        if (b.id) {
+          b.orders = (orderRefMap.get(b.id) as any) || undefined;
+          b.quotes = (quoteRefMap.get(b.id) as any) || undefined;
+        }
+      }
+    } catch {
+      // Ignore reference lookup error
+    }
+  }
+
+  // 3. Batch delete unblocked products in chunks of 100 with set-based deleteMany
+  const BATCH_DELETE_CHUNK = 100;
+  for (let i = 0; i < toDeleteIds.length; i += BATCH_DELETE_CHUNK) {
+    const chunk = toDeleteIds.slice(i, i + BATCH_DELETE_CHUNK);
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.wishlist.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.discountProduct.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.collectionProduct.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.productCountry.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.productPaymentMethod.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.productPrice.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.moqPricing.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.tierPricing.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.productReview.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.productTranslation.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.inventoryAdjustment.deleteMany({ where: { inventory: { productId: { in: chunk } } } });
+
+          // Clean variants and their children
+          await tx.productVariantAttributeValue.deleteMany({ where: { variant: { productId: { in: chunk } } } });
+          await tx.variantCountry.deleteMany({ where: { variant: { productId: { in: chunk } } } });
+          await tx.variantPaymentMethod.deleteMany({ where: { variant: { productId: { in: chunk } } } });
+          await tx.productPrice.deleteMany({ where: { variant: { productId: { in: chunk } } } });
+          await tx.inventory.deleteMany({ where: { variant: { productId: { in: chunk } } } });
+          await tx.productVariant.deleteMany({ where: { productId: { in: chunk } } });
+
+          // Clean attribute assignments and product media
+          await tx.productAttributeValueSelection.deleteMany({
+            where: { productAttribute: { productId: { in: chunk } } },
+          });
+          await tx.productAttribute.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.productPackage.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.inventory.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.productMedia.deleteMany({ where: { productId: { in: chunk } } });
+          await tx.product.deleteMany({ where: { id: { in: chunk } } });
+        },
+        { timeout: 30000 }
+      );
+      deletedIds.push(...chunk);
+    } catch {
+      // If batch fails, fallback to individual for this chunk to isolate any error
+      for (const chunkId of chunk) {
+        try {
+          await permanentDeleteProduct(chunkId);
+          deletedIds.push(chunkId);
+        } catch (individualError: any) {
+          const prod = productMap.get(chunkId);
+          blocked.push({
+            id: chunkId,
+            name: prod?.title ? `${prod.title}${prod.sku ? ` (${prod.sku})` : ""}` : chunkId,
+            reason: individualError?.message || "Failed to permanently delete product.",
+          });
+        }
+      }
     }
   }
 
   return {
     deletedCount: deletedIds.length,
     blockedCount: blocked.length,
-    deletedIds,
-    blocked,
+    deletedIds: deletedIds.length > 500 ? deletedIds.slice(0, 500) : deletedIds,
+    blocked: blocked.slice(0, 100),
   };
 }
 
