@@ -1888,7 +1888,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
               if (stockVal !== null) {
                 finalStock = stockVal;
               } else {
-                const variant = (product?.variants ?? []).find((v: any) => v.id === vId);
+                const variant = ((allVariantRows?.length ? allVariantRows : product?.variants) ?? []).find((v: any) => v.id === vId);
                 const baseInv = getBaseInventory(variant?.inventories) as any;
                 finalStock = baseInv ? (baseInv.stock ?? 0) : 0;
               }
@@ -6648,7 +6648,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
                 <button
                   type="button"
                   onClick={handleExportVariants}
-                  disabled={!product.hasVariants || exportingVariants || !(product.variants?.length ?? 0)}
+                  disabled={!product.hasVariants || exportingVariants || !(selectedVariantIds.length || totalItems || allVariantRows.length || variantRows.length || (product._count?.variants ?? 0))}
                   className="flex items-center gap-1.5 rounded-md border border-[#E6E6E6] bg-white px-4 py-2 text-[13px] font-medium text-[#1A1A1A] hover:bg-[#F5F5F5] disabled:opacity-40 shadow-2xs transition-colors cursor-pointer"
                   title={selectedVariantIds.length > 0 ? `Export ${selectedVariantIds.length} selected variant(s) to Excel` : "Export all variants to Excel"}
                 >
@@ -9249,7 +9249,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
         {activeTab === 12 && (
           <ProductPaymentOverridesTab
             productId={productId}
-            variants={product?.variants || []}
+            variants={allVariantRows?.length ? allVariantRows : (product?.variants || [])}
           />
         )}
       </div>
@@ -11400,7 +11400,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             required
             options={[
               { value: "", label: "Select Variant" },
-              ...(product?.variants?.map((v: any) => ({
+              ...((allVariantRows?.length ? allVariantRows : product?.variants)?.map((v: any) => ({
                 value: v.id,
                 label: v.title,
               })) || []),
