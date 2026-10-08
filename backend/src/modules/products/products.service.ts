@@ -2408,7 +2408,7 @@ export async function deleteBulkProductMedia(productId: string, mediaIds: string
 
 export async function assignAttributes(
   productId: string,
-  attributes: { attributeId: string; required: boolean; gridAxis?: "ROW" | "COLUMN" | null; allowedValueIds?: string[] }[]
+  attributes: { attributeId: string; required: boolean; gridAxis?: "ROW" | "COLUMN" | null; allowedValueIds?: string[]; visibleOnStorefront?: boolean }[]
 ) {
   await assertProductExists(productId);
   if (!Array.isArray(attributes)) throw new AppError("Attributes payload must be an array.", 400);
@@ -2522,13 +2522,47 @@ export async function assignAttributes(
       }
     }
 
+    // Synchronize visibility overrides if specified
+    const visibilityUpdates: Record<string, boolean> = {};
+    for (const attr of attributes) {
+      if (attr.visibleOnStorefront !== undefined) {
+        visibilityUpdates[attr.attributeId] = Boolean(attr.visibleOnStorefront);
+      }
+    }
+    if (Object.keys(visibilityUpdates).length > 0) {
+      const settingKey = `product_filter_visibility_${productId}`;
+      const existingSetting = await tx.setting.findUnique({ where: { key: settingKey } });
+      let currentOverrides: Record<string, boolean> = {};
+      if (existingSetting?.value) {
+        try {
+          currentOverrides = JSON.parse(existingSetting.value);
+        } catch {}
+      }
+      const updatedOverrides = { ...currentOverrides, ...visibilityUpdates };
+      await tx.setting.upsert({
+        where: { key: settingKey },
+        create: {
+          key: settingKey,
+          value: JSON.stringify(updatedOverrides),
+          group: "products",
+          label: `Product Filter Visibility - ${productId}`,
+          type: "json",
+          isEnabled: true,
+        },
+        update: {
+          value: JSON.stringify(updatedOverrides),
+          isEnabled: true,
+        },
+      });
+    }
+
     return created;
   }, { timeout: 30000, maxWait: 10000 });
 }
 
 export async function listProductAttributes(productId: string) {
   await assertProductExists(productId);
-  return prisma.productAttribute.findMany({
+  const rows = await prisma.productAttribute.findMany({
     where: { productId },
     orderBy: { createdAt: "asc" },
     include: {
@@ -2551,6 +2585,23 @@ export async function listProductAttributes(productId: string) {
       },
     },
   });
+
+  const settingKey = `product_filter_visibility_${productId}`;
+  const visibilitySetting = await prisma.setting.findUnique({
+    where: { key: settingKey },
+    select: { value: true },
+  });
+  let overrides: Record<string, boolean> = {};
+  if (visibilitySetting?.value) {
+    try {
+      overrides = JSON.parse(visibilitySetting.value);
+    } catch {}
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    visibleOnStorefront: overrides[row.attributeId] !== false,
+  }));
 }
 
 export async function removeProductAttribute(productId: string, attributeId: string) {
@@ -2564,6 +2615,19 @@ export async function removeProductAttribute(productId: string, attributeId: str
     prisma.productAttributeValueSelection.deleteMany({ where: { productAttributeId: existing.id } }),
     prisma.productAttribute.delete({ where: { id: existing.id } }),
   ]);
+
+  const settingKey = `product_filter_visibility_${productId}`;
+  const setting = await prisma.setting.findUnique({ where: { key: settingKey } });
+  if (setting?.value) {
+    try {
+      const parsed = JSON.parse(setting.value);
+      if (attributeId in parsed) {
+        delete parsed[attributeId];
+        await prisma.setting.update({ where: { key: settingKey }, data: { value: JSON.stringify(parsed) } });
+      }
+    } catch {}
+  }
+
   return { id: existing.id, productId, attributeId };
 }
 

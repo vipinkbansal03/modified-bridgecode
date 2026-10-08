@@ -930,10 +930,14 @@ export async function exportAttributesSpreadsheet() {
     const valuesString = attr.values
       .map((v) => {
         const priceAdj = Number(v.priceAdjustment);
+        let part = v.value;
         if (priceAdj > 0) {
-          return `${v.value} (+${priceAdj})`;
+          part = `${part} (+${priceAdj})`;
         }
-        return v.value;
+        if (v.status === "INACTIVE") {
+          part = `${part} [INACTIVE]`;
+        }
+        return part;
       })
       .join(" | ");
 
@@ -1249,14 +1253,33 @@ export async function importAttributesSpreadsheet(filePathOrRows: string | any[]
 
         // If values are provided, parse and upsert them
         for (const [vIdx, rawItem] of item.values.entries()) {
-          let valName = rawItem;
+          let valName = rawItem.trim();
           let priceAdj = 0;
+          let explicitStatus: AttributeStatus | null = null;
+
+          // Check if format has [INACTIVE] or [ACTIVE] tag (or (INACTIVE) / (ACTIVE) / (DISABLED))
+          const statusMatch = valName.match(/\s*[\[\(](INACTIVE|ACTIVE|DISABLED)[\]\)]\s*$/i);
+          if (statusMatch) {
+            const tag = statusMatch[1].toUpperCase();
+            explicitStatus = tag === "INACTIVE" || tag === "DISABLED" ? "INACTIVE" : "ACTIVE";
+            valName = valName.replace(/\s*[\[\(](INACTIVE|ACTIVE|DISABLED)[\]\)]\s*$/i, "").trim();
+          }
 
           // Check if format is "Name (+12)" or "Name (12)"
-          const priceMatch = rawItem.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
+          const priceMatch = valName.match(/^(.*?)\s*\(\+?([0-9.]+)\)$/);
           if (priceMatch) {
             valName = priceMatch[1].trim();
             priceAdj = parseFloat(priceMatch[2]) || 0;
+          }
+
+          // Also check if status tag was placed before price adjustment, e.g. "Name [INACTIVE] (+12)"
+          if (!explicitStatus) {
+            const innerStatusMatch = valName.match(/\s*[\[\(](INACTIVE|ACTIVE|DISABLED)[\]\)]\s*$/i);
+            if (innerStatusMatch) {
+              const tag = innerStatusMatch[1].toUpperCase();
+              explicitStatus = tag === "INACTIVE" || tag === "DISABLED" ? "INACTIVE" : "ACTIVE";
+              valName = valName.replace(/\s*[\[\(](INACTIVE|ACTIVE|DISABLED)[\]\)]\s*$/i, "").trim();
+            }
           }
 
           if (!valName) continue;
@@ -1277,7 +1300,7 @@ export async function importAttributesSpreadsheet(filePathOrRows: string | any[]
               where: { id: existingVal.id },
               data: {
                 value: valName,
-                status: "ACTIVE",
+                status: explicitStatus ?? existingVal.status,
                 sortOrder: valSortOrder,
                 priceAdjustment: new Prisma.Decimal(priceAdj),
               },
@@ -1297,7 +1320,7 @@ export async function importAttributesSpreadsheet(filePathOrRows: string | any[]
                 attributeId: attribute.id,
                 value: valName,
                 slug: uniqueValSlug,
-                status: "ACTIVE",
+                status: explicitStatus ?? "ACTIVE",
                 sortOrder: valSortOrder,
                 priceAdjustment: new Prisma.Decimal(priceAdj),
               },

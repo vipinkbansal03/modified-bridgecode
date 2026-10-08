@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, ImageOff, Maximize2, X } from "lucide-react";
 import { cn } from "@/utils/cn";
@@ -20,20 +21,33 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
 
   const [index, setIndex] = useState(0);
   const [zoomed, setZoomed] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const thumbScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const go = (delta: number) => {
+    if (!safeImages.length) return;
+    setIndex((i) => (i + delta + safeImages.length) % safeImages.length);
+  };
 
   useEffect(() => {
     if (!zoomed) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setZoomed(false);
+      if (e.key === "ArrowLeft") go(-1);
+      if (e.key === "ArrowRight") go(1);
     };
     window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = prevOverflow;
     };
-  }, [zoomed]);
+  }, [zoomed, safeImages.length]);
 
   // Keep thumbnail in view when navigating
   useEffect(() => {
@@ -45,10 +59,6 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
     }
   }, [index]);
 
-  const go = (delta: number) => {
-    if (!safeImages.length) return;
-    setIndex((i) => (i + delta + safeImages.length) % safeImages.length);
-  };
 
   if (!safeImages.length) {
     return (
@@ -64,7 +74,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
     <>
       <div className="flex flex-col gap-3.5 w-full min-w-0 max-w-full overflow-hidden">
         {/* Main Image Box */}
-        <div className="relative flex min-h-[320px] sm:min-h-[400px] lg:min-h-[460px] aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:p-6">
+        <div className="group relative flex min-h-[320px] sm:min-h-[400px] lg:min-h-[460px] aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 sm:p-6">
           {/* Previous Arrow */}
           {safeImages.length > 1 && (
             <button
@@ -76,6 +86,12 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
               <ChevronLeft size={16} />
             </button>
           )}
+
+          {/* Zoom hint badge */}
+          <div className="absolute right-3.5 bottom-3.5 z-10 hidden sm:flex items-center gap-1.5 rounded-md bg-white/90 backdrop-blur-xs px-2.5 py-1 text-[11.5px] font-medium text-[#374151] shadow-2xs border border-[#E5E7EB] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <Maximize2 size={13} className="text-[#E31E24]" />
+            <span>Click to zoom</span>
+          </div>
 
           {/* Main Image Preview */}
           <div
@@ -186,18 +202,64 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
         )}
       </div>
 
-      {zoomed && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 sm:p-8" onClick={() => setZoomed(false)}>
+      {zoomed && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4 sm:p-8 backdrop-blur-xs select-none"
+          onClick={() => setZoomed(false)}
+        >
           <button
             type="button"
             aria-label="Close zoom"
             onClick={() => setZoomed(false)}
-            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/25"
+            className="absolute top-5 right-5 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white shadow-lg transition-all hover:bg-white/30 hover:scale-105 cursor-pointer"
           >
-            <X size={22} />
+            <X size={24} />
           </button>
-          <img src={safeImages[index]} alt={title} onClick={(e) => e.stopPropagation()} className="max-h-full max-w-full object-contain" />
-        </div>
+          {safeImages.length > 1 && (
+            <button
+              type="button"
+              aria-label="Previous image"
+              onClick={(e) => {
+                e.stopPropagation();
+                go(-1);
+              }}
+              className="absolute left-4 sm:left-6 top-1/2 z-50 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white shadow-lg transition-all hover:bg-white/30 hover:scale-105 cursor-pointer"
+            >
+              <ChevronLeft size={24} />
+            </button>
+          )}
+          <div
+            className="relative flex max-h-[85vh] max-w-[88vw] items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={safeImages[index]}
+              alt={title}
+              className="max-h-[85vh] max-w-[88vw] object-contain rounded-md shadow-2xl transition-transform duration-200"
+            />
+          </div>
+          {safeImages.length > 1 && (
+            <button
+              type="button"
+              aria-label="Next image"
+              onClick={(e) => {
+                e.stopPropagation();
+                go(1);
+              }}
+              className="absolute right-4 sm:right-6 top-1/2 z-50 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white shadow-lg transition-all hover:bg-white/30 hover:scale-105 cursor-pointer"
+            >
+              <ChevronRight size={24} />
+            </button>
+          )}
+          {safeImages.length > 1 && (
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-50 rounded-full bg-black/60 px-4 py-1.5 text-[12.5px] font-medium text-white/90 backdrop-blur-xs border border-white/10">
+              {index + 1} / {safeImages.length}
+            </div>
+          )}
+        </div>,
+        document.body
       )}
     </>
   );

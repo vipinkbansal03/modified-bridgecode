@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   CheckCircle2,
   ShieldCheck,
@@ -135,6 +136,11 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
 
   const [activeSpecImageIndex, setActiveSpecImageIndex] = useState(0);
   const [isSpecZoomed, setIsSpecZoomed] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const specImages = useMemo(() => {
     const list: Array<{ url: string; title: string }> = [];
@@ -520,26 +526,25 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
             </div>
 
             {/* Fullscreen Lightbox Modal for Technical Spec Diagrams */}
-            {isSpecZoomed && (
+            {mounted && isSpecZoomed && typeof document !== "undefined" && createPortal(
               <div
                 role="dialog"
                 aria-modal="true"
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-xs"
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4 sm:p-8 backdrop-blur-xs select-none"
                 onClick={() => setIsSpecZoomed(false)}
               >
+                <button
+                  type="button"
+                  aria-label="Close zoomed view"
+                  onClick={() => setIsSpecZoomed(false)}
+                  className="absolute top-5 right-5 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white shadow-lg hover:bg-white/30 hover:scale-105 transition-all cursor-pointer"
+                >
+                  <X size={24} />
+                </button>
                 <div
                   className="relative flex max-h-[90vh] max-w-[90vw] flex-col items-center justify-center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <button
-                    type="button"
-                    aria-label="Close zoomed view"
-                    onClick={() => setIsSpecZoomed(false)}
-                    className="absolute -top-10 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40 transition-all cursor-pointer"
-                  >
-                    <X size={20} />
-                  </button>
-
                   <img
                     src={specImages[activeSpecImageIndex]?.url}
                     alt={specImages[activeSpecImageIndex]?.title || "Technical specification diagram"}
@@ -555,9 +560,9 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                             prev === 0 ? specImages.length - 1 : prev - 1
                           )
                         }
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 cursor-pointer"
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 cursor-pointer transition-all"
                       >
-                        <ChevronLeft size={18} />
+                        <ChevronLeft size={20} />
                       </button>
                     )}
                     <span className="text-xs font-semibold">
@@ -571,14 +576,15 @@ export function ProductTabs({ product, apiProduct }: ProductTabsProps) {
                             prev === specImages.length - 1 ? 0 : prev + 1
                           )
                         }
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 cursor-pointer"
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 hover:bg-white/40 cursor-pointer transition-all"
                       >
-                        <ChevronRight size={18} />
+                        <ChevronRight size={20} />
                       </button>
                     )}
                   </div>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         )}

@@ -42,7 +42,7 @@ interface DynamicVariantMatrixConfiguratorProps {
 }
 
 type AttributeDisplayType = "DROPDOWN" | "X_GRID" | "Y_GRID";
-type ProductOptionAttribute = ApiAttribute & { values: ApiAttributeValue[] };
+type ProductOptionAttribute = ApiAttribute & { values: ApiAttributeValue[]; visibleOnStorefront?: boolean };
 type NormalizedVariant = ApiVariant & {
   selectionByAttributeId: Record<string, string>;
 };
@@ -406,7 +406,9 @@ export function DynamicVariantMatrixConfigurator({
     () =>
       attributes.filter(
         (a) =>
-          !gridRowAttributeIds.has(a.id) && !gridColAttributeIds.has(a.id),
+          !gridRowAttributeIds.has(a.id) &&
+          !gridColAttributeIds.has(a.id) &&
+          a.visibleOnStorefront !== false,
       ),
     [attributes, gridRowAttributeIds, gridColAttributeIds],
   );

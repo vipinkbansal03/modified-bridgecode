@@ -1185,8 +1185,13 @@ export const useUpdateProductFilterVisibility = (productId?: string) => {
       adminApi
         .put(`/product-filters/${productId}/visibility`, { items })
         .then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["admin-product-filter-visibility", productId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-product-filter-visibility", productId] });
+      qc.invalidateQueries({ queryKey: ["admin-product-attributes", productId] });
+      qc.invalidateQueries({ queryKey: ["admin-product", productId] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["product-facets"] });
+    },
   });
 };
 

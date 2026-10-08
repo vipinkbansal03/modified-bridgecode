@@ -3923,6 +3923,7 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
       attributeId: mapping.attributeId,
       required: mapping.required,
       gridAxis: mapping.gridAxis ?? null,
+      visibleOnStorefront: mapping.visibleOnStorefront !== false,
       allowedValueIds: mapping.allowedValues.map((allowedValue) => allowedValue.attributeValueId),
     }));
 
@@ -4135,6 +4136,12 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
 
   const handleToggleMappedVisibility = async (attributeId: string, visibleOnStorefront: boolean) => {
     try {
+      queryClient.setQueryData(["admin-product-attributes", productId], (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((m: any) =>
+          m.attributeId === attributeId ? { ...m, visibleOnStorefront } : m
+        );
+      });
       await updateProductFilterVisibility.mutateAsync(
         mappedAttributeRows.map((mapping) => ({
           attributeId: mapping.attributeId,
@@ -4143,8 +4150,10 @@ export function ProductEditor({ productId, isEmbed }: ProductEditorProps) {
             mapping.attributeId === attributeId ? visibleOnStorefront : mapping.visibleOnStorefront !== false,
         }))
       );
+      await refetchProductAttributes();
       showToast(visibleOnStorefront ? "Filter will appear on the storefront." : "Filter hidden from the storefront.");
     } catch (error) {
+      await refetchProductAttributes();
       showToast(getAdminErrorMessage(error, "Failed to update storefront visibility."), "error");
     }
   };

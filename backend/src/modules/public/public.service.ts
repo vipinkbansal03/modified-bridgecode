@@ -1785,6 +1785,17 @@ async function toPublicProductDetail(
     (attr) => attr.gridAxis === "COLUMN" || attr.gridAxis === "ROW"
   );
 
+  const visibilitySetting = await prisma.setting.findUnique({
+    where: { key: `product_filter_visibility_${p.id}` },
+    select: { value: true },
+  });
+  let visibilityOverrides: Record<string, boolean> = {};
+  if (visibilitySetting?.value) {
+    try {
+      visibilityOverrides = JSON.parse(visibilitySetting.value);
+    } catch {}
+  }
+
   const configuratorAttributes = p.hasVariants
     ? p.attributes
     .map((pa) => {
@@ -1815,6 +1826,7 @@ async function toPublicProductDetail(
         role,
         displayType: role,
         gridAxis: pa.gridAxis ?? null,
+        visibleOnStorefront: (pa.attribute?.id ? visibilityOverrides[pa.attribute.id] : (pa as any).attributeId ? visibilityOverrides[(pa as any).attributeId] : undefined) !== false,
         status: pa.attribute.status,
         required: pa.required,
         sortOrder: pa.attribute.sortOrder,
