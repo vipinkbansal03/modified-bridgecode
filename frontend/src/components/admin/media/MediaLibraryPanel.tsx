@@ -35,6 +35,7 @@ import { ConfirmModal, useToast } from "@/components/admin/AdminComponents";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { mediaService, type MediaItem, type MediaFolderItem } from "@/services/mediaService";
 import { getAdminErrorMessage } from "@/services/adminApi";
+import { copyToClipboard } from "@/utils/clipboard";
 
 type Props = {
   mode?: "select" | "manage";
@@ -437,33 +438,7 @@ export default function MediaLibraryPanel({
         ? `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`
         : url;
 
-    let copied = false;
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(fullUrl);
-        copied = true;
-      }
-    } catch {
-      copied = false;
-    }
-
-    if (!copied && typeof document !== "undefined") {
-      try {
-        const textarea = document.createElement("textarea");
-        textarea.value = fullUrl;
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        textarea.style.top = "-9999px";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        copied = document.execCommand("copy");
-        document.body.removeChild(textarea);
-      } catch {
-        copied = false;
-      }
-    }
+    const copied = await copyToClipboard(fullUrl);
 
     if (copied) {
       setCopiedId(id);

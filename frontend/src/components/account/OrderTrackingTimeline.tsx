@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { type CustomerTrackingShipment } from "@/services/customerApi";
 import { cn } from "@/utils/cn";
+import { copyToClipboard } from "@/utils/clipboard";
 
 interface OrderTrackingTimelineProps {
   shipment: CustomerTrackingShipment;
@@ -96,11 +97,13 @@ export function OrderTrackingTimeline({
   const currentStep = getMilestoneIndex(shipment.status);
   const isFailedOrCancelled = ["FAILED", "RETURNED", "CANCELLED"].includes(shipment.status);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!trackingCode) return;
-    navigator.clipboard.writeText(trackingCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const copied = await copyToClipboard(trackingCode);
+    if (copied) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (

@@ -53,6 +53,7 @@ import HighlightsEditor, {
   Highlight,
   normalizeHighlights,
 } from "./translations/HighlightsEditor";
+import { copyToClipboard } from "@/utils/clipboard";
 
 type CoverageGapType = "product" | "category" | "static" | "cms";
 type CoveragePriority = "high" | "medium" | "low";
@@ -256,7 +257,7 @@ function TranslationModal({
 
   if (!gap) return null;
 
-  const handleCopyEnglish = (field: CoverageMissingField) => {
+  const handleCopyEnglish = async (field: CoverageMissingField) => {
     let copyText = field.englishValue;
     if (["technicalSpecs", "warranty", "primaryFeatures", "highlights"].includes(field.field)) {
       try {
@@ -268,8 +269,10 @@ function TranslationModal({
     } else if (/<[a-z][\s\S]*>/i.test(field.englishValue)) {
       copyText = stripHtmlTags(field.englishValue);
     }
-    navigator.clipboard.writeText(copyText);
-    showToast("English text copied to clipboard.");
+    const copied = await copyToClipboard(copyText);
+    if (copied) {
+      showToast("English text copied to clipboard.");
+    }
   };
 
   const handleSaveAll = async () => {

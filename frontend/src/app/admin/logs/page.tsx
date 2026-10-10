@@ -6,6 +6,7 @@ import { AdminLayout } from "@/components/admin/layout/AdminLayout";
 import { DataTable, Column, Pagination, AdminSelect, AdminInput } from "@/components/admin/AdminComponents";
 import { useAdminLogs } from "@/hooks/admin/useAdminHooks";
 import { Modal } from "@/components/ui/Modal";
+import { copyToClipboard } from "@/utils/clipboard";
 import {
   ExternalLink,
   Copy,
@@ -101,10 +102,12 @@ export default function LogsPage() {
     search: search.trim() || undefined,
   });
 
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleCopy = async (text: string, id: string) => {
+    const copied = await copyToClipboard(text);
+    if (copied) {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
   };
 
   const columns: Column<Log>[] = [
