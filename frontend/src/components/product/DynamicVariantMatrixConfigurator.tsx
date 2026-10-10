@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
@@ -609,6 +609,114 @@ export function DynamicVariantMatrixConfigurator({
     });
   }, [allDropdownsSelected, matrixEnabled, columnCombinations, activeRowCombinations, dropdownSelections, selectedPackageId, variantLookup]);
 
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const stickyScrollRef = useRef<HTMLDivElement>(null);
+  const isSyncingTableScroll = useRef(false);
+  const isSyncingStickyScroll = useRef(false);
+
+  const [isSticky, setIsSticky] = useState(false);
+  const [headerOffset, setHeaderOffset] = useState(112);
+  const [containerBounds, setContainerBounds] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
+  const [tableWidth, setTableWidth] = useState<number | null>(null);
+  const [columnWidths, setColumnWidths] = useState<number[]>([]);
+
+  const handleTableScroll = () => {
+    if (isSyncingStickyScroll.current) return;
+    if (!tableScrollRef.current || !stickyScrollRef.current) return;
+    isSyncingTableScroll.current = true;
+    stickyScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    requestAnimationFrame(() => {
+      isSyncingTableScroll.current = false;
+    });
+  };
+
+  const handleStickyScroll = () => {
+    if (isSyncingTableScroll.current) return;
+    if (!tableScrollRef.current || !stickyScrollRef.current) return;
+    isSyncingStickyScroll.current = true;
+    tableScrollRef.current.scrollLeft = stickyScrollRef.current.scrollLeft;
+    requestAnimationFrame(() => {
+      isSyncingStickyScroll.current = false;
+    });
+  };
+
+  useEffect(() => {
+    if (!matrixEnabled || activeRowCombinations.length === 0 || activeColumnCombinations.length === 0) {
+      setIsSticky(false);
+      return;
+    }
+
+    const updateSticky = () => {
+      const container = tableContainerRef.current;
+      const table = tableRef.current;
+      if (!container || !table) {
+        setIsSticky(false);
+        return;
+      }
+
+      const navbar = document.querySelector("header");
+      const navHeight = navbar ? navbar.getBoundingClientRect().height : 112;
+      setHeaderOffset(navHeight);
+
+      const containerRect = container.getBoundingClientRect();
+      const tableRect = table.getBoundingClientRect();
+      const thead = table.querySelector("thead");
+      const headerHeight = thead ? thead.getBoundingClientRect().height : 48;
+
+      const isPastTop = containerRect.top <= navHeight;
+      const isBeforeBottom = tableRect.bottom >= navHeight + headerHeight;
+
+      if (isPastTop && isBeforeBottom) {
+        setIsSticky(true);
+        setContainerBounds({
+          left: containerRect.left,
+          width: containerRect.width,
+        });
+        setTableWidth(tableRect.width);
+
+        const thElements = table.querySelectorAll("thead th");
+        if (thElements.length > 0) {
+          setColumnWidths(Array.from(thElements).map((th) => th.getBoundingClientRect().width));
+        }
+
+        if (stickyScrollRef.current && tableScrollRef.current) {
+          stickyScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+        }
+      } else {
+        setIsSticky(false);
+      }
+    };
+
+    let rafId: number | null = null;
+    const onScrollOrResize = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        updateSticky();
+        rafId = null;
+      });
+    };
+
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize, { passive: true });
+
+    updateSticky();
+
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [matrixEnabled, activeRowCombinations.length, activeColumnCombinations.length]);
+
+  useEffect(() => {
+    if (isSticky && stickyScrollRef.current && tableScrollRef.current) {
+      stickyScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+  }, [isSticky]);
+
+
   const singleResolvedVariant = useMemo<NormalizedVariant | null>(() => {
     if (!allDropdownsSelected) return null;
     if (matrixEnabled && activeRowCombinations.length > 0 && activeColumnCombinations.length > 0) return null;
@@ -1174,9 +1282,97 @@ export function DynamicVariantMatrixConfigurator({
                     {t("ui.pdp.matrixGridSubtitle")}
                   </span>
                 </div>
-                <div className="overflow-hidden rounded-xl border border-[#E31E24] bg-white shadow-xs">
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-left">
+                {isSticky && (
+                  <div
+                    style={{
+                      position: "fixed",
+                      top: headerOffset,
+                      left: containerBounds.left,
+                      width: containerBounds.width,
+                      zIndex: 40,
+                    }}
+                    className="overflow-hidden rounded-t-xl border-x border-t border-b border-[#E31E24] bg-[#FFFBFB] shadow-[0_4px_14px_rgba(227,30,36,0.12)]"
+                  >
+                    <div
+                      ref={stickyScrollRef}
+                      className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                      onScroll={handleStickyScroll}
+                    >
+                      <table
+                        className="border-collapse text-left"
+                        style={{
+                          width: tableWidth ? `${tableWidth}px` : "100%",
+                          minWidth: tableWidth ? `${tableWidth}px` : "100%",
+                        }}
+                      >
+                        <thead>
+                          <tr className="bg-[#FFFBFB]">
+                            <th
+                              className="sticky left-0 z-20 border-r border-[#E31E24] bg-red-50/95 px-3 py-2.5 text-left text-[12px] font-bold uppercase tracking-[0.06em] text-[#111827] shadow-xs"
+                              style={
+                                columnWidths[0]
+                                  ? {
+                                      width: `${columnWidths[0]}px`,
+                                      minWidth: `${columnWidths[0]}px`,
+                                      maxWidth: `${columnWidths[0]}px`,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              <span className="text-[#111827]">
+                                {rowAxisAttributes.map((a) => a.name).join(" + ") || "Size"}
+                              </span>
+                              <span className="mx-1 text-[#111827]">/</span>
+                              <span className="text-[#111827]">
+                                {xAxisAttributes.map((a) => a.name).join(" + ")}
+                              </span>
+                            </th>
+                            {activeColumnCombinations.map((columnCombination, idx) => {
+                              const headerText = columnCombination.labels
+                                .map((l) => l.value.value)
+                                .join(" • ");
+                              const colWidth = columnWidths[idx + 1];
+                              return (
+                                <th
+                                  key={columnCombination.key}
+                                  className="min-w-[88px] border-r border-red-200 bg-[#FFFBFB] px-2 py-2.5 text-center text-[12.5px] font-bold text-[#111827] last:border-r-0"
+                                  style={
+                                    colWidth
+                                      ? {
+                                          width: `${colWidth}px`,
+                                          minWidth: `${colWidth}px`,
+                                          maxWidth: `${colWidth}px`,
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="rounded-md bg-red-50 px-2.5 py-1 text-[12px] font-bold text-[#E31E24] border border-[#E31E24] leading-tight">
+                                      {headerText}
+                                    </span>
+                                  </div>
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                <div
+                  ref={tableContainerRef}
+                  className="overflow-hidden rounded-xl border border-[#E31E24] bg-white shadow-xs"
+                >
+                  <div
+                    ref={tableScrollRef}
+                    className="overflow-x-auto"
+                    onScroll={handleTableScroll}
+                  >
+                    <table
+                      ref={tableRef}
+                      className="w-full border-collapse text-left"
+                    >
                       <thead>
                         <tr className="border-b border-[#E31E24] bg-[#FFFBFB]">
                           <th className="sticky left-0 z-20 border-r border-[#E31E24] bg-red-50/70 px-3 py-2.5 text-left text-[12px] font-bold uppercase tracking-[0.06em] text-[#111827]">
@@ -1258,6 +1454,9 @@ export function DynamicVariantMatrixConfigurator({
                                           : "bg-white"
                                       } ${outOfStock || isPor ? "opacity-60" : ""}`}
                                     >
+                                      <span className="mb-1 text-[10.5px] font-bold text-[#6B7280] tracking-wider uppercase">
+                                        {columnCombination.labels.map((l) => l.value.value).join(" • ")}
+                                      </span>
                                       <QuantityInput
                                         size="xs"
                                         value={outOfStock ? 0 : quantity}

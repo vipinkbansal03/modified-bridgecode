@@ -428,11 +428,50 @@ export default function MediaLibraryPanel({
     }
   };
 
-  const copyUrl = (id: string, url: string) => {
-    navigator.clipboard.writeText(url);
-    setCopiedId(id);
-    showToast("URL copied to clipboard.");
-    setTimeout(() => setCopiedId(null), 2000);
+  const copyUrl = async (id: string, url: string) => {
+    if (!url) return;
+    const fullUrl =
+      url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : typeof window !== "undefined"
+        ? `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`
+        : url;
+
+    let copied = false;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(fullUrl);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied && typeof document !== "undefined") {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = fullUrl;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "-9999px";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch {
+        copied = false;
+      }
+    }
+
+    if (copied) {
+      setCopiedId(id);
+      showToast("URL copied to clipboard.");
+      setTimeout(() => setCopiedId(null), 2000);
+    } else {
+      showToast("Failed to copy URL to clipboard.", "error");
+    }
   };
 
   const openDetailsForItem = (item: MediaItem) => {
