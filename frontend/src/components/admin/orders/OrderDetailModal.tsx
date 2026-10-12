@@ -48,6 +48,7 @@ export function OrderDetailModal({ open, onClose, orderId }: OrderDetailModalPro
   };
 
   const address = order?.shippingAddress as Record<string, any> | undefined;
+  const billingAddress = order?.billingAddress as Record<string, any> | undefined;
 
   return (
     <Modal
@@ -144,8 +145,8 @@ export function OrderDetailModal({ open, onClose, orderId }: OrderDetailModalPro
             </div>
           </div>
 
-          {/* Customer & Shipping 2-col info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Customer & Shipping 2/3-col info */}
+          <div className={`grid grid-cols-1 ${billingAddress ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2"} gap-3.5`}>
             {/* Customer Details */}
             <div className="rounded-xl border border-[#E6E6E6] bg-white p-3.5">
               <div className="flex items-center gap-1.5 font-semibold text-[#1A1A1A] pb-2 border-b border-[#F0F0F0]">
@@ -169,12 +170,14 @@ export function OrderDetailModal({ open, onClose, orderId }: OrderDetailModalPro
               <div className="mt-2.5 text-[12.5px] text-[#444] space-y-0.5">
                 {address ? (
                   <>
+                    {address.fullName && <div className="font-semibold text-[#111]">{address.fullName}</div>}
+                    {address.phone && <div className="text-[12px] text-[#666]">{address.phone}</div>}
                     {address.addressLine1 && <div>{address.addressLine1}</div>}
                     {address.addressLine2 && <div>{address.addressLine2}</div>}
                     <div>
                       {[address.city, address.state, address.postalCode || address.pincode].filter(Boolean).join(", ")}
                     </div>
-                    <div className="font-medium text-[#111]">{order.country?.name || address.country || "-"}</div>
+                    <div className="font-medium text-[#111]">{order.country?.name || address.country || address.countryCode || "-"}</div>
                   </>
                 ) : (
                   <div className="text-[#888]">No address recorded</div>
@@ -186,6 +189,30 @@ export function OrderDetailModal({ open, onClose, orderId }: OrderDetailModalPro
                 )}
               </div>
             </div>
+
+            {/* Billing Address */}
+            {billingAddress && (
+              <div className="rounded-xl border border-[#E6E6E6] bg-white p-3.5">
+                <div className="flex items-center gap-1.5 font-semibold text-[#1A1A1A] pb-2 border-b border-[#F0F0F0]">
+                  <CreditCard size={14} className="text-[#666]" />
+                  <span>Billing Address</span>
+                </div>
+                <div className="mt-2.5 text-[12.5px] text-[#444] space-y-0.5">
+                  {billingAddress.fullName && (
+                    <div className="font-semibold text-[#111]">{billingAddress.fullName}</div>
+                  )}
+                  {billingAddress.phone && (
+                    <div className="text-[12px] text-[#666]">{billingAddress.phone}</div>
+                  )}
+                  {billingAddress.addressLine1 && <div>{billingAddress.addressLine1}</div>}
+                  {billingAddress.addressLine2 && <div>{billingAddress.addressLine2}</div>}
+                  <div>
+                    {[billingAddress.city, billingAddress.state, billingAddress.postalCode || billingAddress.pincode].filter(Boolean).join(", ")}
+                  </div>
+                  <div className="font-medium text-[#111]">{billingAddress.country || billingAddress.countryCode || "-"}</div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Items Table */}

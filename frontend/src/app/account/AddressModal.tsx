@@ -200,15 +200,36 @@ export default function AddressModal({
       onClose={onClose}
       title={editingAddress ? "Edit Address" : "Add New Address"}
       panelClassName="max-w-lg rounded-2xl"
+      bodyClassName="p-6 custom-scrollbar"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-[13px] font-semibold text-[#6B7280] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="address-modal-form"
+            disabled={formik.isSubmitting || !formik.isValid}
+            className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#E31E24] text-[13px] font-bold text-white shadow-xs hover:bg-[#B5151B] transition-colors disabled:opacity-50 cursor-pointer"
+          >
+            <Check size={15} />
+            {formik.isSubmitting ? "Saving..." : editingAddress ? "Update Address" : "Add Address"}
+          </button>
+        </>
+      }
     >
-      <div className="max-h-[80vh] overflow-y-auto custom-scrollbar p-6 space-y-4">
+      <div className="space-y-4">
         {error && (
           <div className="rounded-xl border border-[#FEE2E2] bg-[#FEF2F2] p-3 text-xs text-[#B91C1C]">
             {error}
           </div>
         )}
 
-        <form onSubmit={formik.handleSubmit} className="space-y-4">
+        <form id="address-modal-form" onSubmit={formik.handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[12.5px] font-bold text-[#374151] mb-1">Address Label</label>
@@ -359,24 +380,6 @@ export default function AddressModal({
             <label htmlFor="isDefault" className="text-[13px] font-medium text-[#374151] cursor-pointer">
               Set as default shipping address
             </label>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F3F4F6]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-[13px] font-semibold text-[#6B7280] hover:bg-[#F3F4F6]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={formik.isSubmitting || !formik.isValid}
-              className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#E31E24] text-[13px] font-bold text-white shadow-xs hover:bg-[#B5151B] disabled:opacity-50"
-            >
-              <Check size={15} />
-              {formik.isSubmitting ? "Saving..." : editingAddress ? "Update Address" : "Add Address"}
-            </button>
           </div>
         </form>
       </div>

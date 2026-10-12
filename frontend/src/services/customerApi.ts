@@ -124,6 +124,8 @@ export interface CustomerOrderLineItem {
 export interface CreateCustomerOrderPayload {
   items: CustomerOrderItemPayload[];
   shippingAddress: CustomerOrderAddressPayload;
+  billingAddress?: CustomerOrderAddressPayload;
+  sameAsShipping?: boolean;
   couponCode?: string;
   notes?: string;
   shippingZoneId?: string;
@@ -157,6 +159,7 @@ export interface CustomerOrderSummary {
   currency?: { code: string; symbol: string };
   country?: { id: string; name: string; code: string };
   shippingAddress?: CustomerOrderAddressPayload;
+  billingAddress?: CustomerOrderAddressPayload;
   items: CustomerOrderLineItem[];
   orderBoxes?: any[];
   isInvoiceGenerated?: boolean;

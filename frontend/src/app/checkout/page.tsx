@@ -50,6 +50,8 @@ import { RazorpayPaymentButton, launchRazorpayModal } from "@/components/checkou
 import { CashfreePaymentButton, launchCashfreeCheckout } from "@/components/checkout/CashfreePaymentButton";
 import { PaymentCountdownTimer } from "@/components/checkout/PaymentCountdownTimer";
 import { AddressValidationDialog } from "@/components/ui/delivery/AddressValidationDialog";
+import AddressModal from "@/app/account/AddressModal";
+import { useToast } from "@/components/ui/ToastProvider";
 
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
@@ -319,6 +321,62 @@ export default function CheckoutPage() {
     notes: "",
   });
 
+  const [sameAsShipping, setSameAsShipping] = useState(true);
+  const [selectedSavedBillingAddressId, setSelectedSavedBillingAddressId] = useState<string>("");
+  const [billingForm, setBillingForm] = useState({
+    id: "",
+    fullName: "",
+    phone: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    countryCode: selectedCountryCode ? selectedCountryCode.toUpperCase() : "IN",
+  });
+
+  const applySavedBillingAddress = (address: CustomerAddress) => {
+    setSelectedSavedBillingAddressId(address.id);
+    setBillingForm({
+      id: address.id,
+      fullName: (address.fullName && address.fullName.trim()) ? address.fullName.trim() : "",
+      phone: (address.phone && address.phone.trim()) ? address.phone.trim() : "",
+      addressLine1: address.addressLine1 || "",
+      addressLine2: address.addressLine2 ?? "",
+      city: address.city || "",
+      state: address.state || "",
+      postalCode: address.postalCode || "",
+      countryCode: address.country?.code ? address.country.code.toUpperCase() : "IN",
+    });
+  };
+
+  const { showToast } = useToast();
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [addressModalTarget, setAddressModalTarget] = useState<"shipping" | "billing">("shipping");
+
+  function handleOpenAddAddressModal(target: "shipping" | "billing") {
+    setAddressModalTarget(target);
+    setIsAddressModalOpen(true);
+  }
+
+  function handleAddressModalSuccess(newAddress: CustomerAddress) {
+    setAddresses((prev) => {
+      const exists = prev.some((a) => a.id === newAddress.id);
+      return exists ? prev.map((a) => (a.id === newAddress.id ? newAddress : a)) : [newAddress, ...prev];
+    });
+
+    if (addressModalTarget === "shipping") {
+      setSelectedSavedAddressId(newAddress.id);
+      applySavedAddress(newAddress, false);
+      showToast("Shipping address added and selected.", "success");
+    } else {
+      setSelectedSavedBillingAddressId(newAddress.id);
+      applySavedBillingAddress(newAddress);
+      showToast("Billing address added and selected.", "success");
+    }
+    setIsAddressModalOpen(false);
+  }
+
   useEffect(() => {
     if (form.countryCode) {
       if (initialCountryRef.current === null) {
@@ -578,6 +636,16 @@ export default function CheckoutPage() {
     return isValidPhoneNumber(form.phone);
   }, [form.phone]);
 
+  const isBillingPhoneValid = useMemo(() => {
+    if (sameAsShipping) return true;
+    if (!billingForm.phone.trim()) return false;
+    try {
+      return isValidPhoneNumber(billingForm.phone);
+    } catch {
+      return false;
+    }
+  }, [sameAsShipping, billingForm.phone]);
+
   const isTaxIdFormatValid = useMemo(() => {
     if (!taxIdInput.trim()) return true;
     if (taxIdConfig.type === "GSTIN") {
@@ -587,7 +655,7 @@ export default function CheckoutPage() {
   }, [taxIdInput, taxIdConfig.type]);
 
   const canSubmit = useMemo(() => {
-    return Boolean(
+    const shippingValid = Boolean(
       items.length &&
       form.fullName.trim() &&
       form.phone.trim() &&
@@ -599,7 +667,21 @@ export default function CheckoutPage() {
       form.postalCode.trim() &&
       form.countryCode.trim(),
     );
-  }, [form, items.length, isPhoneValid, isTaxIdFormatValid]);
+    if (!shippingValid) return false;
+    if (!sameAsShipping) {
+      return Boolean(
+        billingForm.fullName.trim() &&
+        billingForm.phone.trim() &&
+        isBillingPhoneValid &&
+        billingForm.addressLine1.trim() &&
+        billingForm.city.trim() &&
+        billingForm.state.trim() &&
+        billingForm.postalCode.trim() &&
+        billingForm.countryCode.trim(),
+      );
+    }
+    return true;
+  }, [form, billingForm, sameAsShipping, items.length, isPhoneValid, isBillingPhoneValid, isTaxIdFormatValid]);
 
   const hasSpecificTaxes = useMemo(() => {
     if (!estimate?.items) return false;
@@ -724,11 +806,33 @@ export default function CheckoutPage() {
         postalCode: form.postalCode.trim(),
         countryCode: form.countryCode.trim().toUpperCase() || undefined,
       },
+      billingAddress: sameAsShipping
+        ? {
+            fullName: form.fullName.trim(),
+            phone: form.phone.trim(),
+            addressLine1: form.addressLine1.trim(),
+            addressLine2: form.addressLine2.trim() || undefined,
+            city: form.city.trim(),
+            state: form.state.trim(),
+            postalCode: form.postalCode.trim(),
+            countryCode: form.countryCode.trim().toUpperCase() || undefined,
+          }
+        : {
+            fullName: billingForm.fullName.trim(),
+            phone: billingForm.phone.trim(),
+            addressLine1: billingForm.addressLine1.trim(),
+            addressLine2: billingForm.addressLine2.trim() || undefined,
+            city: billingForm.city.trim(),
+            state: billingForm.state.trim(),
+            postalCode: billingForm.postalCode.trim(),
+            countryCode: billingForm.countryCode.trim().toUpperCase() || undefined,
+          },
+      sameAsShipping,
       couponCode: appliedCoupon?.code,
       notes: form.notes.trim() || undefined,
       shippingZoneId: selectedZoneId ?? undefined,
     }),
-    [appliedCoupon?.code, form, items, selectedZoneId],
+    [appliedCoupon?.code, form, billingForm, sameAsShipping, items, selectedZoneId],
   );
 
   useEffect(() => {
@@ -1020,8 +1124,16 @@ export default function CheckoutPage() {
         setError("Please enter a valid phone number with country code.");
         return;
       }
+      if (!sameAsShipping && billingForm.phone.trim() && !isBillingPhoneValid) {
+        setError("Please enter a valid billing phone number with country code.");
+        return;
+      }
       if (taxIdInput.trim() && !isTaxIdFormatValid) {
         setError(`Please enter a valid ${taxIdConfig.type} format or clear the field.`);
+        return;
+      }
+      if (!sameAsShipping) {
+        setError("Complete all required shipping and billing address fields before placing the order.");
         return;
       }
       setError("Complete all required shipping address fields before placing the order.");
@@ -1295,19 +1407,33 @@ export default function CheckoutPage() {
                 <h2 className="mb-5 text-[18px] font-semibold text-ink">
                   Shipping address
                 </h2>
-                {addresses.length > 0 && (
-                  <div className="mb-5">
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-1.5">
                     <label
                       htmlFor="savedAddress"
-                      className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2"
+                      className="block text-xs font-semibold uppercase tracking-wide text-steel-2"
                     >
                       Saved address
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddAddressModal("shipping")}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline cursor-pointer"
+                    >
+                      <Plus size={13} />
+                      Add New Address
+                    </button>
+                  </div>
+                  {addresses.length > 0 ? (
                     <select
                       id="savedAddress"
                       value={selectedSavedAddressId || form.id || ""}
                       onChange={(event) => {
                         const val = event.target.value;
+                        if (val === "ADD_NEW") {
+                          handleOpenAddAddressModal("shipping");
+                          return;
+                        }
                         if (!val) {
                           setSelectedSavedAddressId("");
                           return;
@@ -1319,6 +1445,7 @@ export default function CheckoutPage() {
                       }}
                       className="w-full rounded-md border border-line bg-white px-4 py-3 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
                     >
+                      <option value="ADD_NEW">+ Add New Address...</option>
                       <option value="">-- Custom / Enter New Address --</option>
                       {addresses.map((address) => (
                         <option key={address.id} value={address.id}>
@@ -1326,12 +1453,12 @@ export default function CheckoutPage() {
                             (address.isDefault
                               ? "Default address"
                               : address.fullName)}{" "}
-                          - {address.city}, {address.country.code}
+                          - {address.city}, {address.country?.code || (address as any).countryCode}
                         </option>
                       ))}
                     </select>
-                  </div>
-                )}
+                  ) : null}
+                </div>
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Input
                     required
@@ -1472,7 +1599,237 @@ export default function CheckoutPage() {
                     }
                   />
                 </div>
+
+                <div className="mt-5 pt-4 border-t border-line">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-[14.5px] font-medium text-ink select-none">
+                    <input
+                      type="checkbox"
+                      checked={sameAsShipping}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSameAsShipping(checked);
+                        if (!checked && !billingForm.fullName && !billingForm.addressLine1) {
+                          setBillingForm({
+                            id: "",
+                            fullName: form.fullName,
+                            phone: form.phone,
+                            addressLine1: form.addressLine1,
+                            addressLine2: form.addressLine2,
+                            city: form.city,
+                            state: form.state,
+                            postalCode: form.postalCode,
+                            countryCode: form.countryCode,
+                          });
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-line text-brand focus:ring-brand accent-brand cursor-pointer"
+                    />
+                    Billing address is the same as shipping address
+                  </label>
+                </div>
               </div>
+
+              {!sameAsShipping && (
+                <div className="rounded-md border border-line bg-white p-5">
+                  <h2 className="mb-5 text-[18px] font-semibold text-ink">
+                    Billing address
+                  </h2>
+                  <div className="mb-5">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label
+                        htmlFor="savedBillingAddress"
+                        className="block text-xs font-semibold uppercase tracking-wide text-steel-2"
+                      >
+                        Saved address
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddAddressModal("billing")}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-brand hover:underline cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        Add New Address
+                      </button>
+                    </div>
+                    {addresses.length > 0 ? (
+                      <select
+                        id="savedBillingAddress"
+                        value={selectedSavedBillingAddressId || billingForm.id || ""}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          if (val === "ADD_NEW") {
+                            handleOpenAddAddressModal("billing");
+                            return;
+                          }
+                          if (!val) {
+                            setSelectedSavedBillingAddressId("");
+                            return;
+                          }
+                          const address = addresses.find(
+                            (entry) => entry.id === val,
+                          );
+                          if (address) applySavedBillingAddress(address);
+                        }}
+                        className="w-full rounded-md border border-line bg-white px-4 py-3 text-[14.5px] text-ink outline-none transition-colors focus:border-steel-2"
+                      >
+                        <option value="ADD_NEW">+ Add New Address...</option>
+                        <option value="">-- Custom / Enter New Address --</option>
+                        {addresses.map((address) => (
+                          <option key={address.id} value={address.id}>
+                            {address.label ??
+                              (address.isDefault
+                                ? "Default address"
+                                : address.fullName)}{" "}
+                            - {address.city}, {address.country?.code || (address as any).countryCode}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Input
+                      required
+                      label="Full name"
+                      value={billingForm.fullName}
+                      onChange={(event) => {
+                        setSelectedSavedBillingAddressId("");
+                        setBillingForm((current) => ({
+                          ...current,
+                          fullName: event.target.value,
+                        }));
+                      }}
+                    />
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-steel-2">
+                        Phone *
+                      </label>
+                      <PhoneInputField
+                        value={billingForm.phone}
+                        onChange={(val) => {
+                          setSelectedSavedBillingAddressId("");
+                          setBillingForm((current) => ({
+                            ...current,
+                            phone: val || "",
+                          }));
+                        }}
+                        defaultCountry={
+                          billingForm.countryCode && ["IN", "US", "GB", "AU", "DE"].includes(billingForm.countryCode.toUpperCase())
+                            ? (billingForm.countryCode.toUpperCase() as any)
+                            : "IN"
+                        }
+                        placeholder="Phone number"
+                        error={
+                          billingForm.phone.trim() && !isBillingPhoneValid
+                            ? "Please enter a valid phone number"
+                            : undefined
+                        }
+                        touched={Boolean(billingForm.phone.trim())}
+                      />
+                    </div>
+                    <Input
+                      required
+                      className="sm:col-span-2"
+                      label="Address line 1"
+                      value={billingForm.addressLine1}
+                      onChange={(event) => {
+                        setSelectedSavedBillingAddressId("");
+                        setBillingForm((current) => ({
+                          ...current,
+                          addressLine1: event.target.value,
+                        }));
+                      }}
+                    />
+                    <Input
+                      className="sm:col-span-2"
+                      label="Address line 2 (optional)"
+                      value={billingForm.addressLine2}
+                      onChange={(event) =>
+                        setBillingForm((current) => ({
+                          ...current,
+                          addressLine2: event.target.value,
+                        }))
+                      }
+                    />
+                    <CustomSelect
+                      required
+                      label="Country"
+                      placeholder="Select Country"
+                      value={billingForm.countryCode}
+                      options={
+                        countriesList.length > 0
+                          ? countriesList.map((c) => ({ value: c.code, label: c.name }))
+                          : [
+                              { value: "IN", label: "India" },
+                              { value: "US", label: "United States" },
+                            ]
+                      }
+                      onChange={(nextCode) => {
+                        setSelectedSavedBillingAddressId("");
+                        setBillingForm((current) => ({
+                          ...current,
+                          countryCode: nextCode,
+                          state: "",
+                        }));
+                      }}
+                    />
+
+                    {STATE_MAPPINGS[billingForm.countryCode] ? (
+                      <CustomSelect
+                        required
+                        label="State"
+                        placeholder="Select State"
+                        value={billingForm.state}
+                        options={STATE_MAPPINGS[billingForm.countryCode].map((state) => ({
+                          value: state,
+                          label: state,
+                        }))}
+                        onChange={(nextState) =>
+                          setBillingForm((current) => ({
+                            ...current,
+                            state: nextState,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <Input
+                        required
+                        label="State"
+                        placeholder="Enter state"
+                        value={billingForm.state}
+                        onChange={(event) =>
+                          setBillingForm((current) => ({
+                            ...current,
+                            state: event.target.value,
+                          }))
+                        }
+                      />
+                    )}
+
+                    <Input
+                      required
+                      label="City"
+                      value={billingForm.city}
+                      onChange={(event) =>
+                        setBillingForm((current) => ({
+                          ...current,
+                          city: event.target.value,
+                        }))
+                      }
+                    />
+                    <Input
+                      required
+                      label="Postal code"
+                      value={billingForm.postalCode}
+                      onChange={(event) =>
+                        setBillingForm((current) => ({
+                          ...current,
+                          postalCode: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-md border border-line bg-white p-5">
                 <div className="flex items-center justify-between mb-1.5">
@@ -2421,6 +2778,12 @@ export default function CheckoutPage() {
           onSelectRecommended={handleSelectRecommended}
         />
       )}
+
+      <AddressModal
+        isOpen={isAddressModalOpen}
+        onClose={() => setIsAddressModalOpen(false)}
+        onSuccess={handleAddressModalSuccess}
+      />
     </Container>
   );
 }

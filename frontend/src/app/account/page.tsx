@@ -923,7 +923,14 @@ function AccountPageContent() {
                                   )}
                                   {order.shippingAddress && (
                                     <p className="mt-1 text-[12.5px] text-steel">
+                                      <span className="font-semibold text-ink">Ship to: </span>
                                       {order.shippingAddress.addressLine1}, {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}
+                                    </p>
+                                  )}
+                                  {order.billingAddress && (
+                                    <p className="mt-1 text-[12.5px] text-steel">
+                                      <span className="font-semibold text-ink">Bill to: </span>
+                                      {order.billingAddress.addressLine1}, {order.billingAddress.city}, {order.billingAddress.state} {order.billingAddress.postalCode}
                                     </p>
                                   )}
                                 </div>

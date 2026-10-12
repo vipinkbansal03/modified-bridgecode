@@ -46,16 +46,113 @@ function formatDateTime(date: Date | string, timeZone = "Asia/Kolkata") {
   }
 }
 
+const GST_STATE_CODES: Record<string, string> = {
+  "JAMMU AND KASHMIR": "01",
+  "JAMMU & KASHMIR": "01",
+  "HIMACHAL PRADESH": "02",
+  "PUNJAB": "03",
+  "CHANDIGARH": "04",
+  "UTTARAKHAND": "05",
+  "HARYANA": "06",
+  "DELHI": "07",
+  "RAJASTHAN": "08",
+  "UTTAR PRADESH": "09",
+  "BIHAR": "10",
+  "SIKKIM": "11",
+  "ARUNACHAL PRADESH": "12",
+  "NAGALAND": "13",
+  "MANIPUR": "14",
+  "MIZORAM": "15",
+  "TRIPURA": "16",
+  "MEGHALAYA": "17",
+  "ASSAM": "18",
+  "WEST BENGAL": "19",
+  "JHARKHAND": "20",
+  "ODISHA": "21",
+  "ORISSA": "21",
+  "CHHATTISGARH": "22",
+  "MADHYA PRADESH": "23",
+  "GUJARAT": "24",
+  "DAMAN AND DIU": "26",
+  "DADRA AND NAGAR HAVELI": "26",
+  "DADRA AND NAGAR HAVELI AND DAMAN AND DIU": "26",
+  "MAHARASHTRA": "27",
+  "ANDHRA PRADESH": "37",
+  "KARNATAKA": "29",
+  "GOA": "30",
+  "LAKSHADWEEP": "31",
+  "KERALA": "32",
+  "TAMIL NADU": "33",
+  "PUDUCHERRY": "34",
+  "PONDICHERRY": "34",
+  "ANDAMAN AND NICOBAR ISLANDS": "35",
+  "ANDAMAN & NICOBAR ISLANDS": "35",
+  "TELANGANA": "36",
+  "LADAKH": "38",
+  "OTHER TERRITORY": "97",
+};
+
+function formatCountryName(countryCodeOrName?: string | null): string {
+  if (!countryCodeOrName) return "";
+  const code = countryCodeOrName.trim().toUpperCase();
+  const countryMap: Record<string, string> = {
+    IN: "India",
+    US: "United States",
+    GB: "United Kingdom",
+    UK: "United Kingdom",
+    CA: "Canada",
+    AU: "Australia",
+    DE: "Germany",
+    FR: "France",
+    IT: "Italy",
+    ES: "Spain",
+    NL: "Netherlands",
+    AE: "United Arab Emirates",
+    SG: "Singapore",
+    NZ: "New Zealand",
+  };
+  return countryMap[code] || countryCodeOrName;
+}
+
+function getGstStateCode(stateName?: string | null, gstin?: string | null): string | null {
+  if (gstin && gstin.trim().length >= 2 && /^\d{2}/.test(gstin.trim())) {
+    return gstin.trim().slice(0, 2);
+  }
+  if (!stateName) return null;
+  const normalized = stateName.trim().toUpperCase().replace(/[^A-Z&\s]/g, "");
+  return GST_STATE_CODES[normalized] || null;
+}
+
 function shippingAddressLines(address: unknown): string[] {
   if (!address || typeof address !== "object") return [];
   const record = address as Record<string, unknown>;
-  return [
-    record.addressLine1 as string,
-    record.addressLine2 as string,
-    [record.city, record.state, record.postalCode].filter(Boolean).join(", "),
-    record.countryCode as string,
-    record.phone ? `Phone: ${record.phone}` : null,
-  ].filter((line): line is string => Boolean(line));
+  const lines: string[] = [];
+  if (record.addressLine1 && String(record.addressLine1).trim()) {
+    lines.push(String(record.addressLine1).trim());
+  }
+  if (record.addressLine2 && String(record.addressLine2).trim()) {
+    lines.push(String(record.addressLine2).trim());
+  }
+  const cityStateZip = [record.city, record.state, record.postalCode || (record as any).pincode]
+    .filter(Boolean)
+    .map(String)
+    .map((s) => s.trim())
+    .join(", ");
+  if (cityStateZip) {
+    lines.push(cityStateZip);
+  }
+  let countryStr = "";
+  if (record.country && typeof record.country === "object" && (record.country as any).name) {
+    countryStr = (record.country as any).name;
+  } else if (typeof record.country === "string" && record.country.trim()) {
+    countryStr = formatCountryName(record.country);
+  } else if (record.countryCode && typeof record.countryCode === "string" && record.countryCode.trim()) {
+    countryStr = formatCountryName(record.countryCode);
+  }
+  if (countryStr) {
+    lines.push(countryStr);
+  }
+  return lines;
 }
 
 function formatPaymentMethod(value?: string | null) {
@@ -265,20 +362,31 @@ export async function getInvoiceData(orderId: string): Promise<{
     shipFromState: order.warehouse?.state || "Punjab",
   };
 
-  const shippingAddressObj = order.shippingAddress as Record<string, string>;
-  const buyerState = shippingAddressObj?.state || "—";
-  const buyerStateCode = (order as any).taxIdSnapshot ? (order as any).taxIdSnapshot.slice(0, 2) : "08";
+  const shippingAddressObj = (order.shippingAddress || {}) as Record<string, string>;
+  const billingAddressObj = (order.billingAddress || order.shippingAddress || {}) as Record<string, string>;
+  const buyerState = billingAddressObj?.state || shippingAddressObj?.state || "—";
+  const buyerCountry = billingAddressObj?.countryCode || shippingAddressObj?.countryCode || order.country?.code || "IN";
+  const isIndia = buyerCountry.toUpperCase() === "IN";
+  const taxId = (order as any).taxIdSnapshot || "";
+  const resolvedStateCode = isIndia ? getGstStateCode(buyerState, taxId) : "";
+  const buyerStateCode = resolvedStateCode || (taxId ? taxId.slice(0, 2) : "");
+
+  const isDifferentBuyer = Boolean(
+    billingAddressObj?.fullName &&
+    order.customerName &&
+    billingAddressObj.fullName.trim().toLowerCase() !== order.customerName.trim().toLowerCase()
+  );
 
   const defaultBuyer = {
-    name: order.customerName,
+    name: billingAddressObj?.fullName || order.customerName,
     companyName: order.companyName || "",
-    addressLines: shippingAddressLines(shippingAddressObj),
+    addressLines: shippingAddressLines(billingAddressObj),
     taxId: (order as any).taxIdSnapshot || "",
     taxIdType: (order as any).taxIdTypeSnapshot || "Tax ID",
     stateCode: buyerStateCode,
-    placeOfSupply: buyerState.toUpperCase(),
-    email: order.customerEmail,
-    phone: order.customerPhone || "",
+    placeOfSupply: buyerState && buyerState !== "—" ? buyerState.toUpperCase() : "—",
+    email: isDifferentBuyer ? "" : order.customerEmail,
+    phone: billingAddressObj?.phone || order.customerPhone || "",
   };
 
   const defaultItems = order.items.map((item, index) => {
@@ -605,77 +713,189 @@ export async function generateInvoice(orderId: string): Promise<GeneratedInvoice
     // Header Divider Line
     doc.moveTo(50, 64).lineTo(545, 64).strokeColor("#cbd5e1").lineWidth(0.75).stroke();
 
-    // 3. Billing & Vendor Information Columns Y = 74
-    // Left Column details (Seller)
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#64748b").text("SOLD BY:", 50, 76);
-    doc.font("Helvetica-Bold").fontSize(10.5).fillColor("#0f172a").text(storeName, 50, 89);
-    doc.font("Helvetica").fontSize(8.5).fillColor("#475569");
-    let storeY = 103;
-    doc.text(sellerAddress, 50, storeY, { width: 235 });
-    storeY += doc.heightOfString(sellerAddress, { width: 235 }) + 3;
-
-    if (storeEmail) {
-      doc.text(`Email: ${storeEmail}`, 50, storeY, { width: 235 });
-      storeY += 12;
-    }
-    if (storeUrl) {
-      doc.text(`Website: ${storeUrl}`, 50, storeY, { width: 235 });
-      storeY += 12;
-    }
-    if (sellerPan) {
-      doc.text(`PAN: ${sellerPan}`, 50, storeY, { width: 235 });
-      storeY += 12;
-    }
-    if (sellerGstin) {
-      doc.text(`GSTIN: ${sellerGstin}`, 50, storeY, { width: 235 });
-      storeY += 12;
-    }
-    if (sellerIec) {
-      doc.text(`IEC: ${sellerIec}`, 50, storeY, { width: 235 });
-      storeY += 12;
-    }
-    doc.text(`Ship-From State: ${shipFromState}`, 50, storeY, { width: 235 });
-    storeY += 12;
-
-    // Right Column details (Billing & Shipping)
+    // 3. Billing & Vendor Information Columns Y = 76
     const buyer = custom.buyer || {};
-    const buyerName = buyer.name || order.customerName;
+    const billingAddressObj = (order.billingAddress || order.shippingAddress || {}) as Record<string, string>;
+    const shippingAddressObj = (order.shippingAddress || {}) as Record<string, string>;
+    const buyerName = buyer.name || billingAddressObj.fullName || order.customerName;
     const buyerCompany = buyer.companyName ? `${buyer.companyName}\n` : "";
-    const buyerLines = buyer.addressLines && buyer.addressLines.length > 0 ? buyer.addressLines : shippingAddressLines(order.shippingAddress);
-    const buyerStateCode = buyer.stateCode || "08";
+    const buyerLines = buyer.addressLines && buyer.addressLines.length > 0
+      ? buyer.addressLines
+      : shippingAddressLines(billingAddressObj);
+    const shippingLines = shippingAddressLines(shippingAddressObj);
+    const shipName = shippingAddressObj.fullName || order.customerName;
+
+    const hasDifferentShipping = Boolean(
+      order.billingAddress &&
+      shippingLines.length > 0 &&
+      (
+        buyerLines.join("\n").trim().toLowerCase() !== shippingLines.join("\n").trim().toLowerCase() ||
+        (billingAddressObj.fullName && shippingAddressObj.fullName && billingAddressObj.fullName.trim().toLowerCase() !== shippingAddressObj.fullName.trim().toLowerCase())
+      )
+    );
+
+    const buyerCountry = billingAddressObj?.countryCode || shippingAddressObj?.countryCode || order.country?.code || "IN";
+    const isIndia = buyerCountry.toUpperCase() === "IN";
     const placeOfSupply = buyer.placeOfSupply || "—";
     const buyerTaxId = buyer.taxId || "";
     const taxIdLabel = buyer.taxIdType || "Tax ID";
+    const buyerStateCode = isIndia ? (buyer.stateCode || getGstStateCode(placeOfSupply, buyerTaxId) || "") : "";
 
-    let rightY = 76;
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#64748b").text("BILLING & SHIPPING TO:", 315, rightY);
-    rightY += 13;
-    doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a").text(`${buyerCompany}${buyerName}`, 315, rightY, { width: 230 });
-    rightY += doc.heightOfString(`${buyerCompany}${buyerName}`, { width: 230 }) + 3;
-    doc.font("Helvetica").fontSize(8.5).fillColor("#475569");
-    for (const line of buyerLines) {
-      doc.text(line, 315, rightY, { width: 230 });
-      rightY += 12;
-    }
-    if (buyer.phone) {
-      doc.text(`Phone: ${buyer.phone}`, 315, rightY, { width: 230 });
-      rightY += 12;
-    }
-    if (buyer.email) {
-      doc.text(`Email: ${buyer.email}`, 315, rightY, { width: 230 });
-      rightY += 12;
-    }
-    if (buyerTaxId) {
-      doc.text(`${taxIdLabel}: ${buyerTaxId}`, 315, rightY, { width: 230 });
-      rightY += 12;
-    }
-    doc.text(`State/UT Code: ${buyerStateCode}`, 315, rightY, { width: 230 });
-    rightY += 12;
-    doc.text(`Place of Supply: ${placeOfSupply}`, 315, rightY, { width: 230 });
-    rightY += 12;
+    let metaCardY = 0;
 
-    // Dynamic Y position for order metadata card
-    let metaCardY = Math.max(storeY, rightY) + 12;
+    if (!hasDifferentShipping) {
+      // 2-column layout: SOLD BY (left) | BILLING & SHIPPING TO (right)
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#64748b").text("SOLD BY:", 50, 76);
+      doc.font("Helvetica-Bold").fontSize(10.5).fillColor("#0f172a").text(storeName, 50, 89);
+      doc.font("Helvetica").fontSize(8.5).fillColor("#475569");
+      let storeY = 103;
+      doc.text(sellerAddress, 50, storeY, { width: 235 });
+      storeY += doc.heightOfString(sellerAddress, { width: 235 }) + 3;
+
+      if (storeEmail) {
+        doc.text(`Email: ${storeEmail}`, 50, storeY, { width: 235 });
+        storeY += 12;
+      }
+      if (storeUrl) {
+        doc.text(`Website: ${storeUrl}`, 50, storeY, { width: 235 });
+        storeY += 12;
+      }
+      if (sellerPan) {
+        doc.text(`PAN: ${sellerPan}`, 50, storeY, { width: 235 });
+        storeY += 12;
+      }
+      if (sellerGstin) {
+        doc.text(`GSTIN: ${sellerGstin}`, 50, storeY, { width: 235 });
+        storeY += 12;
+      }
+      if (sellerIec) {
+        doc.text(`IEC: ${sellerIec}`, 50, storeY, { width: 235 });
+        storeY += 12;
+      }
+      doc.text(`Ship-From State: ${shipFromState}`, 50, storeY, { width: 235 });
+      storeY += 12;
+
+      let rightY = 76;
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#64748b").text("BILLING & SHIPPING TO:", 315, rightY);
+      rightY += 13;
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a").text(`${buyerCompany}${buyerName}`, 315, rightY, { width: 230 });
+      rightY += doc.heightOfString(`${buyerCompany}${buyerName}`, { width: 230 }) + 3;
+      doc.font("Helvetica").fontSize(8.5).fillColor("#475569");
+      for (const line of buyerLines) {
+        doc.text(line, 315, rightY, { width: 230 });
+        rightY += 12;
+      }
+      if (buyer.phone) {
+        doc.text(`Phone: ${buyer.phone}`, 315, rightY, { width: 230 });
+        rightY += 12;
+      }
+      if (buyer.email) {
+        doc.text(`Email: ${buyer.email}`, 315, rightY, { width: 230 });
+        rightY += 12;
+      }
+      if (buyerTaxId) {
+        doc.text(`${taxIdLabel}: ${buyerTaxId}`, 315, rightY, { width: 230 });
+        rightY += 12;
+        if (buyerStateCode) {
+          doc.text(`State/UT Code: ${buyerStateCode}`, 315, rightY, { width: 230 });
+          rightY += 12;
+        }
+      }
+      if (placeOfSupply && placeOfSupply !== "—") {
+        const posText = isIndia && buyerStateCode && !buyerTaxId
+          ? `Place of Supply: ${placeOfSupply} (${buyerStateCode})`
+          : `Place of Supply: ${placeOfSupply}`;
+        doc.text(posText, 315, rightY, { width: 230 });
+        rightY += 12;
+      }
+      metaCardY = Math.max(storeY, rightY) + 12;
+    } else {
+      // 3-column balanced layout: SOLD BY | BILL TO (BUYER) | SHIP TO (CONSIGNEE)
+      let col1Y = 76;
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#64748b").text("SOLD BY:", 50, col1Y);
+      col1Y += 12;
+      doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0f172a").text(storeName, 50, col1Y, { width: 155 });
+      col1Y += doc.heightOfString(storeName, { width: 155 }) + 3;
+      doc.font("Helvetica").fontSize(8).fillColor("#475569");
+      doc.text(sellerAddress, 50, col1Y, { width: 155 });
+      col1Y += doc.heightOfString(sellerAddress, { width: 155 }) + 2;
+      if (storeEmail) {
+        doc.text(`Email: ${storeEmail}`, 50, col1Y, { width: 155 });
+        col1Y += 11;
+      }
+      if (storeUrl) {
+        doc.text(`Website: ${storeUrl}`, 50, col1Y, { width: 155 });
+        col1Y += 11;
+      }
+      if (sellerPan) {
+        doc.text(`PAN: ${sellerPan}`, 50, col1Y, { width: 155 });
+        col1Y += 11;
+      }
+      if (sellerGstin) {
+        doc.text(`GSTIN: ${sellerGstin}`, 50, col1Y, { width: 155 });
+        col1Y += 11;
+      }
+      if (sellerIec) {
+        doc.text(`IEC: ${sellerIec}`, 50, col1Y, { width: 155 });
+        col1Y += 11;
+      }
+      doc.text(`Ship-From State: ${shipFromState}`, 50, col1Y, { width: 155 });
+      col1Y += 11;
+
+      // Col 2: BILL TO (BUYER)
+      let col2Y = 76;
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#64748b").text("BILL TO (BUYER):", 215, col2Y);
+      col2Y += 12;
+      const buyerTitle = `${buyerCompany}${buyerName}`;
+      doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0f172a").text(buyerTitle, 215, col2Y, { width: 160 });
+      col2Y += doc.heightOfString(buyerTitle, { width: 160 }) + 3;
+      doc.font("Helvetica").fontSize(8).fillColor("#475569");
+      for (const line of buyerLines) {
+        doc.text(line, 215, col2Y, { width: 160 });
+        col2Y += doc.heightOfString(line, { width: 160 }) + 1;
+      }
+      if (buyer.phone) {
+        doc.text(`Phone: ${buyer.phone}`, 215, col2Y, { width: 160 });
+        col2Y += 11;
+      }
+      if (buyer.email) {
+        doc.text(`Email: ${buyer.email}`, 215, col2Y, { width: 160 });
+        col2Y += 11;
+      }
+      if (buyerTaxId) {
+        doc.text(`${taxIdLabel}: ${buyerTaxId}`, 215, col2Y, { width: 160 });
+        col2Y += 11;
+        if (buyerStateCode) {
+          doc.text(`State/UT Code: ${buyerStateCode}`, 215, col2Y, { width: 160 });
+          col2Y += 11;
+        }
+      }
+      if (placeOfSupply && placeOfSupply !== "—") {
+        const posText = isIndia && buyerStateCode && !buyerTaxId
+          ? `Place of Supply: ${placeOfSupply} (${buyerStateCode})`
+          : `Place of Supply: ${placeOfSupply}`;
+        doc.text(posText, 215, col2Y, { width: 160 });
+        col2Y += 11;
+      }
+
+      // Col 3: SHIP TO (CONSIGNEE)
+      let col3Y = 76;
+      doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#64748b").text("SHIP TO (CONSIGNEE):", 385, col3Y);
+      col3Y += 12;
+      doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0f172a").text(shipName, 385, col3Y, { width: 160 });
+      col3Y += doc.heightOfString(shipName, { width: 160 }) + 3;
+      doc.font("Helvetica").fontSize(8).fillColor("#475569");
+      for (const line of shippingLines) {
+        doc.text(line, 385, col3Y, { width: 160 });
+        col3Y += doc.heightOfString(line, { width: 160 }) + 1;
+      }
+      if (shippingAddressObj.phone) {
+        doc.text(`Phone: ${shippingAddressObj.phone}`, 385, col3Y, { width: 160 });
+        col3Y += 11;
+      }
+
+      metaCardY = Math.max(col1Y, col2Y, col3Y) + 12;
+    }
 
     // 4. Order Details Card (Horizontal Summary Bar)
     doc.rect(50, metaCardY, 495, 42).fill("#f8fafc");

@@ -107,6 +107,7 @@ interface OrderDetail {
   customerPhone: string | null;
   companyName: string | null;
   shippingAddress: Record<string, string>;
+  billingAddress?: Record<string, string> | null;
   country: { name: string; code: string };
   currency: { code: string; symbol: string };
   subtotal: number;
@@ -1097,6 +1098,16 @@ function OrderDetailPageContent() {
             <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-2">
               <h3 className="text-[14px] font-semibold text-[#111]">Shipping Address</h3>
               {Object.entries(order.shippingAddress).map(([k, v]) => (
+                <InfoRow key={k} label={k} value={v} />
+              ))}
+            </div>
+          )}
+
+          {/* Billing Address Card */}
+          {order.billingAddress && Object.keys(order.billingAddress).length > 0 && (
+            <div className="rounded-lg border border-[#E6E6E6] bg-white px-5 py-4 space-y-2">
+              <h3 className="text-[14px] font-semibold text-[#111]">Billing Address</h3>
+              {Object.entries(order.billingAddress).map(([k, v]) => (
                 <InfoRow key={k} label={k} value={v} />
               ))}
             </div>

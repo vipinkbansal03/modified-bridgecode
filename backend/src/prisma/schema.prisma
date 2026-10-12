@@ -739,6 +739,7 @@ model Order {
   customerPhone     String?
   companyName       String?
   shippingAddress   Json
+  billingAddress    Json?
   countryId         String
   currencyId        String
   subtotal          Decimal            @db.Decimal(12, 2)

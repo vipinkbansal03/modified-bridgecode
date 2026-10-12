@@ -510,6 +510,7 @@ export async function createCustomerOrder(
         customerId: customer.id,
         customerPhone: customer.phone ?? input.shippingAddress.phone,
         shippingAddress: input.shippingAddress,
+        billingAddress: input.sameAsShipping !== false || !input.billingAddress ? input.shippingAddress : input.billingAddress,
         countryId: orderCountry.id,
         currencyId,
         subtotal,

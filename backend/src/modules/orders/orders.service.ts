@@ -266,6 +266,7 @@ export async function createAdminOrder(input: {
   companyName?: string | null;
   countryId?: string | null;
   shippingAddress?: Record<string, unknown>;
+  billingAddress?: Record<string, unknown>;
   shippingZoneId?: string | null;
   shippingCharge?: number | string | null;
   discount?: number | string | null;
@@ -399,6 +400,7 @@ export async function createAdminOrder(input: {
         customerPhone: customer?.phone ?? input.customerPhone ?? null,
         companyName: input.companyName ?? null,
         shippingAddress: (input.shippingAddress ?? {}) as Prisma.InputJsonValue,
+        billingAddress: (input.billingAddress ?? input.shippingAddress ?? {}) as Prisma.InputJsonValue,
         countryId: country.id,
         currencyId: country.currencyId,
         subtotal,
