@@ -7,10 +7,48 @@ Production-ready Next.js 14 (App Router) + TypeScript + Tailwind conversion of m
 ```bash
 npm install
 cp .env.local.example .env.local
-npm run dev   # http://localhost:3000
+npm run dev   # http://localhost:7000
 npm run build
 npm run lint
 ```
+
+## Local API and database
+
+The storefront runs on `http://localhost:7000` and proxies `/api` and `/uploads`
+to the Express API at `http://localhost:7001`. PostgreSQL runs locally on port
+`5432`.
+
+1. Install PostgreSQL locally and create the database with
+   `createdb -U postgres -p 5432 modortho`. If you use pgAdmin, create a database
+   named `modortho` on the PostgreSQL server listening on port `5432` instead.
+2. In `backend`, copy `.env.example` to `.env`, then replace the placeholder JWT
+   secrets before starting the API.
+3. Run `npm install` and `npm run dev` in `backend`. This applies the committed
+   Prisma migrations and starts the API on port 7001.
+4. Run `npm install` and `npm run dev` in `frontend`.
+
+To seed development data after the API dependencies are installed, run
+`npm run prisma:seed` from `backend`. Use `npm run prisma:studio` to inspect the
+local database.
+
+## Vercel frontend deployment
+
+Deploy only the `frontend` directory to Vercel (set it as the Vercel **Root
+Directory**). Before deployment, deploy the Express API to a persistent Node.js
+host and PostgreSQL to a managed PostgreSQL service. Set these Vercel environment
+variables for every required environment:
+
+```text
+BACKEND_URL=https://your-api-domain.example
+NEXT_PUBLIC_API_URL=https://your-api-domain.example
+NEXT_PUBLIC_SITE_URL=https://your-vercel-domain.example
+```
+
+Set the API host's `FRONTEND_URL` to the matching Vercel domain, run
+`npm run db:migrate:deploy:production` there, and use persistent object storage
+(`STORAGE_PROVIDER=s3` or `cloudinary`) rather than local uploads. Vercel serverless
+functions are not suitable for this repository's long-running Express API,
+background workers, and local upload storage.
 
 ## What's in this build
 
