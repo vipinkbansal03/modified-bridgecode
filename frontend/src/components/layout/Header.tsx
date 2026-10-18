@@ -39,6 +39,14 @@ const navLabelKeys: Record<string, StaticMessageKey> = {
   "Quick Order": "ui.nav.quickOrder",
 };
 
+const clinicalWorkflowLinks = [
+  { label: "Brackets", href: "/products?search=bracket" },
+  { label: "Archwires", href: "/products?search=archwire" },
+  { label: "Elastomerics", href: "/products?search=elastomeric" },
+  { label: "Buccal Tubes", href: "/products?search=buccal%20tube" },
+  { label: "Clinical Instruments", href: "/products?search=instrument" },
+];
+
 export function Header() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
@@ -377,7 +385,7 @@ export function Header() {
 
               <button
                 aria-label="Open cart"
-                className="flex items-end gap-1 text-ink hover:text-brand transition-colors pb-1"
+                className="flex items-center gap-2 rounded-lg border border-[#D8E2E5] bg-[#F7FAFB] px-3 py-2 text-left text-ink transition-colors hover:border-brand hover:text-brand"
                 onClick={openCart}
               >
                 <div className="relative leading-none">
@@ -386,7 +394,10 @@ export function Header() {
                     {totals.itemCount}
                   </span>
                 </div>
-                <span className="text-[13px] font-bold leading-none translate-y-[-2px]">Cart</span>
+                <span className="leading-tight">
+                  <span className="block text-[12px] font-bold">Clinical cart · {totals.currencySymbol}{totals.subtotal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span>
+                  <span className="block text-[10px] font-medium text-steel">Tax at checkout · MOQ tiers apply</span>
+                </span>
               </button>
             </div>
           </div>
@@ -472,6 +483,15 @@ export function Header() {
               })}
             </ul>
           </div>
+
+          <nav aria-label="Clinical workflow" className="hidden xl:flex items-center justify-center gap-1 border-t border-line bg-[#F7FAFB] px-4 py-2">
+            <span className="mr-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-steel">Clinical workflow</span>
+            {clinicalWorkflowLinks.map((item) => (
+              <Link key={item.label} href={item.href} className="rounded-md px-3 py-1.5 text-[12px] font-bold text-ink transition hover:bg-white hover:text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                {item.label}
+              </Link>
+            ))}
+          </nav>
 
           {/* Mobile Header */}
           <div className="flex h-16 items-center justify-between xl:hidden">

@@ -14,6 +14,7 @@ import { QuoteCartUIProvider } from "@/contexts/QuoteCartUIContext";
 import { buildCmsMetadata } from "@/lib/seo";
 import seoData from "@/data/seo.json";
 import { ChunkErrorRecovery } from "@/components/common/ChunkErrorRecovery";
+import { StorefrontThemeProvider } from "@/providers/StorefrontThemeProvider";
 import "react-toastify/dist/ReactToastify.css";
 import "@/styles/globals.css";
 
@@ -47,7 +48,9 @@ export default function RootLayout({
                       <CartProvider>
                         <TrackingProvider>
                           <ToastProvider>
-                            <AppShell>{children}</AppShell>
+                            <StorefrontThemeProvider>
+                              <AppShell>{children}</AppShell>
+                            </StorefrontThemeProvider>
                           </ToastProvider>
                         </TrackingProvider>
                       </CartProvider>

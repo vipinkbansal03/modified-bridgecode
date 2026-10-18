@@ -357,7 +357,8 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
 
   return (
     <div className="pb-20">
-      <div className="mx-auto w-full max-w-[1720px] px-4 sm:px-8 xl:px-10 py-6 lg:py-[34px]">
+      <div className="clinical-page-header">
+        <div className="mx-auto w-full max-w-[1720px] px-4 py-7 sm:px-8 lg:py-10 xl:px-10">
         <div className="mb-2.5">
           <Link
             href="/"
@@ -379,14 +380,16 @@ export function ProductsListingClient({ cmsPage }: ProductsListingClientProps) {
             </>
           )}
         </nav>
-        <h1 className="text-[clamp(26px,3.4vw,40px)] font-bold uppercase tracking-tight text-ink leading-tight">
+        <p className="clinical-eyebrow mb-2">Clinical catalogue</p>
+        <h1 className="max-w-4xl text-[clamp(28px,3.4vw,42px)] font-extrabold tracking-tight text-ink leading-tight">
           {pageTitle}
         </h1>
         {pageDescription && (
-          <p className="mt-3 max-w-[1100px] text-[15px] leading-relaxed text-steel">
+          <p className="mt-3 max-w-3xl text-[15px] leading-relaxed text-steel">
             {pageDescription}
           </p>
         )}
+        </div>
       </div>
 
       <div className="border-y border-line bg-white">

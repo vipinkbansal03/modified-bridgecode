@@ -284,7 +284,7 @@ export async function getPublicTrackingSettings(countryCode?: string) {
   let currentRows = await prisma.setting.findMany({
     where: {
       group: {
-        in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general", "highlights"],
+        in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general", "highlights", "theme"],
       },
     },
   });
@@ -328,7 +328,7 @@ export async function getPublicTrackingSettings(countryCode?: string) {
       currentRows = await prisma.setting.findMany({
         where: {
           group: {
-            in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general", "highlights"],
+            in: ["analytics", "pixels", "marketing", "social", "verification", "scripts", "cookies", "whatsapp", "seo", "general", "highlights", "theme"],
           },
         },
       });
@@ -466,6 +466,16 @@ export async function getPublicTrackingSettings(countryCode?: string) {
       defaultCurrency: str(m, "general.default_currency") || "INR",
       timezone: str(m, "general.timezone") || "Asia/Kolkata",
       allowQuotes: enabled(m, "general.allow_quotes", true),
+    },
+    theme: {
+      primary: val(m, "theme.primary") || "#0F6B78",
+      accent: val(m, "theme.accent") || "#E45B3F",
+      surface: val(m, "theme.surface") || "#F7FAFB",
+      textPrimary: val(m, "theme.text_primary") || "#102A33",
+      textSecondary: val(m, "theme.text_secondary") || "#52656D",
+      border: val(m, "theme.border") || "#D8E2E5",
+      headingFont: val(m, "theme.heading_font") || "Manrope",
+      bodyFont: val(m, "theme.body_font") || "Inter",
     },
   };
 }

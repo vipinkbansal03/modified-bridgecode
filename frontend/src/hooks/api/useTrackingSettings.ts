@@ -52,6 +52,16 @@ export type TrackingSettings = {
     timezone?: string | null;
     allowQuotes?: boolean;
   };
+  theme?: {
+    primary: string;
+    accent: string;
+    surface: string;
+    textPrimary: string;
+    textSecondary: string;
+    border: string;
+    headingFont: string;
+    bodyFont: string;
+  };
 };
 
 let cachedSettings: TrackingSettings | null = null;

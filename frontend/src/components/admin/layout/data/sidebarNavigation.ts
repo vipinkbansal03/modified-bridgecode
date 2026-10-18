@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Newspaper,
   Package,
+  Palette,
   Percent,
   Settings,
   Shield,
@@ -160,6 +161,7 @@ export const sidebarSections: SidebarSection[] = [
       { label: "Payments", href: "/admin/payments", icon: CreditCard, permission: "payments.view" },
       { label: "Configuration", href: "/admin/configuration", icon: Sliders, permission: "settings.view" },
       { label: "Settings", href: "/admin/settings", icon: Settings, permission: "settings.view" },
+      { label: "Storefront Theme", href: "/admin/settings/theme", icon: Palette, permission: "settings.view" },
     ],
   },
 ];

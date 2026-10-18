@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { ImageOff } from "lucide-react";
+import { ArrowRight, ImageOff } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
@@ -45,17 +45,17 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
     <motion.div whileHover={{ y: -4 }} transition={{ duration: 0.2, ease: "easeOut" }} className="group">
       <div className="relative h-full">
         <Link href={`/products/${slug}`} className="block h-full">
-          <Card className="h-full flex flex-col">
-            <div className="relative h-[190px] w-full overflow-hidden bg-offwhite sm:h-[230px]">
+          <Card className="clinical-product-card h-full flex flex-col">
+            <div className="clinical-product-image relative h-[210px] w-full overflow-hidden sm:h-[248px]">
               {imageSrc ? (
                 imageSrc.startsWith("data:") ? (
-                  <img src={imageSrc} alt={title} className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-110" />
+                  <img src={imageSrc} alt={title} className="h-full w-full object-contain p-6 transition-transform duration-300 ease-out group-hover:scale-[1.04]" />
                 ) : (
                   <Image
                     src={imageSrc}
                     alt={title}
                     fill
-                    className="object-cover transition-transform duration-300 ease-out group-hover:scale-110"
+                    className="object-contain p-6 transition-transform duration-300 ease-out group-hover:scale-[1.04]"
                     sizes="(max-width: 768px) 100vw, 33vw"
                     onError={() => setImageError(true)}
                     unoptimized={imageSrc.startsWith("http://") || imageSrc.startsWith("https://")}
@@ -77,23 +77,27 @@ export function ProductCard({ id, image, title, slug, category, shortDescription
             </div>
             <div className="p-4 sm:p-5 flex flex-col justify-between flex-1">
               <div>
-                {category && <span className="text-xs uppercase tracking-wide text-steel-2">{category}</span>}
-                <h5 className="mt-1.5 text-[15px] font-medium text-ink transition-colors duration-300 group-hover:text-brand">{title}</h5>
-                {shortDescription && <p className="mt-1.5 text-sm text-steel">{shortDescription}</p>}
+                {category && <span className="clinical-eyebrow">{category}</span>}
+                <h5 className="mt-2 text-[16px] font-bold leading-snug text-ink transition-colors duration-300 group-hover:text-[var(--color-primary)]">{title}</h5>
+                {shortDescription && <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-steel">{shortDescription}</p>}
                 {price ? (
-                  <div className="mt-2">
-                    <p className="text-sm font-semibold text-ink">{price}</p>
-                    <p className="mt-0.5 text-[11px] font-normal text-steel">{taxLabel}</p>
+                  <div className="mt-3 flex items-end justify-between gap-3">
+                    <div>
+                      <p className="text-[17px] font-extrabold text-ink">{price}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-steel">{taxLabel}</p>
+                    </div>
+                    <span className="clinical-spec-chip rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide">Clinical supply</span>
                   </div>
                 ) : (
-                  <span className="mt-2 inline-block rounded-pill border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-0.5 text-xs font-semibold text-[#E31E24]">
+                  <span className="clinical-spec-chip mt-3 inline-block rounded-md px-2.5 py-1 text-xs font-semibold">
                     Price Upon Request
                   </span>
                 )}
               </div>
-              <div className="mt-4 pt-3 border-t border-line/60">
-                <span className="inline-flex w-full items-center justify-center rounded-md bg-[#E31E24] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors duration-200 group-hover:bg-[#C2181C]">
-                  {ctaLabel || "Buy Now"}
+              <div className="mt-5 pt-4 border-t border-line/60">
+                <span className="clinical-cta inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-bold shadow-sm transition-colors duration-200">
+                  {ctaLabel || "View clinical options"}
+                  <ArrowRight size={15} aria-hidden="true" />
                 </span>
               </div>
             </div>

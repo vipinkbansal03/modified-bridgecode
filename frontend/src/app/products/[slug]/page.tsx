@@ -22,6 +22,7 @@ import { ViewSpecsLink } from "@/components/product/ViewSpecsLink";
 import { DownloadCatalogueButton } from "@/components/product/DownloadCatalogueButton";
 import { ConfigureButton } from "@/components/product/ConfigureButton";
 import { PdpProductSidebar } from "@/components/product/PdpProductSidebar";
+import { PracticeUtilityPanel } from "@/components/product/PracticeUtilityPanel";
 import { buildMetadata } from "@/lib/seo";
 import { staticMessages, type StaticMessageKey } from "@/i18n/staticMessages";
 import homeContent from "@/data/home.json";
@@ -303,7 +304,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 <div className="space-y-1">
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-[13px] font-bold uppercase tracking-wider text-[#111827]">{t("ui.pdp.startingAt")}</span>
-                    <span className="text-[26px] font-extrabold text-[#E31E24]">
+                    <span className="text-[26px] font-extrabold text-[var(--color-primary)]">
                       {formatMoney(publicPrice.currencySymbol, publicPrice.sellingPrice)}
                     </span>
                     {publicDiscount ? (
@@ -344,7 +345,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
               {/* Primary Buy Box & Actions */}
               {hasVariants ? (
-                <div className="rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 space-y-3.5 shadow-xs">
+                <div className="clinical-buy-box rounded-2xl border p-4 sm:p-5 space-y-3.5 shadow-xs">
                   <div className="flex flex-wrap items-center gap-3">
                     <ConfigureButton label={t("ui.pdp.buyNow")} className="h-11 flex-1 min-w-[150px]" />
                     {apiProduct?.id && (
@@ -357,7 +358,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                     )}
                   </div>
                   <p className="text-[13px] font-semibold text-[#111827] flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 rounded-full bg-[#E31E24] shrink-0 animate-pulse" />
+                    <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-primary)] shrink-0 animate-pulse" />
                     {t("ui.products.selectVariantsHelper")}
                   </p>
                   {/* Micro Trust Perks Row */}
@@ -377,7 +378,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   </div>
                 </div>
               ) : (apiProduct?.prices?.length ?? 0) > 0 ? (
-                <div className="rounded-2xl border border-[#E31E24] bg-white p-4 sm:p-5 shadow-xs">
+                <div className="clinical-buy-box rounded-2xl border p-4 sm:p-5 shadow-xs">
                   <BaseProductConfigurator apiProduct={apiProduct} />
                 </div>
               ) : (
@@ -437,6 +438,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
           {/* Variant Configurator Flow / Inquiry */}
           <div id="configurator-section">
+            <PracticeUtilityPanel />
             {hasVariants ? (
               <VariantConfigurator apiProduct={apiProduct} />
             ) : (apiProduct?.prices?.length ?? 0) === 0 ? (

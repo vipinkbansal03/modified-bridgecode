@@ -428,6 +428,7 @@ export function DynamicVariantMatrixConfigurator({
     kind: "success" | "error";
     message: string;
   } | null>(null);
+  const [quickEntry, setQuickEntry] = useState("");
 
   const variantPriceMap = useMemo(() => {
     const map: Record<string, ApiProductPrice | null> = {};
@@ -928,6 +929,27 @@ export function DynamicVariantMatrixConfigurator({
     setFeedback(null);
   };
 
+  const handleQuickEntry = () => {
+    const requested = quickEntry
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.split(/[\t,;]+/).map((value) => value.trim()))
+      .map(([sku, quantity]) => ({ sku: sku?.toLowerCase(), quantity: Number.parseInt(quantity || "1", 10) || 1 }));
+
+    let matched = 0;
+    requested.forEach(({ sku, quantity }) => {
+      const variant = normalizedVariants.find((item) => item.sku?.toLowerCase() === sku);
+      if (!variant) return;
+      handleQuantityChange(variant.id, quantity);
+      matched += 1;
+    });
+
+    setFeedback(matched
+      ? { kind: "success", message: `${matched} SKU line${matched === 1 ? "" : "s"} staged in the prescription matrix.` }
+      : { kind: "error", message: "No active SKU matched. Paste one SKU and quantity per line, for example MO-022-MBT-UR3, 4." });
+  };
+
   const handleAddSelectedToCart = () => {
     let items = buildCartItems(
       apiProduct,
@@ -1097,19 +1119,29 @@ export function DynamicVariantMatrixConfigurator({
           <div className="max-w-[720px]">
             <span className="mb-2 inline-flex items-center gap-2 rounded-pill border border-[#E31E24] bg-red-50/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E31E24]">
               <Sparkles size={13} className="text-[#E31E24]" />
-              {matrixEnabled ? t("ui.products.matrixConfiguratorBadge") : "Product Configurator"}
+              {matrixEnabled ? "Orthodontic prescription matrix" : "Clinical product configurator"}
             </span>
             <h2 className="text-[clamp(24px,2.6vw,30px)] font-bold leading-tight tracking-tight text-[#111827]">
               {t("ui.products.matrixConfiguratorTitle")}
             </h2>
             <p className="mt-2 max-w-[620px] text-[14px] leading-relaxed text-[#111827]">
-              {t("ui.products.matrixConfiguratorDescription")}
+              Select clinical prescription values, enter quantities by tooth/arch, or paste SKU lines to stage a complete case order.
             </p>
           </div>
         </div>
 
         <div className="space-y-6">
           <div className="min-w-0 space-y-5">
+            <div className="rounded-xl border border-[#D8E2E5] bg-[#F7FAFB] p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <label className="block flex-1">
+                  <span className="block text-[12px] font-bold uppercase tracking-[0.12em] text-[#102A33]">Quick case entry · SKU / lot reference</span>
+                  <span className="mt-1 block text-[12px] text-[#52656D]">Paste CSV or tab-separated rows: <strong>SKU, quantity</strong>. Example: <strong>MO-022-MBT-UR3, 4</strong>.</span>
+                  <textarea value={quickEntry} onChange={(event) => setQuickEntry(event.target.value)} rows={2} placeholder="MO-022-MBT-UR3, 4&#10;MO-022-MBT-UL3, 4" className="mt-2 w-full resize-y rounded-lg border border-[#D8E2E5] bg-white px-3 py-2 text-[13px] text-[#102A33] outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15" />
+                </label>
+                <button type="button" onClick={handleQuickEntry} disabled={!quickEntry.trim()} className="h-10 shrink-0 rounded-lg bg-brand px-4 text-[13px] font-bold text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50">Stage case lines</button>
+              </div>
+            </div>
             {packageOptions.length > 1 && (
               <div className="rounded-xl border border-[#E31E24] bg-white p-3 shadow-2xs">
                 <p className="px-2 pb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-[#111827]">

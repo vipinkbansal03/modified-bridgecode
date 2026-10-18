@@ -31,7 +31,7 @@ export function ConfigureButton({
       type="button"
       onClick={handleClick}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-pill bg-[#E31E24] px-6 py-2.5 text-[14px] font-bold text-white shadow-md transition-all hover:bg-[#B5151B] active:scale-95 cursor-pointer",
+        "clinical-cta inline-flex items-center justify-center gap-2 rounded-lg px-6 py-2.5 text-[14px] font-bold shadow-md transition-all active:scale-95 cursor-pointer",
         className
       )}
     >
